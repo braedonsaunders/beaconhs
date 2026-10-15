@@ -27,7 +27,12 @@ import {
   type TemplateCollection,
   type TemplateMergeField,
 } from '@/lib/template-builder-html'
-import { TableColumnResizer, TableToolbar } from '../_table-tools'
+import {
+  installTableEditing,
+  repairTables,
+  TableColumnResizer,
+  TableToolbar,
+} from '../_table-tools'
 
 const STARTER_HTML =
   '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;padding:24px;max-width:680px;margin:0 auto;">' +
@@ -153,6 +158,8 @@ export default function EmailBuilder({
               content,
             })
           }
+          // Cells delete as whole columns; must be in place before components load.
+          installTableEditing(editor)
           // Sanitized HTML+CSS is the sole editable source; else use the starter.
           try {
             if (initialHtml && initialHtml.trim()) {
@@ -167,6 +174,8 @@ export default function EmailBuilder({
               /* noop */
             }
           }
+          // Open tables whole: rows padded to one column count, widths filling 100%.
+          repairTables(editor)
           setEditor(editor)
           onReady(editor)
         }}

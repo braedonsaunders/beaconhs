@@ -3,185 +3,181 @@
 import { GeneratedText, GeneratedValue, useGeneratedTranslations } from '@/i18n/generated'
 
 // Shared table-editing tools for the GrapesJS builders (email + pdf). The plain
-// HTML tables authored in the builders need real structural editing — add/remove
-// columns + rows and set per-column width — which GrapesJS doesn't expose out of
-// the box. This module manipulates the selected cell's table in the component
-// tree, and renders a contextual <TableToolbar> that appears whenever a table
-// cell is selected.
+// HTML tables authored in the builders need real structural editing — add and
+// delete whole columns and rows, size columns, fit a table to the page — which
+// GrapesJS doesn't expose out of the box. The geometry lives in `_table-grid.ts`
+// and its application to components in `_table-model.ts`; this module wires it
+// to the editor and renders the contextual <TableToolbar> and column handles.
 
 import { useEffect, useRef, useState } from 'react'
 import type { Component, Editor } from 'grapesjs'
+import { layoutTable, nextColumnPercents, nextTableWidthPct } from './_table-grid'
 import {
   applyColumnPercents,
-  MIN_COLUMN_PCT,
-  nextColumnPercents,
+  cellAtColumn,
+  cellPosition,
+  fitTableToWidth,
+  insertTableColumn,
+  insertTableRow,
+  isTableCell,
+  normalizeTables,
   readColumnPercents,
-  tableCols,
-} from './_column-resize'
-
-const CELL_TAGS = new Set(['td', 'th'])
+  readTableWidthPct,
+  removeTableColumn,
+  removeTableRow,
+  setTableWidthPct,
+  type CellPosition,
+} from './_table-model'
 
 function closestCell(cmp: Component | undefined): Component | null {
   let c: Component | undefined = cmp
   while (c) {
-    if (CELL_TAGS.has(String(c.get('tagName')))) return c
+    if (isTableCell(c)) return c
     c = c.parent()
   }
   return null
 }
 
-function closestTable(cmp: Component | null): Component | null {
-  let c: Component | null | undefined = cmp
-  while (c) {
-    if (String(c.get('tagName')) === 'table') return c
-    c = c.parent()
-  }
-  return null
-}
-
-function collectRows(node: Component, out: Component[]): void {
-  node.components().forEach((child: Component) => {
-    const tag = String(child.get('tagName'))
-    if (tag === 'tr') out.push(child)
-    else if (tag === 'thead' || tag === 'tbody' || tag === 'tfoot') collectRows(child, out)
-  })
-}
-
-type CellCtx = {
-  cell: Component
-  row: Component
-  table: Component
-  colIndex: number
-  rows: Component[]
-}
-
-function cellCtx(editor: Editor): CellCtx | null {
+function selectedPosition(editor: Editor): CellPosition | null {
   const cell = closestCell(editor.getSelected())
-  if (!cell) return null
-  const row = cell.parent()
-  if (!row || String(row.get('tagName')) !== 'tr') return null
-  const table = closestTable(row)
-  if (!table) return null
-  const rows: Component[] = []
-  collectRows(table, rows)
-  return { cell, row, table, colIndex: cell.index(), rows }
+  return cell ? cellPosition(cell) : null
 }
 
-// Copy the reference cell's resolved style onto a freshly inserted cell, so a
-// new column/row visually matches its neighbours (GrapesJS keeps styles in CSS
-// rules keyed by id, not inline, so a bare new cell would be unstyled).
-function copyStyle(from: Component | undefined, to: Component | undefined): void {
-  if (!from || !to || typeof to.setStyle !== 'function') return
-  const style = { ...from.getStyle() }
-  delete (style as Record<string, unknown>).width // width is per-column, set explicitly
-  to.setStyle(style)
-}
-
-function firstAdded(added: Component | Component[]): Component | undefined {
-  return Array.isArray(added) ? added[0] : added
+function refresh(editor: Editor): void {
+  editor.trigger('change:canvasOffset')
 }
 
 function addColumn(editor: Editor): void {
-  const ctx = cellCtx(editor)
-  if (!ctx) return
-  const at = ctx.colIndex + 1
-  ctx.rows.forEach((row) => {
-    const cells = row.components()
-    const ref = cells.at(Math.min(ctx.colIndex, cells.length - 1))
-    const tag = String(ref?.get('tagName')) === 'th' ? 'th' : 'td'
-    const label = tag === 'th' ? 'Column' : '&nbsp;'
-    // component.append() parses the HTML into a real component; the collection's
-    // own .add() does NOT parse an HTML string (it just makes an empty model).
-    const created = firstAdded(
-      row.append(`<${tag}>${label}</${tag}>`, { at: Math.min(at, cells.length) }),
-    )
-    copyStyle(ref, created)
-  })
-  editor.trigger('change:canvasOffset')
+  const pos = selectedPosition(editor)
+  if (!pos) return
+  // The new column goes to the right of everything the selected cell covers.
+  insertTableColumn(pos.table, pos.placement.start + pos.placement.span)
+  refresh(editor)
 }
 
-function removeColumn(editor: Editor): void {
-  const ctx = cellCtx(editor)
-  if (!ctx) return
-  // Never delete the last column.
-  if (ctx.rows.every((r) => r.components().length <= 1)) return
-  ctx.rows.forEach((row) => row.components().at(ctx.colIndex)?.remove())
-  editor.trigger('change:canvasOffset')
+/** A column can be deleted from a cell that sits in exactly one column, while another remains. */
+function canDeleteColumn(pos: CellPosition | null): pos is CellPosition {
+  return !!pos && pos.placement.span === 1 && pos.count > 1
+}
+
+function deleteColumn(editor: Editor): void {
+  const pos = selectedPosition(editor)
+  if (!canDeleteColumn(pos)) return
+  const { table, row, placement } = pos
+  if (!removeTableColumn(table, placement.start)) return
+  // The selected cell is gone. Select its neighbour in the same row so the
+  // toolbar stays put and the next delete is one click away.
+  const next = cellAtColumn(table, row, Math.min(placement.start, pos.count - 2))
+  if (next) editor.select(next)
+  else editor.select(table)
+  refresh(editor)
 }
 
 function addRow(editor: Editor): void {
-  const ctx = cellCtx(editor)
-  if (!ctx) return
-  const parent = ctx.row.parent()
-  if (!parent) return
-  const at = ctx.row.index() + 1
-  const cellsHtml = ctx.row
-    .components()
-    .map((c: Component) => {
-      const tag = String(c.get('tagName')) === 'th' ? 'th' : 'td'
-      return `<${tag}>&nbsp;</${tag}>`
-    })
-    .join('')
-  // New rows are static (no data-each marker — those come from record data).
-  const newRow = firstAdded(parent.append(`<tr>${cellsHtml}</tr>`, { at }))
-  if (newRow) {
-    const src = ctx.row.components()
-    const dst = newRow.components()
-    src.forEach((c: Component, i: number) => copyStyle(c, dst.at(i)))
+  const pos = selectedPosition(editor)
+  if (!pos) return
+  insertTableRow(pos.table, pos.row)
+  refresh(editor)
+}
+
+function deleteRow(editor: Editor): void {
+  const pos = selectedPosition(editor)
+  if (!pos) return
+  if (removeTableRow(pos.table, pos.row)) {
+    editor.select(pos.table)
+    refresh(editor)
   }
-  editor.trigger('change:canvasOffset')
 }
 
-function removeRow(editor: Editor): void {
-  const ctx = cellCtx(editor)
-  if (!ctx) return
-  if (ctx.rows.length <= 1) return
-  ctx.row.remove()
-  editor.trigger('change:canvasOffset')
-}
-
-/** Write percentage widths back, preferring the colgroup the renderer reads. */
-function writeColumnPercents(ctx: CellCtx, percents: number[]): void {
-  applyColumnPercents({ cols: tableCols(ctx.table), rows: ctx.rows }, percents)
+function fitToWidth(editor: Editor): void {
+  const pos = selectedPosition(editor)
+  if (!pos) return
+  fitTableToWidth(pos.table)
+  refresh(editor)
 }
 
 /** Set ONE column's width, taking the difference from its right-hand neighbour. */
 function setColumnWidth(editor: Editor, pct: number | null): void {
-  const ctx = cellCtx(editor)
-  if (!ctx) return
-  if (pct === null) return
-  const percents = readColumnPercents(tableCols(ctx.table), ctx.rows)
-  // Typing a width is the same move as dragging that column's right edge.
-  const index = ctx.colIndex < percents.length - 1 ? ctx.colIndex : ctx.colIndex - 1
+  const pos = selectedPosition(editor)
+  if (!pos || pct === null || pos.placement.span !== 1) return
+  const column = pos.placement.start
+  const percents = readColumnPercents(pos.model)
+  // Typing a width is the same move as dragging that column's right edge
+  // (or, for the last column, its left edge).
+  const index = column < percents.length - 1 ? column : column - 1
   if (index < 0) return
-  const current = percents[ctx.colIndex] ?? 0
-  const delta = ctx.colIndex === index ? pct - current : current - pct
-  writeColumnPercents(ctx, nextColumnPercents(percents, index, delta))
-  editor.trigger('change:canvasOffset')
+  const current = percents[column] ?? 0
+  const delta = column === index ? pct - current : current - pct
+  applyColumnPercents(pos.model, nextColumnPercents(percents, index, delta))
+  refresh(editor)
 }
 
-function currentColWidthPct(editor: Editor): string {
-  const ctx = cellCtx(editor)
-  if (!ctx) return ''
-  const pct = readColumnPercents(tableCols(ctx.table), ctx.rows)[ctx.colIndex]
+function currentColWidthPct(pos: CellPosition | null): string {
+  if (!pos || pos.placement.span !== 1) return ''
+  const pct = readColumnPercents(pos.model)[pos.placement.start]
   return pct === undefined ? '' : String(Math.round(pct * 10) / 10)
 }
 
+/**
+ * Make GrapesJS treat table cells as parts of a grid. Call once from the
+ * builder's onEditor, BEFORE loading components.
+ *
+ * Out of the box a cell is just another component: its Delete key and trash
+ * icon removed that one cell, leaving the rows below it a cell longer, and
+ * clone/move did the same in reverse. Here deleting a cell deletes its whole
+ * column (or, for a title cell spanning the table, its row), and cells cannot
+ * be cloned or dragged out of line.
+ */
+export function installTableEditing(editor: Editor): void {
+  editor.DomComponents.addType('cell', {
+    model: { defaults: { draggable: false, copyable: false } },
+  })
+  editor.on(
+    'command:run:before:core:component-delete',
+    ({ options }: { options: { abort?: boolean } }) => {
+      const selected = editor.getSelected()
+      if (!selected || !isTableCell(selected)) return
+      options.abort = true
+      const pos = cellPosition(selected)
+      if (!pos) return
+      if (pos.placement.span === 1) {
+        deleteColumn(editor)
+      } else if (pos.placement.span === pos.count) {
+        deleteRow(editor)
+      }
+    },
+  )
+}
+
+/**
+ * Repair every table in a freshly loaded document. Call right after
+ * setComponents so a template saved with misaligned rows, or with a colgroup
+ * still sizing a deleted column, opens whole — and saves that way.
+ */
+export function repairTables(editor: Editor): void {
+  const wrapper = editor.getWrapper()
+  if (wrapper) normalizeTables(wrapper)
+}
+
 const BTN =
-  'rounded px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700'
+  'rounded px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-700'
 
 // Floats at the top of the canvas whenever a table cell is selected.
 export function TableToolbar({ editor }: { editor: Editor | null }) {
   const tGenerated = useGeneratedTranslations()
   const [active, setActive] = useState(false)
+  const [canDelete, setCanDelete] = useState(false)
+  const [canSize, setCanSize] = useState(false)
   const [width, setWidth] = useState('')
 
   useEffect(() => {
     if (!editor) return
     const sync = () => {
-      const ctx = cellCtx(editor)
-      setActive(!!ctx)
-      setWidth(currentColWidthPct(editor))
+      const pos = selectedPosition(editor)
+      setActive(!!pos)
+      setCanDelete(canDeleteColumn(pos))
+      setCanSize(!!pos && pos.placement.span === 1 && pos.count > 1)
+      setWidth(currentColWidthPct(pos))
     }
     editor.on('component:selected', sync)
     editor.on('component:deselected', sync)
@@ -216,7 +212,8 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
       <button
         type="button"
         className={BTN}
-        onClick={() => removeColumn(editor)}
+        onClick={() => deleteColumn(editor)}
+        disabled={!canDelete}
         title={tGenerated('m_0605fd789eea1e')}
       >
         <GeneratedText id="m_173569351d7bf3" />
@@ -233,10 +230,19 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
       <button
         type="button"
         className={BTN}
-        onClick={() => removeRow(editor)}
+        onClick={() => deleteRow(editor)}
         title={tGenerated('m_12b310a027b08a')}
       >
         <GeneratedText id="m_18e6c9418cc728" />
+      </button>
+      <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-600" />
+      <button
+        type="button"
+        className={BTN}
+        onClick={() => fitToWidth(editor)}
+        title={tGenerated('m_0b3b42818d84db')}
+      >
+        <GeneratedText id="m_1fd502c12105c1" />
       </button>
       <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-600" />
       <label className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
@@ -246,18 +252,42 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
           min={0}
           max={100}
           value={width}
+          disabled={!canSize}
           onChange={(e) => setWidth(e.target.value)}
           onBlur={(e) => applyWidth(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') applyWidth((e.target as HTMLInputElement).value)
           }}
           placeholder={tGenerated('m_0e4a54b8ee5d61')}
-          className="h-6 w-16 rounded border border-slate-300 bg-white px-1.5 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+          className="h-6 w-16 rounded border border-slate-300 bg-white px-1.5 text-xs text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
         />
         <GeneratedText id="m_10e423cde29e41" />
       </label>
     </div>
   )
+}
+
+type Handle = {
+  left: number
+  top: number
+  height: number
+  /** A column boundary (the column to its left), or the table's own right edge. */
+  kind: 'column' | 'table'
+  index: number
+}
+
+/** How much of the width it sits in a table fills, in %, measured in the canvas. */
+function measuredTableWidthPct(tableEl: HTMLElement): number {
+  const parent = tableEl.parentElement
+  const view = tableEl.ownerDocument.defaultView
+  if (!parent || !view) return 100
+  const style = view.getComputedStyle(parent)
+  const inner =
+    parent.clientWidth -
+    parseFloat(style.paddingLeft || '0') -
+    parseFloat(style.paddingRight || '0')
+  if (inner <= 0) return 100
+  return Math.min(100, (tableEl.getBoundingClientRect().width / inner) * 100)
 }
 
 /**
@@ -267,22 +297,28 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
  * visual judgement — you widen "Specific controls" until the hand-written box
  * looks big enough. The handles sit over the canvas at each boundary and move
  * width between the two columns they divide, so the row always totals 100% and
- * the table can never drift off the page.
+ * the table can never drift off the page. A table narrower than the page also
+ * gets a handle on its right edge, to drag it back out to full width.
  */
 export function TableColumnResizer({ editor }: { editor: Editor | null }) {
-  const [bounds, setBounds] = useState<
-    { left: number; top: number; height: number; index: number }[]
-  >([])
-  const dragRef = useRef<{
-    index: number
-    startX: number
-    percents: number[]
-    width: number
-    // Captured up front. Re-resolving the selection on every move was the bug:
-    // writing a width re-creates components, GrapesJS drops the selection, and
-    // cellCtx() then returns null — so the drag applied ONE jump and went dead.
-    targets: { cols: Component[]; rows: Component[] }
-  } | null>(null)
+  const tGenerated = useGeneratedTranslations()
+  const [handles, setHandles] = useState<Handle[]>([])
+  const dragRef = useRef<
+    | {
+        kind: 'column'
+        index: number
+        startX: number
+        percents: number[]
+        width: number
+        // Captured up front. Re-resolving the selection on every move was the
+        // bug: writing a width re-creates components, GrapesJS drops the
+        // selection, and the lookup then returns null — so the drag applied ONE
+        // jump and went dead.
+        model: CellPosition['model']
+      }
+    | { kind: 'table'; startX: number; startPct: number; containerWidth: number; table: Component }
+    | null
+  >(null)
 
   useEffect(() => {
     if (!editor) return
@@ -290,37 +326,46 @@ export function TableColumnResizer({ editor }: { editor: Editor | null }) {
       // Never move the handles mid-drag: each width write fires component:update,
       // which would recompute and re-render the control under the cursor.
       if (dragRef.current) return
-      const ctx = cellCtx(editor)
-      const headerRow = ctx?.rows[0]
-      const tableEl = ctx?.table.getEl()
-      if (!ctx || !headerRow || !tableEl) {
-        setBounds([])
+      const pos = selectedPosition(editor)
+      const tableEl = pos?.table.getEl()
+      if (!pos || !tableEl) {
+        setHandles([])
         return
       }
       const canvas = editor.Canvas
       const tablePos = canvas.getElementPos(tableEl)
-      // Boundaries come from the widest row's cells, so a colspan heading row
-      // (which spans every column and knows nothing about them) is skipped.
-      const cells = ctx.rows
-        .map((row) => row.components().toArray())
-        .reduce(
-          (widest, cells) => (cells.length > widest.length ? cells : widest),
-          [] as Component[],
-        )
-      const next: { left: number; top: number; height: number; index: number }[] = []
-      cells.forEach((cell, index) => {
-        if (index === cells.length - 1) return
-        const el = cell.getEl()
-        if (!el) return
-        const pos = canvas.getElementPos(el)
+      const { placements } = layoutTable(pos.model.grid)
+      const percents = readColumnPercents(pos.model)
+      const next: Handle[] = []
+      let cumulative = 0
+      for (let index = 0; index < pos.count - 1; index++) {
+        cumulative += percents[index] ?? 0
+        // Measure the boundary off a cell that ends there — a title row
+        // spanning every column knows nothing about it, so it is skipped.
+        const el = placements
+          .flatMap((own, r) =>
+            own.flatMap((p, c) =>
+              p.start + p.span - 1 === index ? [pos.model.cells[r]![c]!] : [],
+            ),
+          )
+          .map((cell) => cell.getEl())
+          .find((cellEl) => !!cellEl)
+        const cellPos = el ? canvas.getElementPos(el) : null
+        const left = cellPos
+          ? cellPos.left + cellPos.width
+          : tablePos.left + (tablePos.width * cumulative) / 100
+        next.push({ left, top: tablePos.top, height: tablePos.height, kind: 'column', index })
+      }
+      if (measuredTableWidthPct(tableEl) < 99.5) {
         next.push({
-          left: pos.left + pos.width,
+          left: tablePos.left + tablePos.width,
           top: tablePos.top,
           height: tablePos.height,
-          index,
+          kind: 'table',
+          index: pos.count - 1,
         })
-      })
-      setBounds(next)
+      }
+      setHandles(next)
     }
     const events = [
       'component:selected',
@@ -334,47 +379,71 @@ export function TableColumnResizer({ editor }: { editor: Editor | null }) {
     return () => events.forEach((event) => editor.off(event, sync))
   }, [editor])
 
-  if (!editor || bounds.length === 0) return null
+  if (!editor || handles.length === 0) return null
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
       <GeneratedValue
-        value={bounds.map((bound) => (
+        value={handles.map((handle) => (
           <div
-            key={bound.index}
+            key={`${handle.kind}:${handle.index}`}
             role="separator"
             aria-orientation="vertical"
+            aria-label={
+              handle.kind === 'table'
+                ? tGenerated('m_18726b31cb3a41')
+                : tGenerated('m_13b885cc10f3a7')
+            }
             className="pointer-events-auto absolute w-2 -translate-x-1/2 cursor-col-resize bg-teal-500/0 transition-colors hover:bg-teal-500/40"
-            style={{ left: bound.left, top: bound.top, height: bound.height }}
+            style={{ left: handle.left, top: handle.top, height: handle.height }}
             onPointerDown={(event) => {
-              const ctx = cellCtx(editor)
-              const tableEl = ctx?.table.getEl()
-              if (!ctx || !tableEl) return
+              const pos = selectedPosition(editor)
+              const tableEl = pos?.table.getEl()
+              if (!pos || !tableEl) return
               event.preventDefault()
               // Capture on the handle itself. The canvas is an IFRAME, so once
               // the cursor crosses into it the parent document stops seeing
               // pointer events — the handle rendered and highlighted but never
               // moved. Capture keeps them coming to this element.
               event.currentTarget.setPointerCapture(event.pointerId)
+              // Measure in the SAME space the handles are positioned in.
+              // getBoundingClientRect() reports iframe pixels, which do not
+              // match the pointer's coordinates once the canvas is zoomed — the
+              // delta came out scaled and saturated the clamp on the first move.
+              const width = editor.Canvas.getElementPos(tableEl).width
+              if (handle.kind === 'table') {
+                const startPct = readTableWidthPct(pos.table) ?? measuredTableWidthPct(tableEl)
+                dragRef.current = {
+                  kind: 'table',
+                  startX: event.clientX,
+                  startPct,
+                  containerWidth: startPct > 0 ? (width / startPct) * 100 : width,
+                  table: pos.table,
+                }
+                return
+              }
               dragRef.current = {
-                index: bound.index,
+                kind: 'column',
+                index: handle.index,
                 startX: event.clientX,
-                percents: readColumnPercents(tableCols(ctx.table), ctx.rows),
-                // Measure in the SAME space the handles are positioned in.
-                // getBoundingClientRect() reports iframe pixels, which do not
-                // match the pointer's coordinates once the canvas is zoomed —
-                // the delta came out scaled and saturated the clamp on the
-                // first move.
-                width: editor.Canvas.getElementPos(tableEl).width,
-                targets: { cols: tableCols(ctx.table), rows: ctx.rows },
+                percents: readColumnPercents(pos.model),
+                width,
+                model: pos.model,
               }
             }}
             onPointerMove={(event) => {
               const drag = dragRef.current
-              if (!drag || drag.width <= 0) return
+              if (!drag) return
+              if (drag.kind === 'table') {
+                if (drag.containerWidth <= 0) return
+                const deltaPct = ((event.clientX - drag.startX) / drag.containerWidth) * 100
+                setTableWidthPct(drag.table, nextTableWidthPct(drag.startPct, deltaPct))
+                return
+              }
+              if (drag.width <= 0) return
               const deltaPct = ((event.clientX - drag.startX) / drag.width) * 100
               applyColumnPercents(
-                drag.targets,
+                drag.model,
                 nextColumnPercents(drag.percents, drag.index, deltaPct),
               )
             }}
@@ -382,7 +451,7 @@ export function TableColumnResizer({ editor }: { editor: Editor | null }) {
               if (!dragRef.current) return
               dragRef.current = null
               event.currentTarget.releasePointerCapture(event.pointerId)
-              editor.trigger('change:canvasOffset')
+              refresh(editor)
             }}
           />
         ))}

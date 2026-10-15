@@ -22,7 +22,12 @@ import {
   type TemplateCollection,
   type TemplateMergeField,
 } from '@/lib/template-builder-html'
-import { TableColumnResizer, TableToolbar } from '../_table-tools'
+import {
+  installTableEditing,
+  repairTables,
+  TableColumnResizer,
+  TableToolbar,
+} from '../_table-tools'
 
 const STARTER_HTML =
   '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;">' +
@@ -193,6 +198,8 @@ export default function PdfBuilder({
             style.innerHTML = pageCss(pageWidthPx, pageHeightPx, marginPx)
             doc.head.appendChild(style)
           })
+          // Cells delete as whole columns; must be in place before components load.
+          installTableEditing(editor)
           try {
             if (initialHtml && initialHtml.trim()) {
               editor.setComponents(initialHtml)
@@ -206,6 +213,8 @@ export default function PdfBuilder({
               /* noop */
             }
           }
+          // Open tables whole: rows padded to one column count, widths filling 100%.
+          repairTables(editor)
           editorRef.current = editor
           setEditor(editor)
           onReady(editor)
