@@ -4,15 +4,19 @@ import { createRoot, type Root } from 'react-dom/client'
 import { Select } from '@beaconhs/ui'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JournalEntryDetail, WorkspaceData } from './_types'
-import { flushRecordSaves } from '@/lib/pending-record-saves'
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   fetch: vi.fn(),
   workspace: vi.fn(),
-  update: vi.fn(),
   error: vi.fn(),
   success: vi.fn(),
+  change: vi.fn(),
+  flush: vi.fn(),
+  online: vi.fn(),
+  isOnline: true,
+  saveState: 'idle' as 'idle' | 'saved',
+  shown: '',
   edit: null as null | ((html: string) => void),
 }))
 vi.mock('./_actions', () => ({
@@ -22,16 +26,54 @@ vi.mock('./_actions', () => ({
   fetchAuthorWorkspaceData: mocks.workspace,
   fetchTree: vi.fn(),
   fetchAuthorTree: vi.fn(),
-  updateEntry: mocks.update,
   submitEntry: vi.fn(),
   deleteEntry: vi.fn(),
   emailEntry: vi.fn(),
   unlockEntry: vi.fn(),
 }))
 vi.mock('./_editor', () => ({
-  JournalEditor: ({ onChange }: { onChange: typeof mocks.edit }) => {
+  JournalEditor: ({ value, onChange }: { value: string; onChange: typeof mocks.edit }) => {
     mocks.edit = onChange
+    mocks.shown = value
     return <textarea aria-label="Journal text" />
+  },
+}))
+// The provider (device store + sync engine) has its own tests; here each field
+// is a plain binding. `mocks.saveState = 'saved'` makes the server acknowledge
+// every edit.
+vi.mock('@/lib/offline-drafts/offline-record', async () => {
+  const { useEffect, useState } = await import('react')
+  return {
+    OfflineRecordProvider: ({ children }: { children: ReactNode }) => children,
+    RecordSyncStatus: () => null,
+    RecordSyncBanner: () => null,
+    useRecordField: <T,>(fieldId: string, server: T) => {
+      const [value, setValue] = useState(server)
+      const serverKey = JSON.stringify(server)
+      useEffect(() => setValue(JSON.parse(serverKey) as T), [serverKey])
+      return {
+        value,
+        change: (next: T) => {
+          setValue(next)
+          mocks.change(fieldId, next)
+        },
+        commit: vi.fn(),
+        saveState: mocks.saveState,
+        error: null,
+        retry: vi.fn(),
+        paused: false,
+      }
+    },
+  }
+})
+// Online-only steps: refused without signal, otherwise queued edits first.
+vi.mock('@/lib/offline-drafts/use-online-action', () => ({
+  useOnlineAction: () => async (purpose: string, run: () => Promise<void>) => {
+    mocks.online(purpose)
+    if (!mocks.isOnline) return false
+    await mocks.flush()
+    await run()
+    return true
   },
 }))
 vi.mock('./_photos', () => ({ Photos: () => null }))
@@ -45,6 +87,7 @@ vi.mock('./_sidebar-tree', () => ({
   }) => (
     <>
       <button onClick={() => onSelect('older')}>Open older</button>
+      <button onClick={() => onSelect('entry')}>Open first</button>
       <button onClick={() => onPickDate('2026-10-04')}>Open date</button>
     </>
   ),
@@ -185,7 +228,9 @@ beforeEach(() => {
   mocks.create.mockResolvedValue({ ok: true, entry })
   mocks.fetch.mockResolvedValue({ ...entry, id: 'older', reference: 'J-older' })
   mocks.workspace.mockResolvedValue(data)
-  mocks.update.mockResolvedValue({ ok: true })
+  mocks.flush.mockResolvedValue(undefined)
+  mocks.isOnline = true
+  mocks.saveState = 'idle'
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   window.history.replaceState(null, '', '/journals')
   container = document.createElement('div')
@@ -193,13 +238,14 @@ beforeEach(() => {
   root = createRoot(container)
 })
 afterEach(async () => {
-  await act(async () => {
-    await flushRecordSaves()
-    root.unmount()
-  })
+  await act(async () => root.unmount())
   container.remove()
   vi.unstubAllGlobals()
 })
+function goOffline() {
+  mocks.isOnline = false
+  vi.stubGlobal('navigator', { ...navigator, onLine: false })
+}
 describe('one journal editor', () => {
   it('creates once on arrival, then immediately shows the actual full editor without typing', async () => {
     const opening = deferred<{ ok: true; entry: JournalEntryDetail }>()
@@ -266,18 +312,47 @@ describe('one journal editor', () => {
     await act(async () => button('Retry opening journal').click())
     expect(container.querySelector('textarea')).not.toBeNull()
   })
-  it('saves the last words before creating or resuming another date', async () => {
+  it('pushes the last words before creating or resuming another date', async () => {
     await render(entry)
-    const saving = deferred<{ ok: true }>()
-    mocks.update.mockReturnValueOnce(saving.promise)
+    const pushing = deferred<undefined>()
+    mocks.flush.mockReturnValueOnce(pushing.promise)
     await act(async () => mocks.edit!('<p>Final words</p>'))
+    expect(mocks.change).toHaveBeenCalledExactlyOnceWith('bodyHtml', '<p>Final words</p>')
     await act(async () => button('Open date').click())
+    expect(mocks.online).toHaveBeenCalledWith('start')
     expect(mocks.create).not.toHaveBeenCalled()
-    expect(mocks.update).toHaveBeenCalledExactlyOnceWith({
-      id: 'entry',
-      patch: { bodyHtml: '<p>Final words</p>' },
-    })
-    await act(async () => saving.resolve({ ok: true }))
+    await act(async () => pushing.resolve(undefined))
     expect(mocks.create).toHaveBeenCalledExactlyOnceWith('2026-10-04')
+  })
+  it('switches back to an entry opened earlier without signal, with its synced edits', async () => {
+    mocks.saveState = 'saved'
+    await render(entry)
+    await act(async () => mocks.edit!('<p>Synced words</p>'))
+    await act(async () => button('Open older').click())
+    expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith('older')
+    expect(container.textContent).toContain('J-older')
+    goOffline()
+    await act(async () => button('Open first').click())
+    expect(mocks.fetch).toHaveBeenCalledOnce()
+    expect(window.location.pathname).toBe('/journals/entry')
+    expect(container.textContent).toContain('J-1')
+    expect(mocks.shown).toBe('<p>Synced words</p>')
+  })
+  it('explains instead of opening an entry this device has not loaded without signal', async () => {
+    await render(entry)
+    goOffline()
+    await act(async () => button('Open older').click())
+    expect(mocks.online).toHaveBeenCalledExactlyOnceWith('start')
+    expect(mocks.fetch).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('J-1')
+  })
+  it('leaves a retry instead of a skeleton when a new entry cannot start without signal', async () => {
+    goOffline()
+    await render()
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull()
+    expect(container.querySelector('[role="alert"]')!.textContent).toBe(
+      'Could not open your journal.',
+    )
   })
 })

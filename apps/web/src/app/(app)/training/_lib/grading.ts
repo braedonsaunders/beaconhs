@@ -7,21 +7,9 @@
 // comma-separated value lists. We sort + lowercase both before comparing so
 // "A,B,C" matches "c,b,a".
 
-export type QuestionKind = 'text' | 'single_choice' | 'multi_choice' | 'numeric' | 'true_false'
-type ChoiceOption = { value: string; label: string }
+import { validChoiceOptions } from './assessment-display'
 
-function submittedChoiceOptions(options: unknown): ChoiceOption[] {
-  if (!Array.isArray(options)) return []
-  return options.filter(
-    (option): option is ChoiceOption =>
-      option != null &&
-      typeof option === 'object' &&
-      'value' in option &&
-      typeof option.value === 'string' &&
-      'label' in option &&
-      typeof option.label === 'string',
-  )
-}
+export type QuestionKind = 'text' | 'single_choice' | 'multi_choice' | 'numeric' | 'true_false'
 
 export function normalizeSubmittedAnswer(
   kind: QuestionKind,
@@ -47,7 +35,7 @@ export function normalizeSubmittedAnswer(
     return value
   }
 
-  const choices = submittedChoiceOptions(options)
+  const choices = validChoiceOptions(options)
   if (choices.length < 2) throw new Error('This assessment question has no available choices')
   const allowed = new Set(choices.map((option) => option.value))
   if (values.some((value) => !allowed.has(value))) {
@@ -63,6 +51,47 @@ export function normalizeSubmittedAnswer(
     .filter((option) => selected.has(option.value))
     .map((option) => option.value)
     .join(',')
+}
+
+/**
+ * An answer while the attempt is in progress, as the attempt page edits it and
+ * the device queues it: the chosen values for multi-choice, otherwise the
+ * typed or chosen value ('' when unanswered).
+ */
+export type DraftAnswerWire = string | string[]
+
+/** The stored answer as the values a submission carries. */
+export function storedAnswerValues(kind: QuestionKind, stored: string | null): string[] {
+  if (stored == null || stored === '') return []
+  return kind === 'multi_choice' ? stored.split(',') : [stored]
+}
+
+/** The stored answer as the attempt page shows it. */
+export function draftAnswerWire(kind: QuestionKind, stored: string | null): DraftAnswerWire {
+  return kind === 'multi_choice' ? storedAnswerValues(kind, stored) : (stored ?? '')
+}
+
+/**
+ * Validate an in-progress answer for its question with the submission's own
+ * rules, except that leaving a question unanswered is allowed until submit.
+ * Returns the value to store (null when unanswered).
+ */
+export function parseDraftAnswer(
+  kind: QuestionKind,
+  wire: unknown,
+  options: unknown,
+): string | null {
+  let values: string[]
+  if (kind === 'multi_choice') {
+    if (!Array.isArray(wire) || wire.some((value) => typeof value !== 'string')) {
+      throw new Error('An answer does not match the available choices')
+    }
+    values = wire as string[]
+  } else {
+    if (wire != null && typeof wire !== 'string') throw new Error('This value is invalid.')
+    values = wire ? [wire] : []
+  }
+  return normalizeSubmittedAnswer(kind, values, options, false)
 }
 
 export function gradeAnswer(

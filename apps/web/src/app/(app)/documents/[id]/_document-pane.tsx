@@ -33,7 +33,7 @@ import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { MAX_DOCUMENT_VERSION_NOTE_CHARS } from '@/lib/document-authoring-policy'
 import { CollaboraEmbed, type CollaboraHandle } from '@/components/collabora-embed'
 import { DownloadLink } from '@/components/download-link'
-import { flushRecordSaves } from '@/lib/pending-record-saves'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import {
   createBlankDocumentMaster,
   getDocumentWriterSession,
@@ -89,36 +89,44 @@ export function DocumentPane({
     return () => clearInterval(t)
   }, [rendering, router])
 
+  // Publishing and starting a blank master need signal: offline they explain
+  // instead of failing, and online they first push the Overview's queued
+  // metadata so the published version carries it.
+  const runOnline = useOnlineAction()
+
   function publish() {
     startTransition(async () => {
-      try {
-        const editor = editorRef.current
-        if (!editor) throw new Error('Wait for the document editor to finish loading.')
-        await flushRecordSaves()
-        await editor.save()
-        await publishDocumentVersion(documentId, changelog)
-        setShowPublish(false)
-        setChangelog('')
-        toast.success(tGenerated('m_0af338262dbb88'))
-        router.refresh()
-      } catch (err) {
-        toast.error(
-          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_01404a5cbe3992')),
-        )
-      }
+      await runOnline('finish', async () => {
+        try {
+          const editor = editorRef.current
+          if (!editor) throw new Error('Wait for the document editor to finish loading.')
+          await editor.save()
+          await publishDocumentVersion(documentId, changelog)
+          setShowPublish(false)
+          setChangelog('')
+          toast.success(tGenerated('m_0af338262dbb88'))
+          router.refresh()
+        } catch (err) {
+          toast.error(
+            tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_01404a5cbe3992')),
+          )
+        }
+      })
     })
   }
 
   function startBlank() {
     startTransition(async () => {
-      try {
-        await createBlankDocumentMaster(documentId)
-        router.refresh()
-      } catch (err) {
-        toast.error(
-          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_006a4dba30e7cf')),
-        )
-      }
+      await runOnline('start', async () => {
+        try {
+          await createBlankDocumentMaster(documentId)
+          router.refresh()
+        } catch (err) {
+          toast.error(
+            tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_006a4dba30e7cf')),
+          )
+        }
+      })
     })
   }
 

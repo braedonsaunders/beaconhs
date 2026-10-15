@@ -1,6 +1,7 @@
 'use server'
 
-// Document metadata + PDF-source actions. Authoring lives in Collabora Writer
+// Document PDF-source actions (the Overview metadata autosaves through the
+// `documents` record saver in ../_record-edits.ts). Authoring lives in Collabora Writer
 // (see _master-actions.ts): getDocumentPdfUrl resolves what the PDF pane shows
 // — a fresh render of the working master for managers (draft mode), the
 // published version's PDF for readers, or the uploaded file for file-only
@@ -8,33 +9,17 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
-import {
-  attachments,
-  documentCategories,
-  documentTypes,
-  documentVersions,
-  documents,
-} from '@beaconhs/db/schema'
+import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
 import { presignExistingGet } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
-import { isDocumentKeyConflict, parseDocumentKey } from '@/lib/document-key-policy'
-import { DOCUMENT_METADATA_LIMITS } from '@/lib/document-metadata-limits'
 import { nextDocumentMajorVersion } from '@/lib/document-authoring-policy'
 import {
   assertUploadedDocumentPdf,
   documentVersionVisibilityWhere,
 } from '@/lib/document-version-policy'
-import {
-  optionalDateInput,
-  optionalNumberInput,
-  optionalTextInput,
-  optionalUuidInput,
-  requiredTextInput,
-  requireRecordInput,
-  requireUuidInput,
-} from '@/lib/mutation-input'
+import { requireRecordInput, requireUuidInput } from '@/lib/mutation-input'
 
 type DocumentPdfUrlResult =
   | { ok: true; url: string }
@@ -152,144 +137,6 @@ export async function getDocumentPdfUrl(
   const url = await presignExistingGet({ key: pdfAtt.key, expiresInSeconds: 300 })
   if (!url) return { ok: false, error: 'The rendered PDF is missing from storage.' }
   return { ok: true, url }
-}
-
-// Edit all document "header" metadata from the manage page (incl. first-time fill-in).
-export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean; error?: string }> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  try {
-    const values = requireRecordInput(input, 'Document details')
-    const documentId = requireUuidInput(values.documentId, 'Document')
-    const title = requiredTextInput(values.title, 'Title', DOCUMENT_METADATA_LIMITS.title)
-    const parsedKey = parseDocumentKey(values.key)
-    if (!parsedKey.ok) return parsedKey
-    const categoryId = optionalUuidInput(values.categoryId, 'Category')
-    const typeId = optionalUuidInput(values.typeId, 'Type')
-    const description = optionalTextInput(
-      values.description,
-      'Description',
-      DOCUMENT_METADATA_LIMITS.description,
-    )
-    const reviewFrequencyMonths = optionalNumberInput(
-      values.reviewFrequencyMonths,
-      'Review frequency',
-      { min: 1, max: DOCUMENT_METADATA_LIMITS.reviewFrequencyMonths, integer: true },
-    )
-    const nextReviewOn = optionalDateInput(values.nextReviewOn, 'Next review date')
-    const headerIssuedOn = optionalDateInput(values.headerIssuedOn, 'Issue date')
-    const headerRevisedOn = optionalDateInput(values.headerRevisedOn, 'Revision date')
-    const headerApprovedBy = optionalTextInput(
-      values.headerApprovedBy,
-      'Approved by',
-      DOCUMENT_METADATA_LIMITS.headerApprovedBy,
-    )
-    const headerVersionLabel = optionalTextInput(
-      values.headerVersionLabel,
-      'Printed version',
-      DOCUMENT_METADATA_LIMITS.headerVersionLabel,
-    )
-    if (typeof values.showDocumentHeader !== 'boolean') {
-      throw new Error('The document header setting is invalid.')
-    }
-    const showDocumentHeader = values.showDocumentHeader
-
-    const updated = await ctx.db(async (tx) => {
-      const [before] = await tx
-        .select()
-        .from(documents)
-        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
-        .limit(1)
-        .for('update')
-      if (!before) return false
-      if (showDocumentHeader && !before.sourceAttachmentId) {
-        throw new Error('PDF headers require a Word working document.')
-      }
-
-      if (categoryId) {
-        const [category] = await tx
-          .select({ id: documentCategories.id })
-          .from(documentCategories)
-          .where(and(eq(documentCategories.id, categoryId), isNull(documentCategories.deletedAt)))
-          .limit(1)
-        if (!category) throw new Error('The selected category no longer exists.')
-      }
-      if (typeId) {
-        const [type] = await tx
-          .select({ id: documentTypes.id })
-          .from(documentTypes)
-          .where(and(eq(documentTypes.id, typeId), isNull(documentTypes.deletedAt)))
-          .limit(1)
-        if (!type) throw new Error('The selected type no longer exists.')
-      }
-
-      await tx
-        .update(documents)
-        .set({
-          title,
-          key: parsedKey.key,
-          categoryId,
-          typeId,
-          description,
-          reviewFrequencyMonths,
-          nextReviewOn,
-          showDocumentHeader,
-          headerIssuedOn,
-          headerRevisedOn,
-          headerApprovedBy,
-          headerVersionLabel,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'document',
-        entityId: documentId,
-        action: 'update',
-        summary: 'Updated document details',
-        before: {
-          title: before.title,
-          key: before.key,
-          categoryId: before.categoryId,
-          typeId: before.typeId,
-          description: before.description,
-          reviewFrequencyMonths: before.reviewFrequencyMonths,
-          nextReviewOn: before.nextReviewOn,
-          showDocumentHeader: before.showDocumentHeader,
-          headerIssuedOn: before.headerIssuedOn,
-          headerRevisedOn: before.headerRevisedOn,
-          headerApprovedBy: before.headerApprovedBy,
-          headerVersionLabel: before.headerVersionLabel,
-        },
-        after: {
-          title,
-          key: parsedKey.key,
-          categoryId,
-          typeId,
-          description,
-          reviewFrequencyMonths,
-          nextReviewOn,
-          showDocumentHeader,
-          headerIssuedOn,
-          headerRevisedOn,
-          headerApprovedBy,
-          headerVersionLabel,
-        },
-      })
-      return true
-    })
-    if (!updated) return { ok: false, error: 'Document not found.' }
-    revalidatePath(`/documents/${documentId}`)
-    revalidatePath('/documents')
-    return { ok: true }
-  } catch (error) {
-    if (isDocumentKeyConflict(error)) {
-      return { ok: false, error: 'A live document already uses that key.' }
-    }
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : 'Document details could not be saved.',
-    }
-  }
 }
 
 // Attach an uploaded PDF as a new unpublished file version. The document row

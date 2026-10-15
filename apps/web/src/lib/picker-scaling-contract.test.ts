@@ -140,13 +140,14 @@ describe('production-scale picker contract', () => {
     expect(locations).toContain('isNull(orgUnits.deletedAt)')
     expect(locations).not.toContain('eq(orgUnits.level')
 
-    const inspectionDetail = source('../app/(app)/inspections/records/[id]/page.tsx')
+    const inspectionEdits = source('../app/(app)/inspections/_record-edits.ts')
     const inspectionLocationSave = between(
-      inspectionDetail,
-      "if (field === 'siteOrgUnitId' && val)",
-      'const beforeValue =',
+      inspectionEdits,
+      "if (value && op === 'siteOrgUnitId')",
+      'const before = record[op]',
     )
-    expect(inspectionLocationSave).toContain('eq(orgUnits.id, String(val))')
+    expect(inspectionLocationSave).toContain('eq(orgUnits.id, value)')
+    expect(inspectionLocationSave).toContain('eq(orgUnits.tenantId, ctx.tenantId)')
     expect(inspectionLocationSave).not.toContain('orgUnits.level')
 
     const safeDistanceActions = source('../app/(app)/tools/safe-distance/_actions.ts')
@@ -162,11 +163,14 @@ describe('production-scale picker contract', () => {
     expect(hazardDetail).toContain('<LiveRemoteSelect')
     expect(hazardDetail).toContain('lookup="hazard-assessment-locations"')
 
-    const hazardMutations = source('../app/(app)/hazard-assessments/_actions.ts')
-    expect(hazardMutations).toContain("if (field === 'siteOrgUnitId' && val)")
-    expect(hazardMutations).toContain('isNull(orgUnits.deletedAt)')
-    expect(hazardMutations).toContain('siteOrgUnitId: assessment.siteOrgUnitId')
-    expect(hazardMutations).toContain('eq(hazidAssessmentAppResponses.assessmentId, id)')
+    const hazardLocationSave = source('../app/(app)/hazard-assessments/_record-edits.ts')
+    expect(hazardLocationSave).toContain('if (patch.siteOrgUnitId)')
+    expect(hazardLocationSave).toContain('isNull(orgUnits.deletedAt)')
+    expect(hazardLocationSave).toContain(
+      'eq(hazidAssessmentAppResponses.assessmentId, assessmentId)',
+    )
+    const hazardAppResponses = source('../app/(app)/hazard-assessments/_assessment-rules.ts')
+    expect(hazardAppResponses).toContain('siteOrgUnitId: assessment.siteOrgUnitId')
 
     const formRenderer = source('../app/(app)/apps/templates/[id]/fill/form-renderer.tsx')
     expect(formRenderer).toContain('lookup="form-response-locations"')

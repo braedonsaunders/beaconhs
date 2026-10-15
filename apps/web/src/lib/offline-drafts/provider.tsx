@@ -2,14 +2,25 @@
 
 // Mounted once in the authenticated layout. Supplies the device-store scope
 // (tenant + signed-in user, plus the real admin while impersonating) to every
-// form filler, and drives the background sync queue: it drains pending
-// device copies when the app loads, when the connection returns, when the tab
-// becomes visible again, and on a fixed interval — so a draft saved in a dead
-// zone reaches the server even if its form is never reopened.
+// form filler and record page, and drives the background sync queue: it
+// drains pending device copies when the app loads, when the connection
+// returns, when the tab becomes visible again, and on a fixed interval — so
+// work saved in a dead zone reaches the server even if its page is never
+// reopened.
+//
+// It also enforces the online-only rule for everything that is not queued on
+// the device. Field edits work offline; a form submission (creating a record,
+// adding or removing rows, submitting, locking, signing, emailing) needs the
+// server. While the browser reports no connection, any form submission is
+// stopped before the Server Action runs and the worker is told why, instead of
+// the request failing mid-flight. Forms that handle this themselves
+// (<OnlineActionForm>) or that work without the server opt out with
+// `data-offline-ok`.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react'
 import { useGeneratedTranslations } from '@/i18n/generated'
 import { confirmDialog } from '@/lib/confirm'
+import { toast } from '@/lib/toast'
 import { getDraftSyncEngine } from './engine'
 import { draftScopeKey, type DraftScope } from './model'
 
@@ -76,6 +87,21 @@ export function OfflineDraftsProvider({
       window.clearTimeout(initial)
     }
   }, [scopeKey])
+
+  useEffect(() => {
+    const onSubmit = (event: SubmitEvent) => {
+      if (navigator.onLine) return
+      const form = event.target
+      if (!(form instanceof HTMLFormElement) || form.hasAttribute('data-offline-ok')) return
+      // Capture phase on window: runs before React's root listener, so the
+      // Server Action is never started.
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      toast.error(tGenerated('m_1274068c9365ae'))
+    }
+    window.addEventListener('submit', onSubmit, true)
+    return () => window.removeEventListener('submit', onSubmit, true)
+  }, [tGenerated])
 
   const prepareSignOut = useCallback(async () => {
     const engine = getDraftSyncEngine()

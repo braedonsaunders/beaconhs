@@ -7,7 +7,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
+import { and, asc, eq, isNull, ne, sql } from 'drizzle-orm'
 import { normalizeCatalogDisplayName, normalizedCatalogNameSql, type Database } from '@beaconhs/db'
 import {
   attachments,
@@ -28,6 +28,7 @@ import {
   materializeLockedJobTitleObligations,
 } from '@/lib/job-title-compliance'
 import { assertCanActOnPerson } from '../_lib/person-access'
+import { refreshPersonTitleCache } from '../_lib/person-assignments'
 
 const DUPLICATE_TITLE_ERROR = 'A job title with this name already exists.'
 
@@ -261,222 +262,6 @@ export async function restoreTitle(formData: FormData): Promise<void> {
 
 // ---------- title assignment --------------------------------------------
 
-/**
- * Set a person's full set of held titles in one shot — the write half of the
- * inline "Titles" multi-select on the person overview. Diffs against current
- * assignments, adds/removes the delta, and guarantees exactly one primary
- * survives whenever the person still holds at least one title.
- */
-export async function setPersonTitles(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'people')
-  const personId = String(formData.get('id') ?? '')
-  if (!personId) return
-  const titleIds = Array.from(new Set(formData.getAll('value').map(String).filter(Boolean)))
-
-  await ctx.db(async (tx) => {
-    const [person] = await tx
-      .select({ id: people.id })
-      .from(people)
-      .where(and(eq(people.id, personId), isNull(people.deletedAt)))
-      .limit(1)
-      .for('update')
-    if (!person) throw new Error('Person not found')
-    if (await getPersonSyncOrigin(tx, personId)) {
-      throw new Error('Title assignments are managed by an external sync and are read-only')
-    }
-
-    const selectedTitles =
-      titleIds.length > 0
-        ? await tx
-            .select({ id: personTitles.id, name: personTitles.name })
-            .from(personTitles)
-            .where(and(inArray(personTitles.id, titleIds), isNull(personTitles.deletedAt)))
-            .for('key share')
-        : []
-    if (selectedTitles.length !== titleIds.length) {
-      throw new Error('One or more selected titles are unavailable')
-    }
-
-    const existing = await tx
-      .select()
-      .from(personTitleAssignments)
-      .where(eq(personTitleAssignments.personId, personId))
-    const existingIds = existing.map((row) => row.titleId)
-    const lockedObligations = await lockJobTitleObligations(tx, ctx.tenantId, [
-      ...existingIds,
-      ...titleIds,
-    ])
-    if (existing.length > 0) {
-      // No active crosswalk owns this person. Complete any historical/removed
-      // connection handoff before applying the user's full manual selection.
-      await tx
-        .update(personTitleAssignments)
-        .set({ isManuallyMaintained: true, sourceConnectionId: null })
-        .where(eq(personTitleAssignments.personId, personId))
-    }
-    const toRemove = existingIds.filter((t) => !titleIds.includes(t))
-    const toAdd = titleIds.filter((t) => !existingIds.includes(t))
-    if (toRemove.length > 0) {
-      await tx
-        .delete(personTitleAssignments)
-        .where(
-          and(
-            eq(personTitleAssignments.personId, personId),
-            inArray(personTitleAssignments.titleId, toRemove),
-          ),
-        )
-    }
-    if (toAdd.length > 0) {
-      await tx
-        .insert(personTitleAssignments)
-        .values(toAdd.map((titleId) => ({ tenantId: ctx.tenantId, titleId, personId })))
-        .onConflictDoNothing()
-    }
-    // Keep the primary invariant. If the previous primary was removed, choose
-    // by canonical title name so form order and insertion timing cannot change
-    // which title becomes primary.
-    const remaining = await tx
-      .select({ assignment: personTitleAssignments, titleName: personTitles.name })
-      .from(personTitleAssignments)
-      .innerJoin(personTitles, eq(personTitles.id, personTitleAssignments.titleId))
-      .where(eq(personTitleAssignments.personId, personId))
-      .orderBy(asc(personTitles.name), asc(personTitleAssignments.titleId))
-    if (remaining.length > 0 && !remaining.some((r) => r.assignment.isPrimary)) {
-      await tx
-        .update(personTitleAssignments)
-        .set({ isPrimary: true })
-        .where(
-          and(
-            eq(personTitleAssignments.personId, personId),
-            eq(personTitleAssignments.titleId, remaining[0]!.assignment.titleId),
-          ),
-        )
-    }
-    await refreshTitleCache(tx, ctx.tenantId, [personId])
-    await materializeLockedJobTitleObligations(tx, ctx.tenantId, lockedObligations)
-    const primary = remaining.find((row) => row.assignment.isPrimary) ?? remaining[0] ?? null
-    const result = {
-      beforeTitleIds: existingIds.sort(),
-      beforePrimaryTitleId: existing.find((row) => row.isPrimary)?.titleId ?? null,
-      afterTitleIds: remaining.map((row) => row.assignment.titleId).sort(),
-      afterPrimaryTitleId: primary?.assignment.titleId ?? null,
-    }
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'person',
-      entityId: personId,
-      action: 'update',
-      summary: 'Updated title assignments',
-      before: {
-        titleIds: result.beforeTitleIds,
-        primaryTitleId: result.beforePrimaryTitleId,
-      },
-      after: {
-        titleIds: result.afterTitleIds,
-        primaryTitleId: result.afterPrimaryTitleId,
-      },
-    })
-    return result
-  })
-  revalidatePath(`/people/${personId}`)
-}
-
-/**
- * Set the single title used anywhere a person needs one display/search title.
- * Selecting an unheld title also adds it to the person's held-title set.
- */
-export async function setPrimaryPersonTitle(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'people')
-  const personId = String(formData.get('id') ?? '')
-  const titleId = String(formData.get('value') ?? '')
-  if (!personId) throw new Error('Person is required')
-
-  await ctx.db(async (tx) => {
-    const [person] = await tx
-      .select({ id: people.id })
-      .from(people)
-      .where(and(eq(people.id, personId), isNull(people.deletedAt)))
-      .limit(1)
-      .for('update')
-    if (!person) throw new Error('Person not found')
-    if (await getPersonSyncOrigin(tx, personId)) {
-      throw new Error('Primary job title is managed by an external sync and is read-only')
-    }
-
-    const existing = await tx
-      .select()
-      .from(personTitleAssignments)
-      .where(eq(personTitleAssignments.personId, personId))
-    const beforePrimaryTitleId = existing.find((row) => row.isPrimary)?.titleId ?? null
-
-    if (!titleId) {
-      if (existing.length > 0) {
-        throw new Error('Choose a primary job title while this person holds titles')
-      }
-      const result = { beforePrimaryTitleId, afterPrimaryTitleId: null }
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'person',
-        entityId: personId,
-        action: 'update',
-        summary: 'Updated primary job title',
-        before: { primaryTitleId: result.beforePrimaryTitleId },
-        after: { primaryTitleId: result.afterPrimaryTitleId },
-      })
-      return result
-    }
-
-    const [title] = await tx
-      .select({ id: personTitles.id })
-      .from(personTitles)
-      .where(and(eq(personTitles.id, titleId), isNull(personTitles.deletedAt)))
-      .limit(1)
-      .for('key share')
-    if (!title) throw new Error('Selected title is unavailable')
-
-    const lockedObligations = await lockJobTitleObligations(tx, ctx.tenantId, [titleId])
-    if (existing.length > 0) {
-      await tx
-        .update(personTitleAssignments)
-        .set({ isManuallyMaintained: true, sourceConnectionId: null })
-        .where(eq(personTitleAssignments.personId, personId))
-    }
-
-    await tx
-      .insert(personTitleAssignments)
-      .values({ tenantId: ctx.tenantId, personId, titleId, isPrimary: false })
-      .onConflictDoNothing()
-    await tx
-      .update(personTitleAssignments)
-      .set({ isPrimary: false })
-      .where(eq(personTitleAssignments.personId, personId))
-    await tx
-      .update(personTitleAssignments)
-      .set({ isPrimary: true })
-      .where(
-        and(
-          eq(personTitleAssignments.personId, personId),
-          eq(personTitleAssignments.titleId, titleId),
-        ),
-      )
-    await refreshTitleCache(tx, ctx.tenantId, [personId])
-    await materializeLockedJobTitleObligations(tx, ctx.tenantId, lockedObligations)
-    const result = { beforePrimaryTitleId, afterPrimaryTitleId: titleId }
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'person',
-      entityId: personId,
-      action: 'update',
-      summary: 'Updated primary job title',
-      before: { primaryTitleId: result.beforePrimaryTitleId },
-      after: { primaryTitleId: result.afterPrimaryTitleId },
-    })
-    return result
-  })
-  revalidatePath(`/people/${personId}`)
-  revalidatePath('/people')
-  revalidatePath('/people/org-chart')
-}
-
 export async function unassignTitleFromPerson(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
@@ -517,7 +302,7 @@ export async function unassignTitleFromPerson(formData: FormData): Promise<void>
       .returning({ id: personTitleAssignments.id })
     if (!deleted) return false
     await promotePrimaryTitleIfNeeded(tx, personId)
-    await refreshTitleCache(tx, ctx.tenantId, [personId])
+    await refreshPersonTitleCache(tx, ctx.tenantId, [personId])
     await materializeLockedJobTitleObligations(tx, ctx.tenantId, lockedObligations)
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'person',
@@ -931,25 +716,4 @@ async function promotePrimaryTitleIfNeeded(tx: Database, personId: string): Prom
     .update(personTitleAssignments)
     .set({ isPrimary: true })
     .where(eq(personTitleAssignments.id, assignments[0]!.id))
-}
-
-async function refreshTitleCache(
-  tx: Database,
-  tenantId: string,
-  personIds: string[],
-): Promise<void> {
-  if (personIds.length === 0) return
-  await tx.execute(sql`
-    UPDATE people
-    SET title_ids = COALESCE((
-      SELECT jsonb_agg(title_id ORDER BY title_id)
-      FROM person_title_assignments
-      WHERE person_id = people.id AND tenant_id = ${tenantId}
-    ), '[]'::jsonb)
-    WHERE id IN (${sql.join(
-      personIds.map((id) => sql`${id}::uuid`),
-      sql`, `,
-    )})
-      AND tenant_id = ${tenantId}
-  `)
 }

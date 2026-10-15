@@ -12,6 +12,7 @@ import { can } from '@beaconhs/tenant'
 import { IncidentsSubNav } from './_sub-nav'
 import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -166,7 +167,7 @@ export default async function IncidentsPage({
   const tableRows: IncidentsTableRow[] = rows.map(({ incident, site }) => ({
     id: incident.id,
     reference: incident.reference,
-    occurredAt: incident.occurredAt.toISOString(),
+    occurredOn: formatDate(incident.occurredAt, ctx.timezone, ctx.locale),
     type: incident.type,
     severity: incident.severity,
     status: incident.status,

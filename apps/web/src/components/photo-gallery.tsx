@@ -134,6 +134,7 @@ function PhotoEditor({
   onSave: (edits: PhotoEdits) => Promise<MutationResult>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [caption, setCaption] = useState(photo.caption ?? '')
   const [annotations, setAnnotations] = useState<Annotation[]>(photo.annotations ?? [])
   const [color, setColor] = useState<(typeof COLORS)[number]>('#ef4444')
@@ -213,6 +214,10 @@ function PhotoEditor({
 
   function save() {
     activeStroke.current = null
+    if (!navigator.onLine) {
+      toast.error(tGenerated('m_0149ae2f927cc5'))
+      return
+    }
     startTransition(async () => {
       try {
         const result = await onSave({ caption, annotations: annotationsRef.current })
@@ -408,6 +413,10 @@ export function PhotoGallery({
 
   function move(photoId: string, direction: -1 | 1) {
     if (!onReorder || pending) return
+    if (!navigator.onLine) {
+      toast.error(tGenerated('m_0149ae2f927cc5'))
+      return
+    }
     const currentIndex = orderedPhotos.findIndex((photo) => photo.id === photoId)
     const nextIndex = currentIndex + direction
     if (currentIndex < 0 || nextIndex < 0 || nextIndex >= orderedPhotos.length) return
@@ -436,6 +445,10 @@ export function PhotoGallery({
 
   async function remove(photo: GalleryPhoto) {
     if (!onRemove) return
+    if (!navigator.onLine) {
+      toast.error(tGenerated('m_0149ae2f927cc5'))
+      return
+    }
     if (
       !(await confirmDialog({
         message: 'Remove this photo from the record?',

@@ -17,11 +17,8 @@ describe('custom-field lifecycle contract', () => {
   const actions = source('./custom-fields/actions.ts')
 
   it('serializes value writes against definition edits and audits in the same transaction', () => {
-    const update = between(
-      actions,
-      'export async function updateCustomFieldValueAction',
-      'export type SaveCustomFieldInput',
-    )
+    const update = source('./custom-fields/record-op.ts')
+    const values = source('./custom-fields/values.ts')
     expect(update).toContain(".for('share')")
     expect(update.indexOf(".for('share')")).toBeLessThan(
       update.indexOf('writeMetadataInTransaction('),
@@ -30,8 +27,8 @@ describe('custom-field lifecycle contract', () => {
       update.indexOf('recordAuditInTransaction('),
     )
     expect(update).not.toContain('recordAudit(ctx')
-    expect(actions).toContain('subtypeId ? eq(equipmentItems.typeId, subtypeId) : undefined')
-    expect(actions).toContain('subtypeId ? eq(ppeItems.typeId, subtypeId) : undefined')
+    expect(values).toContain('subtypeId ? eq(equipmentItems.typeId, subtypeId) : undefined')
+    expect(values).toContain('subtypeId ? eq(ppeItems.typeId, subtypeId) : undefined')
   })
 
   it('keeps definition updates, value migrations, scope cleanup, and audit atomic', () => {

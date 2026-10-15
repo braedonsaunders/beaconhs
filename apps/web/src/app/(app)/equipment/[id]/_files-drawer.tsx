@@ -14,6 +14,7 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { Loader2, Upload } from 'lucide-react'
 import { Button, FileUploader, Input, Label, Select, UrlDrawer } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
@@ -52,6 +53,7 @@ export function EquipmentFileDrawer({
   const [uploaded, setUploaded] = useState<{ attachmentId: string; filename: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function reset() {
     setKind('certificate')
@@ -67,21 +69,23 @@ export function EquipmentFileDrawer({
       return
     }
     startTransition(async () => {
-      const res = await attachAction({
-        itemId,
-        attachmentId: uploaded.attachmentId,
-        kind,
-        label: label.trim() || null,
+      await runOnline('finish', async () => {
+        const res = await attachAction({
+          itemId,
+          attachmentId: uploaded.attachmentId,
+          kind,
+          label: label.trim() || null,
+        })
+        if (res.ok) {
+          toast.success(tGenerated('m_01f37a7f2f8620'))
+          reset()
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_0d520cff4c0719')))
+          toast.error(tGeneratedValue(res.error ?? tGenerated('m_0d520cff4c0719')))
+        }
       })
-      if (res.ok) {
-        toast.success(tGenerated('m_01f37a7f2f8620'))
-        reset()
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_0d520cff4c0719')))
-        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0d520cff4c0719')))
-      }
     })
   }
 

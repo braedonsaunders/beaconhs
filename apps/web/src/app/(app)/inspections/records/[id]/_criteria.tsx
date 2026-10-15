@@ -8,13 +8,14 @@ import {
 } from '@/i18n/generated'
 
 // Single-page criterion fill — the inspections analogue of the hazard-assessment
-// row components. Each criterion is one always-live card: tap an answer to save
-// it (optimistic), and the fail-only metadata (severity, reason, action taken,
-// assignee, due date, corrected-on) auto-saves on blur/change. No Save buttons,
-// no edit drawer — the input on the page IS the field, matching the
-// hazard-assessment recipe (see @/components/live-field).
+// row components. Each criterion is one always-live card: tap an answer, and
+// the fail-only metadata (severity, reason, action taken, assignee, due date,
+// corrected-on) saves as it changes. No Save buttons, no edit drawer — the
+// input on the page IS the field. Every field is written to the device first
+// and synced by the record page's <OfflineRecordProvider> (`criteria:<rowId>:
+// <field>`, applied by ../../_record-edits.ts), so the checklist works without
+// signal; photos need signal.
 
-import { useState } from 'react'
 import Link from 'next/link'
 import { Badge, Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
@@ -27,13 +28,18 @@ import {
   type InspectionResponseType,
 } from '@/lib/inspection-response-config'
 import {
-  AutosaveTextarea as AutoTextarea,
   CRITERION_SEVERITY_OPTIONS as SEVERITY_OPTS,
   CriterionPhotosPanel,
-  CriterionSaveIndicator as SaveDot,
+  CriterionSaveIndicator,
   CriterionSeverityPicker,
-  useCriterionAutosave as useAutosave,
+  CriterionTextarea,
 } from '@/components/inspection/criterion-controls'
+import {
+  criterionAssignmentWire,
+  criterionFieldId,
+  type CriterionAssignmentWire,
+} from '@/components/inspection/criterion-fields'
+import { useRecordField } from '@/lib/offline-drafts/offline-record'
 
 type CriterionAnswer = 'pass' | 'fail' | 'n_a'
 export type CriterionSeverity = InspectionSeverity
@@ -50,16 +56,8 @@ const ANSWER_LABELS: Record<
   yes_no: { pass: 'Yes', fail: 'No', n_a: 'N/A' },
 }
 
-type CriterionActions = {
-  setAnswer: (fd: FormData) => Promise<void>
-  setChoiceAnswer: (fd: FormData) => Promise<void>
-  setValueAnswer: (fd: FormData) => Promise<void>
-  setSeverity: (fd: FormData) => Promise<void>
-  setNonCompliance: (fd: FormData) => Promise<void>
-  setActionTaken: (fd: FormData) => Promise<void>
-  setCompliantNote: (fd: FormData) => Promise<void>
-  setAssignment: (fd: FormData) => Promise<void>
-  setCorrected: (fd: FormData) => Promise<void>
+/** Photos need signal, so they stay Server Actions. */
+type CriterionPhotoActions = {
   addPhotos: (fd: FormData) => Promise<void>
   updatePhoto: (
     recordId: string,
@@ -121,7 +119,8 @@ export function CriterionCard({
   choiceOptions: string[]
   choiceAnswer: string | null
   textAnswer: string | null
-  numberAnswer: string | null
+  /** The saved number in its canonical wire form ('' when unanswered). */
+  numberAnswer: string
   requiresPhoto: boolean
   requiresComment: boolean
   answer: CriterionAnswer | null
@@ -141,20 +140,55 @@ export function CriterionCard({
   today: string
   locked: boolean
   allowCompliantNotes: boolean
-  actions: CriterionActions
+  actions: CriterionPhotoActions
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
-  const { state, save, refresh } = useAutosave()
-  // Optimistic local state for the values that drive what's shown.
-  const [answer, setAnswerState] = useState<CriterionAnswer | null>(initialAnswer)
-  const [choiceAnswer, setChoiceAnswerState] = useState(initialChoiceAnswer ?? '')
-  const [textAnswer, setTextAnswerState] = useState(initialTextAnswer ?? '')
-  const [numberAnswer, setNumberAnswerState] = useState(initialNumberAnswer ?? '')
-  const [severity, setSeverityState] = useState<CriterionSeverity | null>(initialSeverity)
-  const [assignee, setAssignee] = useState(assignedToPersonId ?? '')
-  const [due, setDue] = useState(assignedDueDate ?? '')
-  const [corrected, setCorrected] = useState(correctedOn ?? '')
+  const fieldId = (field: string) => criterionFieldId(rowId, field)
+  const answerField = useRecordField<string>(fieldId('answer'), initialAnswer ?? '')
+  const choiceField = useRecordField(fieldId('choiceAnswer'), initialChoiceAnswer ?? '')
+  const valueField = useRecordField(
+    fieldId('value'),
+    responseType === 'number' ? initialNumberAnswer : (initialTextAnswer ?? ''),
+  )
+  const severityField = useRecordField<string>(fieldId('severity'), initialSeverity ?? '')
+  const nonComplianceField = useRecordField(
+    fieldId('nonCompliance'),
+    nonComplianceDescription ?? '',
+  )
+  const actionTakenField = useRecordField(fieldId('actionTaken'), actionTaken ?? '')
+  const compliantNoteField = useRecordField(fieldId('compliantNote'), compliantNote ?? '')
+  const assignmentField = useRecordField<CriterionAssignmentWire>(
+    fieldId('assignment'),
+    criterionAssignmentWire(assignedToPersonId, assignedDueDate),
+  )
+  const correctedField = useRecordField(fieldId('correctedOn'), correctedOn ?? '')
+  const fields = [
+    answerField,
+    choiceField,
+    valueField,
+    severityField,
+    nonComplianceField,
+    actionTakenField,
+    compliantNoteField,
+    assignmentField,
+    correctedField,
+  ]
+  // An editable card shows this device's values, which may not have synced
+  // yet; a locked one shows what the record holds.
+  const answer = locked ? initialAnswer : ((answerField.value || null) as CriterionAnswer | null)
+  const choiceAnswer = locked ? (initialChoiceAnswer ?? '') : choiceField.value
+  const textAnswer =
+    responseType === 'number' ? '' : locked ? (initialTextAnswer ?? '') : valueField.value
+  const numberAnswer =
+    responseType !== 'number' ? '' : locked ? initialNumberAnswer : valueField.value
+  const severity = locked
+    ? initialSeverity
+    : ((severityField.value || null) as CriterionSeverity | null)
+  const assignee = assignmentField.value.assignedToPersonId
+  const due = assignmentField.value.assignedDueDate
+  const corrected = locked ? (correctedOn ?? '') : correctedField.value
+  const editable = !locked && !answerField.paused
   const resolutionLocked =
     Boolean(correctiveActionId) &&
     (!canResolveAction ||
@@ -171,41 +205,25 @@ export function CriterionCard({
   })
 
   function pickAnswer(next: CriterionAnswer) {
-    setAnswerState(next)
-    // Mirror the server: leaving 'fail' clears the failure metadata.
+    answerField.commit(next)
+    // Mirror the server: leaving 'fail' clears the finding. Queue the same
+    // clears so any finding edit still waiting on this device is replaced,
+    // not sent to a criterion that no longer failed.
     if (next !== 'fail') {
-      setSeverityState(null)
-      setAssignee('')
-      setDue('')
-      setCorrected('')
+      severityField.commit('')
+      nonComplianceField.commit('')
+      actionTakenField.commit('')
+      assignmentField.commit(criterionAssignmentWire(null, null))
+      correctedField.commit('')
     }
-    save(actions.setAnswer, { recordId, rowId, answer: next })
-  }
-
-  function pickChoiceAnswer(next: string) {
-    setChoiceAnswerState(next)
-    save(actions.setChoiceAnswer, { recordId, rowId, choiceAnswer: next })
-  }
-
-  function saveValueAnswer(next: string) {
-    if (responseType === 'number') setNumberAnswerState(next)
-    else setTextAnswerState(next)
-    save(actions.setValueAnswer, { recordId, rowId, value: next })
   }
 
   function pickSeverity(next: CriterionSeverity) {
-    const value = severity === next ? '' : next
-    setSeverityState(value === '' ? null : (value as CriterionSeverity))
-    save(actions.setSeverity, { recordId, rowId, severity: value })
+    severityField.commit(severity === next ? '' : next)
   }
 
   function saveAssignment(nextAssignee: string, nextDue: string) {
-    save(actions.setAssignment, {
-      recordId,
-      rowId,
-      assignedToPersonId: nextAssignee,
-      assignedDueDate: nextDue,
-    })
+    assignmentField.commit({ assignedToPersonId: nextAssignee, assignedDueDate: nextDue })
   }
 
   const tone =
@@ -335,7 +353,7 @@ export function CriterionCard({
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <SaveDot state={state} />
+          <CriterionSaveIndicator fields={fields} />
           <GeneratedValue
             value={
               locked ? (
@@ -357,7 +375,8 @@ export function CriterionCard({
               ) : responseType === 'choice' ? (
                 <Select
                   value={choiceAnswer}
-                  onChange={(event) => pickChoiceAnswer(event.target.value)}
+                  disabled={!editable}
+                  onChange={(event) => choiceField.commit(event.target.value)}
                   aria-label={tGenerated('m_136d6440d6732f', { value0: question })}
                   className="max-w-64 min-w-40"
                 >
@@ -372,8 +391,9 @@ export function CriterionCard({
                 <Input
                   value={textAnswer}
                   maxLength={MAX_INSPECTION_TEXT_ANSWER_LENGTH}
-                  onChange={(event) => setTextAnswerState(event.target.value)}
-                  onBlur={(event) => saveValueAnswer(event.target.value)}
+                  disabled={!editable}
+                  onChange={(event) => valueField.change(event.target.value)}
+                  onBlur={() => valueField.commit()}
                   aria-label={tGenerated('m_136d6440d6732f', { value0: question })}
                   className="w-64 max-w-[45vw]"
                 />
@@ -382,8 +402,9 @@ export function CriterionCard({
                   value={textAnswer}
                   maxLength={MAX_INSPECTION_TEXT_ANSWER_LENGTH}
                   rows={3}
-                  onChange={(event) => setTextAnswerState(event.target.value)}
-                  onBlur={(event) => saveValueAnswer(event.target.value)}
+                  disabled={!editable}
+                  onChange={(event) => valueField.change(event.target.value)}
+                  onBlur={() => valueField.commit()}
                   aria-label={tGenerated('m_136d6440d6732f', { value0: question })}
                   className="w-80 max-w-[50vw]"
                 />
@@ -392,8 +413,9 @@ export function CriterionCard({
                   type="number"
                   step="any"
                   value={numberAnswer}
-                  onChange={(event) => setNumberAnswerState(event.target.value)}
-                  onBlur={(event) => saveValueAnswer(event.target.value)}
+                  disabled={!editable}
+                  onChange={(event) => valueField.change(event.target.value)}
+                  onBlur={() => valueField.commit()}
                   aria-label={tGenerated('m_136d6440d6732f', { value0: question })}
                   className="w-40 max-w-[40vw]"
                 />
@@ -408,8 +430,9 @@ export function CriterionCard({
                           type="button"
                           onClick={() => pickAnswer(opt)}
                           aria-pressed={active}
+                          disabled={!editable}
                           className={cn(
-                            'min-h-9 rounded-md border px-2.5 text-sm font-medium transition-colors sm:min-h-0 sm:py-1 sm:text-xs',
+                            'min-h-9 rounded-md border px-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0 sm:py-1 sm:text-xs',
                             active
                               ? opt === 'pass'
                                 ? 'border-emerald-500 bg-emerald-500 text-white'
@@ -439,6 +462,7 @@ export function CriterionCard({
               <CriterionSeverityPicker
                 severity={severity}
                 onPick={pickSeverity}
+                disabled={!editable}
                 helper={
                   <p className="text-[11px] text-slate-400 dark:text-slate-500">
                     <GeneratedValue value="Choose a severity (required). Severity sets urgency. Unresolved findings can create follow-up actions on submission." />
@@ -446,17 +470,17 @@ export function CriterionCard({
                 }
               />
 
-              <AutoTextarea
+              <CriterionTextarea
                 label={tGenerated('m_04d0cf04f2240b')}
-                initial={nonComplianceDescription}
+                field={nonComplianceField}
                 placeholder={tGenerated('m_0016970632a81e')}
-                onCommit={(v) => save(actions.setNonCompliance, { recordId, rowId, value: v })}
+                disabled={!editable}
               />
-              <AutoTextarea
+              <CriterionTextarea
                 label={tGenerated('m_0da1a29f41377e')}
-                initial={actionTaken}
+                field={actionTakenField}
                 placeholder={tGenerated('m_0692fe3c89bfd4')}
-                onCommit={(v) => save(actions.setActionTaken, { recordId, rowId, value: v })}
+                disabled={!editable}
               />
 
               <div className="space-y-1">
@@ -466,11 +490,11 @@ export function CriterionCard({
                 <Select
                   id={`resolution-${rowId}`}
                   value={corrected ? 'resolved' : 'follow_up'}
-                  disabled={resolutionLocked}
+                  disabled={resolutionLocked || !editable}
                   onChange={(event) => {
-                    const date = event.target.value === 'resolved' ? corrected || today : ''
-                    setCorrected(date)
-                    save(actions.setCorrected, { recordId, rowId, correctedOn: date })
+                    correctedField.commit(
+                      event.target.value === 'resolved' ? corrected || today : '',
+                    )
                   }}
                 >
                   <option value="follow_up">{tGeneratedValue('Follow-up required')}</option>
@@ -495,10 +519,8 @@ export function CriterionCard({
                   <RemoteSearchSelect
                     lookup="inspection-people"
                     value={assignee}
-                    onChange={(next) => {
-                      setAssignee(next)
-                      saveAssignment(next, due)
-                    }}
+                    disabled={!editable}
+                    onChange={(next) => saveAssignment(next, due)}
                     placeholder={tGenerated('m_1f2bc1976a0465')}
                     searchPlaceholder={tGenerated('m_06c2338b990aea')}
                     sheetTitle="Assign finding"
@@ -514,10 +536,8 @@ export function CriterionCard({
                   <Input
                     type="date"
                     value={due}
-                    onChange={(e) => {
-                      setDue(e.target.value)
-                      saveAssignment(assignee, e.target.value)
-                    }}
+                    disabled={!editable}
+                    onChange={(e) => saveAssignment(assignee, e.target.value)}
                   />
                 </div>
                 <div className="space-y-1">
@@ -527,13 +547,11 @@ export function CriterionCard({
                   <Input
                     type="date"
                     value={corrected}
-                    disabled={resolutionLocked || !corrected}
+                    disabled={resolutionLocked || !corrected || !editable}
                     max={today}
                     required={Boolean(corrected)}
                     onChange={(e) => {
-                      if (!e.target.value) return
-                      setCorrected(e.target.value)
-                      save(actions.setCorrected, { recordId, rowId, correctedOn: e.target.value })
+                      if (e.target.value) correctedField.commit(e.target.value)
                     }}
                   />
                 </div>
@@ -549,12 +567,12 @@ export function CriterionCard({
         value={
           (allowCompliantNotes || requiresComment) && responseAnswered && !locked ? (
             <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-              <AutoTextarea
+              <CriterionTextarea
                 label={tGeneratedValue(requiresComment ? 'Notes (required)' : 'Notes')}
-                initial={compliantNote}
+                field={compliantNoteField}
                 rows={1}
                 placeholder={tGenerated('m_152b01fa42432d')}
-                onCommit={(v) => save(actions.setCompliantNote, { recordId, rowId, value: v })}
+                disabled={!editable}
               />
             </div>
           ) : null
@@ -575,7 +593,6 @@ export function CriterionCard({
               updatePhoto={actions.updatePhoto}
               removePhoto={actions.removePhoto}
               reorderPhotos={actions.reorderPhotos}
-              onDone={refresh}
             />
           ) : null
         }

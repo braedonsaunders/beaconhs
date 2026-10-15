@@ -7,7 +7,7 @@ import { X, LoaderCircle } from 'lucide-react'
 import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import { Pagination } from '@/components/pagination'
 import { RawImage } from '@/components/raw-image'
-import { flushRecordSaves } from '@/lib/pending-record-saves'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { toast } from '@/lib/toast'
 import type { SigningRosterData } from '@/lib/hazid-signing-roster'
 import type { PickerOption } from '@/lib/picker-options'
@@ -33,6 +33,10 @@ export function SigningRoster({
   canUpdate: boolean
 }) {
   const t = useGeneratedValueTranslations()
+  // Crew and signature steps need signal: offline they explain instead of
+  // failing, and online they first push the record's queued inline edits so
+  // the crew signs what is on the server.
+  const runOnline = useOnlineAction()
   const search = useSearchParams()
   const query = new URLSearchParams({ crewPage: search.get('crewPage') ?? '1' }).toString()
   const [live, setLive] = useState({ query, initial, data: initial })
@@ -102,15 +106,18 @@ export function SigningRoster({
       setError(err instanceof Error ? err.message : 'Could not refresh signatures')
     }
   }
-  function run(action: () => Promise<void>) {
+  function run(action: () => Promise<void>, onBlocked?: () => void) {
     setError(null)
     start(async () => {
-      try {
-        await action()
-      } catch (err) {
-        unstable_rethrow(err)
-        setError(err instanceof Error ? err.message : 'Could not save changes')
-      }
+      const ran = await runOnline('finish', async () => {
+        try {
+          await action()
+        } catch (err) {
+          unstable_rethrow(err)
+          setError(err instanceof Error ? err.message : 'Could not save changes')
+        }
+      })
+      if (!ran) onBlocked?.()
     })
   }
   function add(option: PickerOption) {
@@ -123,19 +130,23 @@ export function SigningRoster({
       id = option.value.slice(colon + 1)
     void (async () => {
       try {
-        unwrapSigningResult(
-          await addSigningCrew({
-            assessmentId,
-            personIds: kind === 'person' ? [id] : [],
-            groupId: kind === 'group' ? id : undefined,
-            crewId: kind === 'crew' ? id : undefined,
-            externalNames: kind === 'external' ? [id] : [],
-          }),
-        )
-        await sync()
-      } catch (err) {
-        unstable_rethrow(err)
-        setError(err instanceof Error ? err.message : 'Could not add the crew')
+        await runOnline('finish', async () => {
+          try {
+            unwrapSigningResult(
+              await addSigningCrew({
+                assessmentId,
+                personIds: kind === 'person' ? [id] : [],
+                groupId: kind === 'group' ? id : undefined,
+                crewId: kind === 'crew' ? id : undefined,
+                externalNames: kind === 'external' ? [id] : [],
+              }),
+            )
+            await sync()
+          } catch (err) {
+            unstable_rethrow(err)
+            setError(err instanceof Error ? err.message : 'Could not add the crew')
+          }
+        })
       } finally {
         addingValues.current.delete(option.value)
         setAdding((rows) => rows.filter((row) => row.value !== option.value))
@@ -148,23 +159,24 @@ export function SigningRoster({
       .map((r) => ({ id: r.id, name: r.name }))
     if (signerId) signers.sort((a, b) => Number(b.id === signerId) - Number(a.id === signerId))
     setDrawer({ revision: data.revision, signers, ready: false })
-    run(async () => {
-      try {
-        await flushRecordSaves()
-        const result = unwrapSigningResult(await startSigningCollection(assessmentId, signerId))
-        if (!result.signers.length) throw new Error('No active crew members are waiting to sign')
-        if (signerId)
-          result.signers.sort((a, b) => Number(b.id === signerId) - Number(a.id === signerId))
-        setDrawer({ ...result, ready: true })
-      } catch (err) {
-        setDrawer(null)
-        throw err
-      }
-    })
+    run(
+      async () => {
+        try {
+          const result = unwrapSigningResult(await startSigningCollection(assessmentId, signerId))
+          if (!result.signers.length) throw new Error('No active crew members are waiting to sign')
+          if (signerId)
+            result.signers.sort((a, b) => Number(b.id === signerId) - Number(a.id === signerId))
+          setDrawer({ ...result, ready: true })
+        } catch (err) {
+          setDrawer(null)
+          throw err
+        }
+      },
+      () => setDrawer(null),
+    )
   }
   function request() {
     run(async () => {
-      await flushRecordSaves()
       const result = unwrapSigningResult(await requestCrewSignatures(assessmentId))
       toast.success(`${result.requested} ${t('signature requests queued.')}`)
       if (result.skipped || result.withoutPush)

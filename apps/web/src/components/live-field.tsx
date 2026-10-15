@@ -9,128 +9,50 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 
-// Always-editable fields that auto-save through a generic `updateTextField`
-// action — the legacy form's killer mobile trait, modernised. No edit-pencil,
-// no drawer: the input on the page IS the field. Text saves on blur (plus a
-// debounce while typing stops); selects/toggles/ratings save on change. A tiny
-// status dot tells the crew their work is safe.
+// Always-editable record fields — the legacy form's killer mobile trait,
+// modernised. No edit-pencil, no drawer: the input on the page IS the field.
+// Every field is local-first: it binds by `field` (the module saver's op key)
+// to the record's <OfflineRecordProvider>, which writes each edit to the
+// device (~300 ms after typing pauses; immediately on blur, select, tap, and
+// when the page hides) and syncs it to the server with a compare-and-set
+// (see @/lib/offline-drafts/offline-record). A tiny status dot tells the crew
+// where the field stands; the page's sync indicator covers the whole record.
 //
-// Shared primitive — used by the hazard-assessment and incident detail pages
-// (and any future field module). See the hazard-assessment detail page for the
-// canonical single-page-form recipe.
+// Shared primitive — used by every native record page (incidents, hazard
+// assessments, inspections, corrective actions, training, people, …).
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useState } from 'react'
 import { htmlToText, normalizeDocumentHref, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { Input, SearchSelect, Select, Textarea, cn, type SelectOption } from '@beaconhs/ui'
-import { FLUSH_RECORD_SAVES, trackRecordSave, forgetRecordSave } from '@/lib/pending-record-saves'
+import { useRecordField, type FieldSaveState } from '@/lib/offline-drafts/offline-record'
+import { RecordFieldError } from './record-field-error'
 import { RemoteSearchSelect } from './remote-search-select'
 import { toast } from '@/lib/toast'
 import type { PickerLookup } from '@/lib/picker-options'
 
-export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
-
-/**
- * Generic auto-save queue: one in-flight write at a time, follow-up edits chase
- * the in-flight save, failures surface as an actionable `error` state with a
- * working `retry`. `prepare` builds the FormData for a value (return null to
- * fail, e.g. when a record id can't be resolved); `onSaved` fires after every
- * successful write with the persisted value — advance your baseline there, so
- * a failed save never pretends the value was persisted.
- */
-export function useAutoSave({
-  prepare,
-  updateAction,
-  onSaved,
+export function SaveDot({
+  state,
+  error,
+  onRetry,
 }: {
-  prepare: (value: string) => FormData | null | Promise<FormData | null>
-  updateAction: (formData: FormData) => Promise<void>
-  /** Called after each successful write with the value that was persisted. */
-  onSaved?: (value: string) => void
+  state: FieldSaveState
+  /** Why the server refused the value (shown as a tooltip). */
+  error?: string | null
+  onRetry?: () => void
 }) {
-  const [state, setState] = useState<SaveState>('idle')
-  const [, start] = useTransition()
-  const saveKey = useRef(Symbol('field'))
-  useEffect(() => {
-    const key = saveKey.current
-    return () => forgetRecordSave(key)
-  }, [])
-  const latest = useRef<string>('')
-  const inFlight = useRef(false)
-
-  function save(value: string) {
-    latest.current = value
-    if (inFlight.current) return // the in-flight completion re-checks latest
-    inFlight.current = true
-    setState('saving')
-    start(async () => {
-      try {
-        await trackRecordSave(
-          saveKey.current,
-          (async () => {
-            for (;;) {
-              const current = latest.current
-              const fd = await prepare(current)
-              if (!fd) throw new Error('Record could not be prepared for saving.')
-              await updateAction(fd)
-              onSaved?.(current)
-              if (latest.current === current) break
-            }
-          })(),
-        )
-        setState('saved')
-        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
-      } catch {
-        setState('error')
-      } finally {
-        inFlight.current = false
-      }
-    })
-  }
-
-  return {
-    state,
-    setState,
-    save,
-    /** Re-attempt the last requested save (rendered as the error-state action). */
-    retry: () => save(latest.current),
-    /** True while a save is in flight or queued behind one. */
-    hasPending: () => inFlight.current,
-  }
-}
-
-/** Save a field on an existing record, including immediately created drafts. */
-function useFieldAutoSave({
-  id,
-  field,
-  updateAction,
-  onSaved,
-}: {
-  id: string
-  field: string
-  updateAction: (formData: FormData) => Promise<void>
-  onSaved?: (value: string) => void
-}) {
-  return useAutoSave({
-    prepare: (value) => {
-      const fd = new FormData()
-      fd.set('id', id)
-      fd.set('field', field)
-      fd.set('value', value)
-      return fd
-    },
-    updateAction,
-    onSaved,
-  })
-}
-
-export function SaveDot({ state, onRetry }: { state: SaveState; onRetry?: () => void }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   if (state === 'idle') return null
   if (state === 'error' && onRetry) {
     return (
       <button
         type="button"
-        onClick={onRetry}
-        className="text-[11px] font-medium text-red-600 hover:underline"
+        onClick={() => {
+          // Touch screens have no tooltips: say why before trying again.
+          if (error) toast.error(tGeneratedValue(error))
+          onRetry()
+        }}
+        title={error ? tGeneratedValue(error) : undefined}
+        className="text-[11px] font-medium text-red-600 hover:underline dark:text-red-400"
       >
         <GeneratedText id="m_13b78c61dbb517" />
       </button>
@@ -138,12 +60,13 @@ export function SaveDot({ state, onRetry }: { state: SaveState; onRetry?: () => 
   }
   return (
     <span
+      title={state === 'error' && error ? tGeneratedValue(error) : undefined}
       className={cn(
         'text-[11px] font-medium',
         state === 'saving' && 'text-slate-400',
         state === 'dirty' && 'text-slate-400',
-        state === 'saved' && 'text-emerald-600',
-        state === 'error' && 'text-red-600',
+        state === 'saved' && 'text-emerald-600 dark:text-emerald-400',
+        state === 'error' && 'text-red-600 dark:text-red-400',
       )}
     >
       <GeneratedValue
@@ -166,18 +89,20 @@ export function SaveDot({ state, onRetry }: { state: SaveState; onRetry?: () => 
 function FieldLabel({
   label,
   state,
+  error,
   onRetry,
 }: {
   label: string
-  state: SaveState
-  onRetry?: () => void
+  state: FieldSaveState
+  error: string | null
+  onRetry: () => void
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <label className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
         <GeneratedValue value={label} />
       </label>
-      <SaveDot state={state} onRetry={onRetry} />
+      <SaveDot state={state} error={error} onRetry={onRetry} />
     </div>
   )
 }
@@ -203,7 +128,6 @@ export function ReadOnlyField({ label, value }: { label: string; value: string |
 }
 
 export function LiveField({
-  id,
   field,
   label,
   initialValue,
@@ -215,9 +139,8 @@ export function LiveField({
   min,
   max,
   disabled,
-  updateAction,
 }: {
-  id: string
+  /** The record saver's op key (usually the column name). */
   field: string
   label: string
   initialValue: string | null
@@ -230,91 +153,38 @@ export function LiveField({
   min?: number | string
   max?: number | string
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const [value, setValue] = useState(initialValue ?? '')
-  // Last successfully persisted value — only advanced when a save succeeds, so
-  // a failed save keeps the field dirty and the advertised retry actually works.
-  const baseline = useRef(initialValue ?? '')
-  const { state, setState, save, retry, hasPending } = useFieldAutoSave({
-    id,
-    field,
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v
-    },
-  })
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    const flush = () => {
-      if (!disabled) commit(value)
-    }
-    window.addEventListener(FLUSH_RECORD_SAVES, flush)
-    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
-  })
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current)
-    },
-    [],
-  )
-
-  // Server revalidation (another section saved) refreshes props; adopt the
-  // new value unless the user has unsaved edits in this exact field.
-  useEffect(() => {
-    const next = initialValue ?? ''
-    if (state === 'idle' && next !== baseline.current) {
-      baseline.current = next
-      setValue(next)
-    }
-  }, [initialValue, state])
-
-  function onChange(next: string) {
-    setValue(next)
-    setState('dirty')
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => commit(next), 1200)
-  }
-
-  function commit(next: string) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-    }
-    // While a save is in flight the latest value must chase it, even when it
-    // matches the persisted baseline (a revert of the in-flight edit).
-    if (next === baseline.current && !hasPending()) {
-      setState('idle')
-      return
-    }
-    save(next)
-  }
-
+  const f = useRecordField(field, initialValue ?? '')
   const shared = {
-    value,
+    value: f.value,
     placeholder,
     maxLength,
     min,
     max,
-    disabled,
+    disabled: disabled || f.paused,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      onChange(e.target.value),
-    onBlur: () => commit(value),
+      f.change(e.target.value),
+    onBlur: () => f.commit(),
   }
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
+      <FieldLabel
+        label={tGeneratedValue(label)}
+        state={f.saveState}
+        error={f.error}
+        onRetry={f.retry}
+      />
       <GeneratedValue
         value={multiline ? <Textarea rows={rows} {...shared} /> : <Input type={type} {...shared} />}
       />
+      <RecordFieldError error={f.error} />
     </div>
   )
 }
 
 export function LiveSelect({
-  id,
   field,
   label,
   initialValue,
@@ -322,9 +192,7 @@ export function LiveSelect({
   emptyLabel = '—',
   allowEmpty = true,
   disabled,
-  updateAction,
 }: {
-  id: string
   field: string
   label: string
   initialValue: string | null
@@ -333,40 +201,22 @@ export function LiveSelect({
   /** Render a blank option. Set false for NOT-NULL enum columns. */
   allowEmpty?: boolean
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const [value, setValue] = useState(initialValue ?? '')
-  const baseline = useRef(initialValue ?? '')
-  const { state, save, retry } = useFieldAutoSave({
-    id,
-    field,
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v
-    },
-  })
-
-  // Adopt the server value on revalidation while idle (another section saved,
-  // or another user edited the record).
-  useEffect(() => {
-    const next = initialValue ?? ''
-    if (state === 'idle' && next !== baseline.current) {
-      baseline.current = next
-      setValue(next)
-    }
-  }, [initialValue, state])
+  const f = useRecordField(field, initialValue ?? '')
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
+      <FieldLabel
+        label={tGeneratedValue(label)}
+        state={f.saveState}
+        error={f.error}
+        onRetry={f.retry}
+      />
       <Select
-        value={value}
-        disabled={disabled}
-        onChange={(e) => {
-          setValue(e.target.value)
-          save(e.target.value)
-        }}
+        value={f.value}
+        disabled={disabled || f.paused}
+        onChange={(e) => f.commit(e.target.value)}
       >
         {allowEmpty ? <option value="">{emptyLabel}</option> : null}
         {options.map((o) => (
@@ -375,13 +225,13 @@ export function LiveSelect({
           </option>
         ))}
       </Select>
+      <RecordFieldError error={f.error} />
     </div>
   )
 }
 
 /** Remote-search counterpart for high-cardinality reference tables. */
 export function LiveRemoteSelect({
-  id,
   field,
   label,
   initialValue,
@@ -391,9 +241,7 @@ export function LiveRemoteSelect({
   emptyLabel = '—',
   allowEmpty = true,
   disabled,
-  updateAction,
 }: {
-  id: string
   field: string
   label: string
   initialValue: string | null
@@ -403,40 +251,24 @@ export function LiveRemoteSelect({
   emptyLabel?: string
   allowEmpty?: boolean
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
-  const [value, setValue] = useState(initialValue ?? '')
-  const baseline = useRef(initialValue ?? '')
-  const { state, save, retry } = useFieldAutoSave({
-    id,
-    field,
-    updateAction,
-    onSaved: (next) => {
-      baseline.current = next
-    },
-  })
-
-  useEffect(() => {
-    const next = initialValue ?? ''
-    if (state === 'idle' && next !== baseline.current) {
-      baseline.current = next
-      setValue(next)
-    }
-  }, [initialValue, state])
+  const f = useRecordField(field, initialValue ?? '')
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
+      <FieldLabel
+        label={tGeneratedValue(label)}
+        state={f.saveState}
+        error={f.error}
+        onRetry={f.retry}
+      />
       <RemoteSearchSelect
         lookup={lookup}
         contextId={contextId}
-        value={value}
-        onChange={(next) => {
-          setValue(next)
-          save(next)
-        }}
+        value={f.value}
+        onChange={(next) => f.commit(next)}
         initialOption={initialOption}
         placeholder={tGeneratedValue(emptyLabel)}
         searchPlaceholder={tGenerated('m_1f0a8c50aedb8c', { value0: label.toLowerCase() })}
@@ -444,14 +276,14 @@ export function LiveRemoteSelect({
         ariaLabel={label}
         clearable={allowEmpty}
         emptyLabel={tGeneratedValue(emptyLabel)}
-        disabled={disabled}
+        disabled={disabled || f.paused}
       />
+      <RecordFieldError error={f.error} />
     </div>
   )
 }
 
 export function LivePersonSelect({
-  id,
   field,
   label,
   initialValue,
@@ -461,9 +293,7 @@ export function LivePersonSelect({
   placeholder = 'Select a person…',
   searchPlaceholder = 'Search active people…',
   disabled,
-  updateAction,
 }: {
-  id: string
   field: string
   label: string
   initialValue: string | null
@@ -473,41 +303,24 @@ export function LivePersonSelect({
   placeholder?: string
   searchPlaceholder?: string
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
-  const [value, setValue] = useState(initialValue ?? '')
-  const baseline = useRef(initialValue ?? '')
-  const { state, save, retry } = useFieldAutoSave({
-    id,
-    field,
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v
-    },
-  })
-
-  // Adopt the server value on revalidation while idle.
-  useEffect(() => {
-    const next = initialValue ?? ''
-    if (state === 'idle' && next !== baseline.current) {
-      baseline.current = next
-      setValue(next)
-    }
-  }, [initialValue, state])
+  const f = useRecordField(field, initialValue ?? '')
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
+      <FieldLabel
+        label={tGeneratedValue(label)}
+        state={f.saveState}
+        error={f.error}
+        onRetry={f.retry}
+      />
       <SearchSelect
-        value={value}
-        onChange={(next) => {
-          setValue(next)
-          save(next)
-        }}
+        value={f.value}
+        onChange={(next) => f.commit(next)}
         options={
-          initialOption?.value === value && !options.some((option) => option.value === value)
+          initialOption?.value === f.value && !options.some((option) => option.value === f.value)
             ? [initialOption, ...options]
             : options
         }
@@ -517,179 +330,90 @@ export function LivePersonSelect({
         ariaLabel={label}
         clearable
         emptyLabel={tGenerated('m_0dd5f8a31ce3e1')}
-        disabled={disabled}
+        disabled={disabled || f.paused}
       />
-    </div>
-  )
-}
-
-export function LiveDateTime({
-  id,
-  field,
-  label,
-  initialValue,
-  disabled,
-  updateAction,
-}: {
-  id: string
-  field: string
-  label: string
-  /** datetime-local formatted string, e.g. 2026-06-11T14:30 */
-  initialValue: string
-  disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
-}) {
-  const tGeneratedValue = useGeneratedValueTranslations()
-  const [value, setValue] = useState(initialValue)
-  const baseline = useRef(initialValue)
-  const { state, setState, save, retry, hasPending } = useFieldAutoSave({
-    id,
-    field,
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v
-    },
-  })
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    const flush = () => {
-      if (!disabled) commit(value)
-    }
-    window.addEventListener(FLUSH_RECORD_SAVES, flush)
-    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
-  })
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current)
-    },
-    [],
-  )
-
-  // Adopt the server value on revalidation while idle.
-  useEffect(() => {
-    if (state === 'idle' && initialValue !== baseline.current) {
-      baseline.current = initialValue
-      setValue(initialValue)
-    }
-  }, [initialValue, state])
-
-  // Commit on blur (plus a debounce while keyboard edits settle) rather than on
-  // every change: datetime-local inputs emit '' for incomplete keyboard edits,
-  // and committing immediately would clear the column mid-edit. An empty commit
-  // IS saved — nullable timestamp columns are cleared server-side; required
-  // ones reject and surface the error state.
-  function onChange(next: string) {
-    setValue(next)
-    setState('dirty')
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => commit(next), 1200)
-  }
-
-  function commit(next: string) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-    }
-    if (next === baseline.current && !hasPending()) {
-      setState('idle')
-      return
-    }
-    save(next)
-  }
-
-  return (
-    <div className="space-y-1">
-      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
-      <Input
-        type="datetime-local"
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => commit(value)}
-      />
+      <RecordFieldError error={f.error} />
     </div>
   )
 }
 
 /**
- * Tap-to-save boolean switch. Saves `'true'`/`'false'` strings — the server
- * action coerces them back to a boolean column. Optimistic; adopts the server
- * value on revalidation while idle.
+ * Date-time field (`datetime-local`, wall-clock time in the worker's
+ * timezone). Written to the device after typing pauses and on blur: the input
+ * emits '' for an incomplete keyboard edit, so it never saves on every change.
+ * An empty value IS saved — nullable columns clear, required ones are refused
+ * and show the field's error state.
  */
-export function LiveToggle({
-  id,
+export function LiveDateTime({
   field,
   label,
   initialValue,
   disabled,
-  updateAction,
 }: {
-  id: string
+  field: string
+  label: string
+  /** datetime-local formatted string, e.g. 2026-06-11T14:30 */
+  initialValue: string
+  disabled?: boolean
+}) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const f = useRecordField(field, initialValue)
+
+  return (
+    <div className="space-y-1">
+      <FieldLabel
+        label={tGeneratedValue(label)}
+        state={f.saveState}
+        error={f.error}
+        onRetry={f.retry}
+      />
+      <Input
+        type="datetime-local"
+        value={f.value}
+        disabled={disabled || f.paused}
+        onChange={(e) => f.change(e.target.value)}
+        onBlur={() => f.commit()}
+      />
+      <RecordFieldError error={f.error} />
+    </div>
+  )
+}
+
+/**
+ * Tap-to-save boolean switch. Sends `'true'`/`'false'` — the saver coerces
+ * them back to a boolean column.
+ */
+export function LiveToggle({
+  field,
+  label,
+  initialValue,
+  disabled,
+}: {
   field: string
   label: string
   initialValue: boolean
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const [on, setOn] = useState(initialValue)
-  const baseline = useRef(initialValue)
-  const { state, save, retry } = useFieldAutoSave({
-    id,
-    field,
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v === 'true'
-    },
-  })
-
-  useEffect(() => {
-    if (state === 'idle' && initialValue !== baseline.current) {
-      baseline.current = initialValue
-      setOn(initialValue)
-    }
-  }, [initialValue, state])
-
-  function toggle() {
-    if (disabled) return
-    const next = !on
-    setOn(next)
-    save(next ? 'true' : 'false')
-  }
+  const f = useRecordField(field, initialValue ? 'true' : 'false')
+  const on = f.value === 'true'
+  const off = disabled || f.paused
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900">
       <span className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <GeneratedValue value={label} />
-        <GeneratedValue
-          value={
-            state === 'saving' ? (
-              <span className="text-[11px] text-slate-400">
-                <GeneratedText id="m_106811f2aac664" />
-              </span>
-            ) : state === 'saved' ? (
-              <span className="text-[11px] text-emerald-600">
-                <GeneratedText id="m_0a3bcf685192f1" />
-              </span>
-            ) : state === 'error' ? (
-              <button
-                type="button"
-                onClick={retry}
-                className="text-[11px] font-medium text-red-600 hover:underline"
-              >
-                <GeneratedText id="m_13b78c61dbb517" />
-              </button>
-            ) : null
-          }
-        />
+        <SaveDot state={f.saveState} error={f.error} onRetry={f.retry} />
       </span>
       <button
         type="button"
         role="switch"
         aria-checked={on}
         aria-label={tGeneratedValue(label)}
-        disabled={disabled}
-        onClick={toggle}
+        disabled={off}
+        onClick={() => {
+          if (!off) f.commit(on ? 'false' : 'true')
+        }}
         className={cn(
           'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
           on ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-700',
@@ -724,52 +448,37 @@ const SEVERITY_ACTIVE: Record<number, string> = {
 
 /**
  * Editable 1–5 severity picker. Tap a cell to set; tap the active cell again
- * to clear. Saves the number as a string (empty clears the column to null).
+ * to clear. Sends the number as a string (empty clears the column).
  */
 export function LiveSeverityRating({
-  id,
   field,
   label,
   initialValue,
   disabled,
-  updateAction,
 }: {
-  id: string
   field: string
   label: string
   initialValue: number | null
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const [value, setValue] = useState<number | null>(initialValue)
-  const baseline = useRef(initialValue)
-  const { state, save, retry } = useFieldAutoSave({
-    id,
-    field,
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v === '' ? null : Number(v)
-    },
-  })
-
-  useEffect(() => {
-    if (state === 'idle' && initialValue !== baseline.current) {
-      baseline.current = initialValue
-      setValue(initialValue)
-    }
-  }, [initialValue, state])
+  const f = useRecordField(field, initialValue == null ? '' : String(initialValue))
+  const value = f.value === '' ? null : Number(f.value)
+  const off = disabled || f.paused
 
   function pick(n: number) {
-    if (disabled) return
-    const next = value === n ? null : n
-    setValue(next)
-    save(next == null ? '' : String(next))
+    if (off) return
+    f.commit(value === n ? '' : String(n))
   }
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
+      <FieldLabel
+        label={tGeneratedValue(label)}
+        state={f.saveState}
+        error={f.error}
+        onRetry={f.retry}
+      />
       <div className="flex items-center gap-1.5">
         <GeneratedValue
           value={[1, 2, 3, 4, 5].map((n) => {
@@ -778,7 +487,7 @@ export function LiveSeverityRating({
               <button
                 key={n}
                 type="button"
-                disabled={disabled}
+                disabled={off}
                 onClick={() => pick(n)}
                 title={tGeneratedValue(`${n} — ${SEVERITY_LABELS[n]}`)}
                 aria-pressed={active}
@@ -800,6 +509,7 @@ export function LiveSeverityRating({
           value={value ? SEVERITY_LABELS[value] : <GeneratedText id="m_13e61f4185333d" />}
         />
       </p>
+      <RecordFieldError error={f.error} />
     </div>
   )
 }
@@ -810,85 +520,30 @@ function htmlIsEmpty(html: string): boolean {
 }
 
 /**
- * Auto-saving rich-text field. Many legacy narrative columns hold HTML
- * (`<p>`, `<strong>`, `&nbsp;`…) — a plain textarea would show the raw markup,
- * so this renders the formatted HTML and edits it with the shared
- * `RichTextEditor`, saving HTML back. Click-to-edit: the heavy TipTap editor
- * mounts only while a field is being edited (one at a time), keeping the
- * single-page form light on phones.
+ * Rich-text field. Many legacy narrative columns hold HTML (`<p>`,
+ * `<strong>`, `&nbsp;`…) — a plain textarea would show the raw markup, so this
+ * renders the formatted HTML and edits it with the shared `RichTextEditor`,
+ * sending HTML back. Click-to-edit: the heavy TipTap editor mounts only while
+ * a field is being edited (one at a time), keeping the page light on phones.
  */
 export function LiveRichText({
-  id,
   field,
   label,
   initialValue,
   placeholder = 'Add…',
   disabled,
-  updateAction,
 }: {
-  id: string
   field: string
   label: string
   initialValue: string | null
   placeholder?: string
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
   const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(initialValue ?? '')
-  const baseline = useRef(initialValue ?? '')
-  const { state, setState, save, retry, hasPending } = useFieldAutoSave({
-    id,
-    field,
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v
-    },
-  })
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    const flush = () => {
-      if (!disabled) commit(value)
-    }
-    window.addEventListener(FLUSH_RECORD_SAVES, flush)
-    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
-  })
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current)
-    },
-    [],
-  )
-
-  // Adopt the server value on revalidation, unless we're editing this field.
-  useEffect(() => {
-    const next = initialValue ?? ''
-    if (!editing && state === 'idle' && next !== baseline.current) {
-      baseline.current = next
-      setValue(next)
-    }
-  }, [initialValue, state, editing])
-
-  function onChange(html: string) {
-    setValue(html)
-    setState('dirty')
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => commit(html), 1000)
-  }
-
-  function commit(html: string) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-    }
-    if (html === baseline.current && !hasPending()) {
-      setState('idle')
-      return
-    }
-    save(html)
-  }
+  const f = useRecordField(field, initialValue ?? '')
+  const off = disabled || f.paused
 
   return (
     <div className="space-y-1">
@@ -897,14 +552,14 @@ export function LiveRichText({
           <GeneratedValue value={label} />
         </label>
         <div className="flex items-center gap-2">
-          <SaveDot state={state} onRetry={retry} />
+          <SaveDot state={f.saveState} error={f.error} onRetry={f.retry} />
           <GeneratedValue
             value={
-              disabled ? null : editing ? (
+              off ? null : editing ? (
                 <button
                   type="button"
                   onClick={() => {
-                    commit(value)
+                    f.commit()
                     setEditing(false)
                   }}
                   className="text-[11px] font-medium text-teal-700 hover:underline dark:text-teal-400"
@@ -926,37 +581,36 @@ export function LiveRichText({
       </div>
       <GeneratedValue
         value={
-          editing ? (
+          editing && !off ? (
             <RichTextEditor
-              defaultValue={value}
-              onChange={onChange}
+              defaultValue={f.value}
+              onChange={(html: string) => f.change(html)}
               placeholder={tGeneratedValue(placeholder)}
-              disabled={disabled}
               minHeight="120px"
               normalizeLink={normalizeDocumentHref}
               onInvalidLink={() => toast.error(tGenerated('m_19dc719a9038ec'))}
             />
           ) : (
             <div
-              role={disabled ? undefined : 'button'}
-              tabIndex={disabled ? undefined : 0}
+              role={off ? undefined : 'button'}
+              tabIndex={off ? undefined : 0}
               onClick={() => {
-                if (!disabled) setEditing(true)
+                if (!off) setEditing(true)
               }}
               onKeyDown={(e) => {
-                if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+                if (!off && (e.key === 'Enter' || e.key === ' ')) {
                   e.preventDefault()
                   setEditing(true)
                 }
               }}
               className={cn(
                 'min-h-[2.5rem] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900',
-                !disabled && 'cursor-text hover:border-slate-300 dark:hover:border-slate-700',
+                !off && 'cursor-text hover:border-slate-300 dark:hover:border-slate-700',
               )}
             >
               <GeneratedValue
                 value={
-                  htmlIsEmpty(value) ? (
+                  htmlIsEmpty(f.value) ? (
                     <span className="text-slate-400 dark:text-slate-500">
                       <GeneratedValue value={placeholder} />
                     </span>
@@ -965,7 +619,7 @@ export function LiveRichText({
                       className="prose prose-sm prose-slate dark:prose-invert max-w-none"
                       // Stored narrative HTML is user-supplied — sanitize before
                       // rendering (defense-in-depth alongside write-side sanitization).
-                      dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(value) }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(f.value) }}
                     />
                   )
                 }
@@ -974,6 +628,7 @@ export function LiveRichText({
           )
         }
       />
+      <RecordFieldError error={f.error} />
     </div>
   )
 }

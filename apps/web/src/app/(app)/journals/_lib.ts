@@ -10,16 +10,23 @@ export { htmlToText } from '@beaconhs/forms-core'
 import { nextReference } from '@/lib/reference'
 import { recordScopeWhere } from '@beaconhs/tenant/visibility'
 
-/** Resolve the `people` row for the current user (the journal's subject). */
-export async function getAuthorPersonId(ctx: RequestContext): Promise<string | null> {
-  return ctx.db(async (tx) => {
-    const [p] = await tx
+/**
+ * Resolve the `people` row for the current user (the journal's subject).
+ * Pass the open transaction when there is one, so the lookup shares it.
+ */
+export async function getAuthorPersonId(
+  ctx: RequestContext,
+  tx?: Database,
+): Promise<string | null> {
+  const find = async (db: Database) => {
+    const [p] = await db
       .select({ id: people.id })
       .from(people)
       .where(and(eq(people.userId, ctx.userId), isNull(people.deletedAt)))
       .limit(1)
     return p?.id ?? null
-  })
+  }
+  return tx ? find(tx) : ctx.db(find)
 }
 
 /** Next per-tenant reference like JRN-2026-0001 (RLS scopes the counter). */

@@ -17,14 +17,29 @@ describe('identity catalog lifecycle contract', () => {
   it('serializes every person-group membership writer and audits in-transaction', () => {
     const groups = source('../app/(app)/people/_actions/groups.ts')
     const bulk = source('../app/(app)/people/_actions/bulk.ts')
+    const personSaver = source('../app/(app)/people/_record-edits.ts')
+    const personAssignments = source('../app/(app)/people/_lib/person-assignments.ts')
     const helper = source('./person-group-memberships.ts')
 
     expect(helper).toContain('pg_advisory_xact_lock')
     expect(helper).toContain('tenant_id = ${tenantId}')
-    expect(groups.match(/lockPersonGroupMembershipGraph\(/g)?.length).toBe(3)
+    // Group-centric writers (membership editor, delete) take the graph lock.
+    expect(groups.match(/lockPersonGroupMembershipGraph\(/g)?.length).toBe(2)
     expect(bulk).toContain('lockPersonGroupMembershipGraph(tx, ctx.tenantId)')
-    expect(groups).not.toContain('recordAudit(ctx')
-    expect(groups.match(/recordAuditInTransaction\(/g)?.length ?? 0).toBeGreaterThanOrEqual(5)
+    // The person-centric writer (the person page's Groups field, applied by the
+    // people record saver) takes it before locking the person row.
+    expect(personSaver.indexOf('lockPersonGroupMembershipGraph(tx, ctx.tenantId)')).toBeGreaterThan(
+      0,
+    )
+    expect(personSaver.indexOf('lockPersonGroupMembershipGraph(tx, ctx.tenantId)')).toBeLessThan(
+      personSaver.indexOf(".for('update')"),
+    )
+    expect(personAssignments).toContain('refreshPersonGroupCache(tx, ctx.tenantId, [personId])')
+    for (const writer of [groups, personAssignments]) {
+      expect(writer).not.toContain('recordAudit(ctx')
+    }
+    expect(groups.match(/recordAuditInTransaction\(/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+    expect(personAssignments).toContain("summary: 'Updated group memberships'")
     expect(bulk.indexOf('recordAuditInTransaction')).toBeLessThan(
       bulk.indexOf("revalidatePath('/people')"),
     )

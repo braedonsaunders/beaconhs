@@ -64,12 +64,12 @@ import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
 import { getConfiguredDirectPrintProviders } from '@/lib/direct-printing'
 import { RecordDetailFields } from './_fields'
 import { TrainingRecordFilesDrawer } from './_files-drawer'
+import { deleteTrainingRecordFile, renewTrainingRecord, revokeTrainingRecord } from '../_actions'
 import {
-  deleteTrainingRecordFile,
-  renewTrainingRecord,
-  revokeTrainingRecord,
-  updateTrainingRecordField,
-} from '../_actions'
+  OfflineRecordProvider,
+  RecordSyncBanner,
+  RecordSyncStatus,
+} from '@/lib/offline-drafts/offline-record'
 
 export const dynamic = 'force-dynamic'
 
@@ -240,370 +240,382 @@ export default async function TrainingRecordPage({
   const basePath = `/training/records/${id}`
   const attachmentsCloseHref = `${basePath}?tab=attachments`
   return (
-    <DetailPageLayout
-      header={
-        <DetailHeader
-          back={{ href: '/training', label: 'Back to training' }}
-          title={tGeneratedValue(course?.name ?? tGenerated('m_0889fafbafcb00'))}
-          subtitle={tGeneratedValue(
-            person
-              ? tGenerated('m_0df15e651a113a', {
-                  value0: person.firstName,
-                  value1: person.lastName,
-                  value2: record.completedOn,
-                })
-              : tGenerated('m_1c6434960eeef6'),
-          )}
-          badge={
-            <div className="flex items-center gap-2">
-              <GeneratedValue
-                value={
-                  status === 'expired' ? (
-                    <Badge variant="destructive">
-                      <GeneratedText id="m_13f7150c94b182" />{' '}
-                      <GeneratedValue value={Math.abs(daysLeft!)} />
-                      <GeneratedText id="m_0ced4968a01894" />
-                    </Badge>
-                  ) : status === 'expiring' ? (
-                    <Badge variant="warning">
-                      <GeneratedValue value={daysLeft} />
-                      <GeneratedText id="m_0a3d63460246cf" />
-                    </Badge>
-                  ) : status === 'ok' ? (
-                    <Badge variant="success">
-                      <GeneratedText id="m_1e418d0475450c" />
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">
-                      <GeneratedText id="m_1bbc44c1ce26a7" />
-                    </Badge>
-                  )
-                }
-              />
-              <GeneratedValue
-                value={
-                  isRevoked ? (
-                    <Badge variant="destructive">
-                      <GeneratedText id="m_1ae9fac75309ce" />
-                    </Badge>
-                  ) : null
-                }
-              />
-            </div>
-          }
-          actions={
-            canRecord ? (
+    <OfflineRecordProvider
+      module="training-records"
+      recordId={id}
+      editable={canRecord && !isRevoked}
+    >
+      <DetailPageLayout
+        header={
+          <DetailHeader
+            back={{ href: '/training', label: 'Back to training' }}
+            title={tGeneratedValue(course?.name ?? tGenerated('m_0889fafbafcb00'))}
+            subtitle={tGeneratedValue(
+              person
+                ? tGenerated('m_0df15e651a113a', {
+                    value0: person.firstName,
+                    value1: person.lastName,
+                    value2: record.completedOn,
+                  })
+                : tGenerated('m_1c6434960eeef6'),
+            )}
+            badge={
               <div className="flex items-center gap-2">
-                <form action={renewTrainingRecord}>
-                  <input type="hidden" name="id" value={id} />
-                  <Button type="submit" variant="outline" size="sm">
-                    <RotateCcw size={14} /> <GeneratedText id="m_1f6557a4319c50" />
-                  </Button>
-                </form>
                 <GeneratedValue
                   value={
-                    !isRevoked ? (
-                      <form action={revokeTrainingRecord}>
-                        <input type="hidden" name="id" value={id} />
-                        <ConfirmButton
-                          size="sm"
-                          message={tGenerated('m_1612be0ce800f1')}
-                          className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
-                        >
-                          <ShieldOff size={14} /> <GeneratedText id="m_18718dd379a57d" />
-                        </ConfirmButton>
-                      </form>
+                    status === 'expired' ? (
+                      <Badge variant="destructive">
+                        <GeneratedText id="m_13f7150c94b182" />{' '}
+                        <GeneratedValue value={Math.abs(daysLeft!)} />
+                        <GeneratedText id="m_0ced4968a01894" />
+                      </Badge>
+                    ) : status === 'expiring' ? (
+                      <Badge variant="warning">
+                        <GeneratedValue value={daysLeft} />
+                        <GeneratedText id="m_0a3d63460246cf" />
+                      </Badge>
+                    ) : status === 'ok' ? (
+                      <Badge variant="success">
+                        <GeneratedText id="m_1e418d0475450c" />
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        <GeneratedText id="m_1bbc44c1ce26a7" />
+                      </Badge>
+                    )
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    isRevoked ? (
+                      <Badge variant="destructive">
+                        <GeneratedText id="m_1ae9fac75309ce" />
+                      </Badge>
                     ) : null
                   }
                 />
+                <RecordSyncStatus />
               </div>
-            ) : undefined
-          }
-        />
-      }
-      alerts={
-        isRevoked ? (
-          <Alert variant="destructive">
-            <AlertTitle>
-              <GeneratedText id="m_13ef5a4866fb5d" />
-            </AlertTitle>
-            <AlertDescription>
-              <GeneratedText id="m_18b63410e5f4b0" />
-            </AlertDescription>
-          </Alert>
-        ) : null
-      }
-      subtabs={
-        <TabNav
-          basePath={basePath}
-          currentParams={sp}
-          active={active}
-          tabs={[
-            { key: 'overview', label: 'Overview' },
-            { key: 'outputs', label: 'Cards & certificates', count: credentialOutputs.length },
-            { key: 'attachments', label: 'Attachments', count: attachmentCount },
-            { key: 'activity', label: 'Activity' },
-          ]}
-        />
-      }
-    >
-      <div className="space-y-5">
-        <GeneratedValue
-          value={
-            active === 'overview' ? (
-              <>
-                {/* At-a-glance summary */}
-                <div className="grid grid-cols-3 gap-3">
-                  <StatTile
-                    icon={STATUS_META[status].icon}
-                    tone={STATUS_META[status].tone}
-                    label={tGenerated('m_0b9da892d6faf0')}
-                    dense
-                    value={STATUS_META[status].value(daysLeft)}
-                    hint={tGeneratedValue(
-                      record.expiresOn
-                        ? tGenerated('m_045cc1172f9f83', { value0: record.expiresOn })
-                        : undefined,
-                    )}
-                    hintVariant={STATUS_META[status].badge}
-                  />
-                  <StatTile
-                    icon={CreditCard}
-                    tone="violet"
-                    label={tGenerated('m_19f4fcf54639f4')}
-                    dense
-                    value={credentialOutputs.length}
-                    href={`${basePath}?tab=outputs`}
-                  />
-                  <StatTile
-                    icon={Paperclip}
-                    tone="sky"
-                    label={tGenerated('m_014ac1a664bf4b')}
-                    dense
-                    value={attachmentCount}
-                    href={`${basePath}?tab=attachments`}
-                  />
-                </div>
-
-                <RecordDetailFields
-                  id={id}
-                  disabled={!canRecord || isRevoked}
-                  personHref={person ? `/people/${person.id}?tab=training` : null}
-                  courseHref={course ? `/training/courses/${course.id}` : null}
-                  options={fieldOptions}
-                  initial={{
-                    personId: record.personId ?? '',
-                    courseId: record.courseId ?? '',
-                    source: record.source,
-                    completedOn: record.completedOn,
-                    expiresOn: record.expiresOn ?? '',
-                    instructor: record.instructor ?? '',
-                    grade: record.grade != null ? String(record.grade) : '',
-                    details: record.details ?? '',
-                    notes: record.notes ?? '',
-                  }}
-                  updateAction={updateTrainingRecordField}
-                />
-              </>
-            ) : null
-          }
-        />
-
-        <GeneratedValue
-          value={
-            active === 'outputs' ? (
-              <CredentialOutputsCard
-                outputs={credentialOutputs}
-                endpoint={`${basePath}/certificate`}
-                canDesign={canDesignCredentials}
-                unavailable={isRevoked}
-                availablePrintProviders={availablePrintProviders}
-              />
-            ) : null
-          }
-        />
-
-        <GeneratedValue
-          value={
-            active === 'attachments' ? (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-3">
-                    <CardTitle>
-                      <GeneratedText id="m_18b330a9afec8b" />
-                      <GeneratedValue value={attachmentCount} />)
-                    </CardTitle>
-                    <GeneratedValue
-                      value={
-                        canRecord ? (
-                          <Link href={`${basePath}?tab=attachments&drawer=upload-file`}>
-                            <Button size="sm">
-                              <Plus size={14} /> <GeneratedText id="m_03cb1d648a3cb1" />
-                            </Button>
-                          </Link>
-                        ) : null
-                      }
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <TableToolbar className="mb-3">
-                    <SearchInput
-                      placeholder={tGenerated('m_1de6fe9adadcdc')}
-                      paramKey="attachmentQ"
-                      pageParamKey="attachmentPage"
-                    />
-                  </TableToolbar>
+            }
+            actions={
+              canRecord ? (
+                <div className="flex items-center gap-2">
+                  <form action={renewTrainingRecord}>
+                    <input type="hidden" name="id" value={id} />
+                    <Button type="submit" variant="outline" size="sm">
+                      <RotateCcw size={14} /> <GeneratedText id="m_1f6557a4319c50" />
+                    </Button>
+                  </form>
                   <GeneratedValue
                     value={
-                      certAttachments.length === 0 ? (
-                        <EmptyState
-                          icon={<Paperclip size={24} />}
-                          title={tGeneratedValue(
-                            attachmentParams.q
-                              ? tGenerated('m_1f8894c4202845')
-                              : tGenerated('m_15cb3d3f501ead'),
-                          )}
-                          description={tGeneratedValue(
-                            attachmentParams.q
-                              ? tGenerated('m_15087d86fa6d56')
-                              : tGenerated('m_159b908318c026'),
-                          )}
-                        />
-                      ) : (
-                        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>
-                                  <GeneratedText id="m_102a42d098d1d2" />
-                                </TableHead>
-                                <TableHead>
-                                  <GeneratedText id="m_074ba2f160c506" />
-                                </TableHead>
-                                <TableHead>
-                                  <GeneratedText id="m_11ad4bbeced31b" />
-                                </TableHead>
-                                <TableHead>
-                                  <GeneratedText id="m_028e286aa7b299" />
-                                </TableHead>
-                                <TableHead></TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              <GeneratedValue
-                                value={certAttachments.map(({ file, attachment: a }) => (
-                                  <TableRow key={file.id}>
-                                    <TableCell className="font-medium">
-                                      <a
-                                        href={attachmentUrl(a.id)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                      >
-                                        <FilePreview
-                                          url={attachmentUrl(a.id)}
-                                          contentType={a.contentType}
-                                          label={file.label}
-                                          className="mb-2 h-32 w-44"
-                                        />
-                                      </a>
-                                      <div>
-                                        <GeneratedValue value={file.label} />
-                                      </div>
-                                      <div className="text-xs font-normal text-slate-500">
-                                        <GeneratedValue value={a.filename} />
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-slate-600 dark:text-slate-400">
-                                      <GeneratedValue value={file.kind.replace('_', ' ')} />
-                                    </TableCell>
-                                    <TableCell className="text-slate-600 dark:text-slate-400">
-                                      <GeneratedValue value={humanSize(a.sizeBytes)} />
-                                    </TableCell>
-                                    <TableCell>
-                                      <GeneratedValue
-                                        value={formatDate(
-                                          new Date(file.uploadedAt),
-                                          ctx.timezone,
-                                          ctx.locale,
-                                        )}
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center justify-end gap-1">
+                      !isRevoked ? (
+                        <form action={revokeTrainingRecord}>
+                          <input type="hidden" name="id" value={id} />
+                          <ConfirmButton
+                            size="sm"
+                            message={tGenerated('m_1612be0ce800f1')}
+                            className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                          >
+                            <ShieldOff size={14} /> <GeneratedText id="m_18718dd379a57d" />
+                          </ConfirmButton>
+                        </form>
+                      ) : null
+                    }
+                  />
+                </div>
+              ) : undefined
+            }
+          />
+        }
+        alerts={
+          <>
+            <RecordSyncBanner />
+            <GeneratedValue
+              value={
+                isRevoked ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>
+                      <GeneratedText id="m_13ef5a4866fb5d" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_18b63410e5f4b0" />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+          </>
+        }
+        subtabs={
+          <TabNav
+            basePath={basePath}
+            currentParams={sp}
+            active={active}
+            tabs={[
+              { key: 'overview', label: 'Overview' },
+              { key: 'outputs', label: 'Cards & certificates', count: credentialOutputs.length },
+              { key: 'attachments', label: 'Attachments', count: attachmentCount },
+              { key: 'activity', label: 'Activity' },
+            ]}
+          />
+        }
+      >
+        <div className="space-y-5">
+          <GeneratedValue
+            value={
+              active === 'overview' ? (
+                <>
+                  {/* At-a-glance summary */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <StatTile
+                      icon={STATUS_META[status].icon}
+                      tone={STATUS_META[status].tone}
+                      label={tGenerated('m_0b9da892d6faf0')}
+                      dense
+                      value={STATUS_META[status].value(daysLeft)}
+                      hint={tGeneratedValue(
+                        record.expiresOn
+                          ? tGenerated('m_045cc1172f9f83', { value0: record.expiresOn })
+                          : undefined,
+                      )}
+                      hintVariant={STATUS_META[status].badge}
+                    />
+                    <StatTile
+                      icon={CreditCard}
+                      tone="violet"
+                      label={tGenerated('m_19f4fcf54639f4')}
+                      dense
+                      value={credentialOutputs.length}
+                      href={`${basePath}?tab=outputs`}
+                    />
+                    <StatTile
+                      icon={Paperclip}
+                      tone="sky"
+                      label={tGenerated('m_014ac1a664bf4b')}
+                      dense
+                      value={attachmentCount}
+                      href={`${basePath}?tab=attachments`}
+                    />
+                  </div>
+
+                  <RecordDetailFields
+                    disabled={!canRecord || isRevoked}
+                    personHref={person ? `/people/${person.id}?tab=training` : null}
+                    courseHref={course ? `/training/courses/${course.id}` : null}
+                    options={fieldOptions}
+                    initial={{
+                      personId: record.personId ?? '',
+                      courseId: record.courseId ?? '',
+                      source: record.source,
+                      completedOn: record.completedOn,
+                      expiresOn: record.expiresOn ?? '',
+                      instructor: record.instructor ?? '',
+                      grade: record.grade != null ? String(record.grade) : '',
+                      details: record.details ?? '',
+                      notes: record.notes ?? '',
+                    }}
+                  />
+                </>
+              ) : null
+            }
+          />
+
+          <GeneratedValue
+            value={
+              active === 'outputs' ? (
+                <CredentialOutputsCard
+                  outputs={credentialOutputs}
+                  endpoint={`${basePath}/certificate`}
+                  canDesign={canDesignCredentials}
+                  unavailable={isRevoked}
+                  availablePrintProviders={availablePrintProviders}
+                />
+              ) : null
+            }
+          />
+
+          <GeneratedValue
+            value={
+              active === 'attachments' ? (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-3">
+                      <CardTitle>
+                        <GeneratedText id="m_18b330a9afec8b" />
+                        <GeneratedValue value={attachmentCount} />)
+                      </CardTitle>
+                      <GeneratedValue
+                        value={
+                          canRecord ? (
+                            <Link href={`${basePath}?tab=attachments&drawer=upload-file`}>
+                              <Button size="sm">
+                                <Plus size={14} /> <GeneratedText id="m_03cb1d648a3cb1" />
+                              </Button>
+                            </Link>
+                          ) : null
+                        }
+                      />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <TableToolbar className="mb-3">
+                      <SearchInput
+                        placeholder={tGenerated('m_1de6fe9adadcdc')}
+                        paramKey="attachmentQ"
+                        pageParamKey="attachmentPage"
+                      />
+                    </TableToolbar>
+                    <GeneratedValue
+                      value={
+                        certAttachments.length === 0 ? (
+                          <EmptyState
+                            icon={<Paperclip size={24} />}
+                            title={tGeneratedValue(
+                              attachmentParams.q
+                                ? tGenerated('m_1f8894c4202845')
+                                : tGenerated('m_15cb3d3f501ead'),
+                            )}
+                            description={tGeneratedValue(
+                              attachmentParams.q
+                                ? tGenerated('m_15087d86fa6d56')
+                                : tGenerated('m_159b908318c026'),
+                            )}
+                          />
+                        ) : (
+                          <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>
+                                    <GeneratedText id="m_102a42d098d1d2" />
+                                  </TableHead>
+                                  <TableHead>
+                                    <GeneratedText id="m_074ba2f160c506" />
+                                  </TableHead>
+                                  <TableHead>
+                                    <GeneratedText id="m_11ad4bbeced31b" />
+                                  </TableHead>
+                                  <TableHead>
+                                    <GeneratedText id="m_028e286aa7b299" />
+                                  </TableHead>
+                                  <TableHead></TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                <GeneratedValue
+                                  value={certAttachments.map(({ file, attachment: a }) => (
+                                    <TableRow key={file.id}>
+                                      <TableCell className="font-medium">
                                         <a
                                           href={attachmentUrl(a.id)}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                                         >
-                                          <GeneratedText id="m_0871fb8eeeedd0" />
+                                          <FilePreview
+                                            url={attachmentUrl(a.id)}
+                                            contentType={a.contentType}
+                                            label={file.label}
+                                            className="mb-2 h-32 w-44"
+                                          />
                                         </a>
-                                        {canRecord ? (
-                                          <form action={deleteTrainingRecordFile}>
-                                            <input type="hidden" name="id" value={file.id} />
-                                            <input type="hidden" name="recordId" value={id} />
-                                            <Button
-                                              type="submit"
-                                              size="sm"
-                                              variant="ghost"
-                                              className="h-7 w-7 p-0 text-slate-400 hover:text-red-600"
-                                              title={tGenerated('m_1daffe3e5eee41')}
-                                            >
-                                              <Trash2 size={14} />
-                                            </Button>
-                                          </form>
-                                        ) : null}
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              />
-                            </TableBody>
-                          </Table>
-                          <Pagination
-                            basePath={basePath}
-                            currentParams={sp}
-                            total={filteredAttachmentCount}
-                            page={attachmentParams.page}
-                            perPage={attachmentParams.perPage}
-                            pageParamKey="attachmentPage"
-                          />
-                        </div>
-                      )
-                    }
-                  />
-                </CardContent>
-              </Card>
-            ) : null
-          }
-        />
+                                        <div>
+                                          <GeneratedValue value={file.label} />
+                                        </div>
+                                        <div className="text-xs font-normal text-slate-500">
+                                          <GeneratedValue value={a.filename} />
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-slate-600 dark:text-slate-400">
+                                        <GeneratedValue value={file.kind.replace('_', ' ')} />
+                                      </TableCell>
+                                      <TableCell className="text-slate-600 dark:text-slate-400">
+                                        <GeneratedValue value={humanSize(a.sizeBytes)} />
+                                      </TableCell>
+                                      <TableCell>
+                                        <GeneratedValue
+                                          value={formatDate(
+                                            new Date(file.uploadedAt),
+                                            ctx.timezone,
+                                            ctx.locale,
+                                          )}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="flex items-center justify-end gap-1">
+                                          <a
+                                            href={attachmentUrl(a.id)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                          >
+                                            <GeneratedText id="m_0871fb8eeeedd0" />
+                                          </a>
+                                          {canRecord ? (
+                                            <form action={deleteTrainingRecordFile}>
+                                              <input type="hidden" name="id" value={file.id} />
+                                              <input type="hidden" name="recordId" value={id} />
+                                              <Button
+                                                type="submit"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 w-7 p-0 text-slate-400 hover:text-red-600"
+                                                title={tGenerated('m_1daffe3e5eee41')}
+                                              >
+                                                <Trash2 size={14} />
+                                              </Button>
+                                            </form>
+                                          ) : null}
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                />
+                              </TableBody>
+                            </Table>
+                            <Pagination
+                              basePath={basePath}
+                              currentParams={sp}
+                              total={filteredAttachmentCount}
+                              page={attachmentParams.page}
+                              perPage={attachmentParams.perPage}
+                              pageParamKey="attachmentPage"
+                            />
+                          </div>
+                        )
+                      }
+                    />
+                  </CardContent>
+                </Card>
+              ) : null
+            }
+          />
 
-        <GeneratedValue
-          value={
-            active === 'activity' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    <GeneratedText id="m_14b78af1b2f95e" />
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
-                </CardContent>
-              </Card>
-            ) : null
-          }
-        />
-      </div>
-      {canRecord ? (
-        <TrainingRecordFilesDrawer
-          recordId={id}
-          open={drawer === 'upload-file'}
-          closeHref={attachmentsCloseHref}
-        />
-      ) : null}
-    </DetailPageLayout>
+          <GeneratedValue
+            value={
+              active === 'activity' ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <GeneratedText id="m_14b78af1b2f95e" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+                  </CardContent>
+                </Card>
+              ) : null
+            }
+          />
+        </div>
+        {canRecord ? (
+          <TrainingRecordFilesDrawer
+            recordId={id}
+            open={drawer === 'upload-file'}
+            closeHref={attachmentsCloseHref}
+          />
+        ) : null}
+      </DetailPageLayout>
+    </OfflineRecordProvider>
   )
 }
 

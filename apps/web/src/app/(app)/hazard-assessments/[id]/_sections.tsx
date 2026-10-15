@@ -13,10 +13,14 @@
 //                              buttons.
 //   - Small button helpers     (MoveButton / DeleteButton).
 //
-// Each Add* form dispatches its server action via `useTransition` and on
-// success navigates to the section's tab URL (drops the `?drawer=…` param)
-// using `router.replace` — this closes the drawer because the page no longer
-// matches the `drawer === '<key>'` predicate.
+// Inline answers (PPE, questions, checklist hazards) are local-first record
+// fields bound to the page's <OfflineRecordProvider>: they save on the device
+// and sync through the module's record saver. Adding, editing, reordering and
+// deleting rows needs signal: each drawer form and row button runs its server
+// action through `useOnlineAction` (explains offline, pushes queued edits
+// first). On success a drawer navigates to the section's tab URL (drops the
+// `?drawer=…` param) using `router.replace` — this closes the drawer because
+// the page no longer matches the `drawer === '<key>'` predicate.
 
 'use client'
 
@@ -29,19 +33,34 @@ import {
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { Button, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
-import { SaveDot, useAutoSave } from '@/components/live-field'
+import { SaveDot } from '@/components/live-field'
+import { useRecordField } from '@/lib/offline-drafts/offline-record'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
+import { PPE_ANSWERS, YES_NO_ANSWERS, assessmentRowOpKey } from '../_assessment-inputs'
 import { RiskDelta, RiskMatrixField } from '../_risk'
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-function useDrawerClose(closeHref: string) {
+/**
+ * Submit a drawer's Server Action, then close the drawer. Adding or editing
+ * rows needs signal: offline it explains instead of failing, and online it
+ * first pushes the record's queued inline edits (see useOnlineAction).
+ */
+function useDrawerSubmit(closeHref: string) {
   const router = useRouter()
-  return () => router.replace(closeHref as any)
+  const runOnline = useOnlineAction()
+  const [pending, start] = useTransition()
+  function submit(action: (formData: FormData) => Promise<void>, formData: FormData) {
+    start(async () => {
+      if (await runOnline('finish', () => action(formData))) router.replace(closeHref as any)
+    })
+  }
+  return { pending, submit }
 }
 
 // ============================================================================
@@ -60,11 +79,10 @@ export function AddTaskDrawerBody({
   addAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [taskId, setTaskId] = useState<string>('')
   const [description, setDescription] = useState<string>('')
   const [controls, setControls] = useState<string>('')
-  const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
   function submit() {
@@ -78,10 +96,7 @@ export function AddTaskDrawerBody({
     if (taskId) fd.set('taskId', taskId)
     if (description) fd.set('description', description)
     if (controls) fd.set('controls', controls)
-    start(async () => {
-      await addAction(fd)
-      close()
-    })
+    drawer.submit(addAction, fd)
   }
 
   return (
@@ -135,7 +150,7 @@ export function AddTaskDrawerBody({
         />
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_02ac1cf154a4f9')}
@@ -166,10 +181,9 @@ export function EditTaskDrawerBody({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [description, setDescription] = useState<string>(row.description ?? '')
   const [controls, setControls] = useState<string>(row.controls ?? '')
-  const [pending, start] = useTransition()
 
   function submit() {
     const fd = new FormData()
@@ -177,10 +191,7 @@ export function EditTaskDrawerBody({
     fd.set('assessmentId', assessmentId)
     fd.set('description', description)
     fd.set('controls', controls)
-    start(async () => {
-      await updateAction(fd)
-      close()
-    })
+    drawer.submit(updateAction, fd)
   }
 
   return (
@@ -239,7 +250,7 @@ export function EditTaskDrawerBody({
         />
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_19e6bff894c3c7')}
@@ -380,10 +391,9 @@ export function AddHazardLibraryDrawerBody({
   addAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [hazardId, setHazardId] = useState<string>('')
   const [query, setQuery] = useState<string>('')
-  const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
   const filtered = query.trim()
@@ -402,10 +412,7 @@ export function AddHazardLibraryDrawerBody({
     const fd = new FormData()
     fd.set('assessmentId', assessmentId)
     fd.set('hazardId', hazardId)
-    start(async () => {
-      await addAction(fd)
-      close()
-    })
+    drawer.submit(addAction, fd)
   }
 
   return (
@@ -478,7 +485,7 @@ export function AddHazardLibraryDrawerBody({
         />
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_1302603dc58ef5')}
@@ -499,9 +506,8 @@ export function AddHazardSetDrawerBody({
   addSetAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [setId, setSetId] = useState<string>('')
-  const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
   function submit() {
@@ -513,10 +519,7 @@ export function AddHazardSetDrawerBody({
     const fd = new FormData()
     fd.set('assessmentId', assessmentId)
     fd.set('setId', setId)
-    start(async () => {
-      await addSetAction(fd)
-      close()
-    })
+    drawer.submit(addSetAction, fd)
   }
 
   return (
@@ -582,7 +585,7 @@ export function AddHazardSetDrawerBody({
         />
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_130c47677645f8')}
@@ -601,9 +604,8 @@ export function AddHazardDrawerBody({
   addAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [name, setName] = useState<string>('')
-  const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
   function submit() {
@@ -615,10 +617,7 @@ export function AddHazardDrawerBody({
     const fd = new FormData()
     fd.set('assessmentId', assessmentId)
     fd.set('name', name.trim())
-    start(async () => {
-      await addAction(fd)
-      close()
-    })
+    drawer.submit(addAction, fd)
   }
 
   return (
@@ -648,7 +647,7 @@ export function AddHazardDrawerBody({
         />
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_1302603dc58ef5')}
@@ -686,7 +685,7 @@ export function EditHazardDrawerBody({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [name, setName] = useState<string>(row.name ?? '')
   const [standard, setStandard] = useState<string>(row.standardControls ?? '')
   const [specific, setSpecific] = useState<string>(row.specificControls ?? '')
@@ -706,7 +705,6 @@ export function EditHazardDrawerBody({
   const [postSeverity, setPostSeverity] = useState<string>(
     row.postSeverity == null ? '' : String(row.postSeverity),
   )
-  const [pending, start] = useTransition()
 
   function submit() {
     const fd = new FormData()
@@ -726,10 +724,7 @@ export function EditHazardDrawerBody({
       fd.set('postLikelihood', postLikelihood)
       fd.set('postSeverity', postSeverity)
     }
-    start(async () => {
-      await updateAction(fd)
-      close()
-    })
+    drawer.submit(updateAction, fd)
   }
 
   return (
@@ -851,7 +846,7 @@ export function EditHazardDrawerBody({
         </label>
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_19e6bff894c3c7')}
@@ -871,7 +866,6 @@ export function HazardRow({
   showRiskRatings = true,
   moveAction,
   deleteAction,
-  updateAction,
 }: {
   row: {
     id: string
@@ -897,7 +891,6 @@ export function HazardRow({
   showRiskRatings?: boolean
   moveAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   return (
     <li
@@ -1028,12 +1021,10 @@ export function HazardRow({
           ) : (
             <HazardChecklistBody
               rowId={row.id}
-              assessmentId={assessmentId}
               applicable={row.applicable}
               standardControls={row.standardControls}
               specificControls={row.specificControls}
               disabled={disabled}
-              updateAction={updateAction}
             />
           )
         }
@@ -1045,79 +1036,42 @@ export function HazardRow({
 /**
  * Legacy checklist flow for no-rating assessment types: the hazard starts as
  * N/A; tapping Applicable reveals the library's default controls and requires
- * typed site-specific controls. Both widgets auto-save (partial updateHazard
- * writes), so the whole section works inline without opening the edit drawer.
+ * typed site-specific controls. Both widgets are local-first record fields
+ * (saved on the device, synced by the record saver with the same rules as the
+ * edit drawer), so the whole section works inline — and offline — without
+ * opening the edit drawer.
  */
 function HazardChecklistBody({
   rowId,
-  assessmentId,
   applicable,
   standardControls,
   specificControls,
   disabled,
-  updateAction,
 }: {
   rowId: string
-  assessmentId: string
   applicable: boolean
   standardControls: string | null
   specificControls: string | null
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const [applies, setApplies] = useState<boolean>(applicable)
-  const applicableSave = useAutoSave({
-    prepare: (value) => {
-      const fd = new FormData()
-      fd.set('id', rowId)
-      fd.set('assessmentId', assessmentId)
-      fd.set('applicable', value)
-      return fd
-    },
-    updateAction,
-  })
-  const [controls, setControls] = useState<string>(specificControls ?? '')
-  const controlsBaseline = useRef(specificControls ?? '')
-  const controlsSave = useAutoSave({
-    prepare: (value) => {
-      const fd = new FormData()
-      fd.set('id', rowId)
-      fd.set('assessmentId', assessmentId)
-      fd.set('specificControls', value)
-      return fd
-    },
-    updateAction,
-    onSaved: (value) => {
-      controlsBaseline.current = value
-    },
-  })
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const applies = useRecordField(
+    assessmentRowOpKey({ kind: 'hazards', rowId, field: 'applicable' }),
+    applicable ? 'true' : 'false',
+  )
+  const controls = useRecordField(
+    assessmentRowOpKey({ kind: 'hazards', rowId, field: 'specificControls' }),
+    specificControls ?? '',
+  )
+  const isApplicable = applies.value === 'true'
+  const off = disabled || applies.paused
 
   function setApplicable(next: boolean) {
-    if (disabled || next === applies) return
-    setApplies(next)
-    applicableSave.save(next ? 'true' : 'false')
-  }
-  function onControlsChange(next: string) {
-    setControls(next)
-    controlsSave.setState('dirty')
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => commitControls(next), 1200)
-  }
-  function commitControls(next: string) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-    }
-    if (next === controlsBaseline.current && !controlsSave.hasPending()) {
-      controlsSave.setState('idle')
-      return
-    }
-    controlsSave.save(next)
+    if (off || next === isApplicable) return
+    applies.commit(next ? 'true' : 'false')
   }
 
-  const missingControls = applies && controls.trim().length === 0
+  const missingControls = isApplicable && controls.value.trim().length === 0
   const segBase =
     'min-h-10 px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60'
 
@@ -1130,10 +1084,11 @@ function HazardChecklistBody({
         >
           <button
             type="button"
-            disabled={disabled}
+            disabled={off}
+            aria-pressed={isApplicable}
             onClick={() => setApplicable(true)}
             className={`${segBase} ${
-              applies
+              isApplicable
                 ? 'bg-teal-600 text-white'
                 : 'bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
             }`}
@@ -1142,10 +1097,11 @@ function HazardChecklistBody({
           </button>
           <button
             type="button"
-            disabled={disabled}
+            disabled={off}
+            aria-pressed={!isApplicable}
             onClick={() => setApplicable(false)}
             className={`${segBase} border-l border-slate-200 dark:border-slate-700 ${
-              applies
+              isApplicable
                 ? 'bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
                 : 'bg-slate-600 text-white'
             }`}
@@ -1153,12 +1109,12 @@ function HazardChecklistBody({
             <GeneratedText id="m_06702e4064e393" />
           </button>
         </div>
-        <SaveDot state={applicableSave.state} onRetry={applicableSave.retry} />
+        <SaveDot state={applies.saveState} error={applies.error} onRetry={applies.retry} />
       </div>
 
       <GeneratedValue
         value={
-          applies ? (
+          isApplicable ? (
             <>
               <GeneratedValue
                 value={
@@ -1195,13 +1151,18 @@ function HazardChecklistBody({
                         <label className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
                           <GeneratedText id="m_1d748b07675565" />
                         </label>
-                        <SaveDot state={controlsSave.state} onRetry={controlsSave.retry} />
+                        <SaveDot
+                          state={controls.saveState}
+                          error={controls.error}
+                          onRetry={controls.retry}
+                        />
                       </div>
                       <Textarea
                         rows={2}
-                        value={controls}
-                        onChange={(e) => onControlsChange(e.target.value)}
-                        onBlur={() => commitControls(controls)}
+                        value={controls.value}
+                        disabled={controls.paused}
+                        onChange={(e) => controls.change(e.target.value)}
+                        onBlur={() => controls.commit()}
                         placeholder={tGenerated('m_0ddf30e0532923')}
                         className={
                           missingControls
@@ -1244,11 +1205,10 @@ export function AddPPEDrawerBody({
   addAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [name, setName] = useState<string>('')
   const [description, setDescription] = useState<string>('')
   const [required, setRequired] = useState<boolean>(true)
-  const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
   function submit() {
@@ -1262,10 +1222,7 @@ export function AddPPEDrawerBody({
     fd.set('name', name.trim())
     fd.set('description', description)
     if (required) fd.set('required', 'on')
-    start(async () => {
-      await addAction(fd)
-      close()
-    })
+    drawer.submit(addAction, fd)
   }
 
   return (
@@ -1311,7 +1268,7 @@ export function AddPPEDrawerBody({
         />
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_0068c6e22ca766')}
@@ -1332,11 +1289,10 @@ export function EditPPEDrawerBody({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [name, setName] = useState<string>(row.name)
   const [description, setDescription] = useState<string>(row.description ?? '')
   const [required, setRequired] = useState<boolean>(row.required)
-  const [pending, start] = useTransition()
 
   function submit() {
     const fd = new FormData()
@@ -1345,10 +1301,7 @@ export function EditPPEDrawerBody({
     fd.set('name', name)
     fd.set('description', description)
     if (required) fd.set('required', 'on')
-    start(async () => {
-      await updateAction(fd)
-      close()
-    })
+    drawer.submit(updateAction, fd)
   }
 
   return (
@@ -1376,7 +1329,7 @@ export function EditPPEDrawerBody({
         </label>
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_19e6bff894c3c7')}
@@ -1392,7 +1345,6 @@ export function PPERow({
   totalCount,
   basePath,
   disabled,
-  answerAction,
   moveAction,
   deleteAction,
 }: {
@@ -1408,20 +1360,15 @@ export function PPERow({
   totalCount: number
   basePath: string
   disabled?: boolean
-  answerAction: (formData: FormData) => Promise<void>
   moveAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
 }) {
-  const [pending, start] = useTransition()
-  function answer(value: 'yes' | 'no' | 'na') {
-    const fd = new FormData()
-    fd.set('id', row.id)
-    fd.set('assessmentId', assessmentId)
-    fd.set('answer', value)
-    start(async () => {
-      await answerAction(fd)
-    })
-  }
+  // Tap to answer: saved on the device at once and synced by the record saver.
+  const answer = useRecordField(
+    assessmentRowOpKey({ kind: 'ppe', rowId: row.id, field: 'answer' }),
+    row.answer ?? '',
+  )
+  const off = disabled || answer.paused
   return (
     <li className="grid grid-cols-1 items-center gap-2 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto_auto] dark:border-slate-800 dark:bg-slate-900">
       <div>
@@ -1449,18 +1396,22 @@ export function PPERow({
       </div>
       <div className="flex items-center gap-1.5 text-sm sm:text-xs">
         <GeneratedValue
-          value={(['yes', 'no', 'na'] as const).map((v) => (
+          value={PPE_ANSWERS.map((v) => (
             <button
               key={v}
               type="button"
-              disabled={pending || disabled}
-              onClick={() => answer(v)}
-              className={`min-h-10 flex-1 rounded-full border px-4 font-medium sm:min-h-0 sm:flex-none sm:px-2.5 sm:py-0.5 sm:font-normal ${row.answer === v ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
+              disabled={off}
+              aria-pressed={answer.value === v}
+              onClick={() => {
+                if (!off) answer.commit(v)
+              }}
+              className={`min-h-10 flex-1 rounded-full border px-4 font-medium sm:min-h-0 sm:flex-none sm:px-2.5 sm:py-0.5 sm:font-normal ${answer.value === v ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-200' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
             >
               <GeneratedValue value={v.toUpperCase()} />
             </button>
           ))}
         />
+        <SaveDot state={answer.saveState} error={answer.error} onRetry={answer.retry} />
       </div>
       <GeneratedValue
         value={
@@ -1504,12 +1455,11 @@ export function AddQuestionDrawerBody({
   addAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [question, setQuestion] = useState<string>('')
   const [questionType, setQuestionType] = useState<'yes_no' | 'text' | 'multi_select'>('yes_no')
   const [answers, setAnswers] = useState<string>('')
   const [requiresYes, setRequiresYes] = useState<boolean>(false)
-  const [pending, start] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
   function submit() {
@@ -1528,10 +1478,7 @@ export function AddQuestionDrawerBody({
     fd.set('questionType', questionType)
     fd.set('answers', answers)
     if (requiresYes) fd.set('requiresYes', 'on')
-    start(async () => {
-      await addAction(fd)
-      close()
-    })
+    drawer.submit(addAction, fd)
   }
 
   return (
@@ -1594,7 +1541,7 @@ export function AddQuestionDrawerBody({
         />
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_029dffafbff34b')}
@@ -1621,10 +1568,9 @@ export function EditQuestionDrawerBody({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const close = useDrawerClose(closeHref)
+  const drawer = useDrawerSubmit(closeHref)
   const [question, setQuestion] = useState<string>(row.question)
   const [requiresYes, setRequiresYes] = useState<boolean>(row.requiresYes)
-  const [pending, start] = useTransition()
 
   function submit() {
     const fd = new FormData()
@@ -1632,10 +1578,7 @@ export function EditQuestionDrawerBody({
     fd.set('assessmentId', assessmentId)
     fd.set('question', question)
     if (requiresYes) fd.set('requiresYes', 'on')
-    start(async () => {
-      await updateAction(fd)
-      close()
-    })
+    drawer.submit(updateAction, fd)
   }
 
   return (
@@ -1694,7 +1637,7 @@ export function EditQuestionDrawerBody({
         />
       </div>
       <DrawerSubmitHandle
-        pending={pending}
+        pending={drawer.pending}
         onSubmit={submit}
         closeHref={closeHref}
         submitLabel={tGenerated('m_19e6bff894c3c7')}
@@ -1710,7 +1653,6 @@ export function QuestionRow({
   totalCount,
   basePath,
   disabled,
-  answerAction,
   moveAction,
   deleteAction,
 }: {
@@ -1727,21 +1669,16 @@ export function QuestionRow({
   totalCount: number
   basePath: string
   disabled?: boolean
-  answerAction: (formData: FormData) => Promise<void>
   moveAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
 }) {
-  const [answer, setAnswer] = useState<string>(row.answer ?? '')
-  const [pending, start] = useTransition()
-  function save() {
-    const fd = new FormData()
-    fd.set('id', row.id)
-    fd.set('assessmentId', assessmentId)
-    fd.set('answer', answer)
-    start(async () => {
-      await answerAction(fd)
-    })
-  }
+  // Local-first answer: taps and picks save at once, typed answers after a
+  // short pause and on blur — on the device first, then synced.
+  const answer = useRecordField(
+    assessmentRowOpKey({ kind: 'questions', rowId: row.id, field: 'answer' }),
+    row.answer ?? '',
+  )
+  const off = disabled || answer.paused
   return (
     <li className="space-y-2 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-start justify-between gap-2">
@@ -1758,8 +1695,9 @@ export function QuestionRow({
               }
             />
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
             <GeneratedValue value={row.questionType.replace('_', ' ')} />
+            <SaveDot state={answer.saveState} error={answer.error} onRetry={answer.retry} />
           </div>
         </div>
         <GeneratedValue
@@ -1792,22 +1730,16 @@ export function QuestionRow({
           row.questionType === 'yes_no' ? (
             <div className="flex items-center gap-2">
               <GeneratedValue
-                value={['Yes', 'No', 'N/A'].map((v) => (
+                value={YES_NO_ANSWERS.map((v) => (
                   <button
                     key={v}
                     type="button"
-                    disabled={pending || disabled}
+                    disabled={off}
+                    aria-pressed={answer.value === v}
                     onClick={() => {
-                      setAnswer(v)
-                      const fd = new FormData()
-                      fd.set('id', row.id)
-                      fd.set('assessmentId', assessmentId)
-                      fd.set('answer', v)
-                      start(async () => {
-                        await answerAction(fd)
-                      })
+                      if (!off) answer.commit(v)
                     }}
-                    className={`min-h-10 flex-1 rounded-full border px-4 text-sm font-medium sm:min-h-0 sm:flex-none sm:px-3 sm:py-1 sm:text-xs sm:font-normal ${(row.answer ?? answer) === v ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
+                    className={`min-h-10 flex-1 rounded-full border px-4 text-sm font-medium sm:min-h-0 sm:flex-none sm:px-3 sm:py-1 sm:text-xs sm:font-normal ${answer.value === v ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-200' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
                   >
                     <GeneratedValue value={v} />
                   </button>
@@ -1815,7 +1747,11 @@ export function QuestionRow({
               />
             </div>
           ) : row.questionType === 'multi_select' ? (
-            <Select value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={disabled}>
+            <Select
+              value={answer.value}
+              onChange={(e) => answer.commit(e.target.value)}
+              disabled={off}
+            >
               <option value="">—</option>
               {row.answers.map((a) => (
                 <option key={a} value={a}>
@@ -1825,23 +1761,13 @@ export function QuestionRow({
             </Select>
           ) : (
             <Textarea
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
+              value={answer.value}
+              onChange={(e) => answer.change(e.target.value)}
+              onBlur={() => answer.commit()}
               rows={3}
-              disabled={disabled}
+              disabled={off}
             />
           )
-        }
-      />
-      <GeneratedValue
-        value={
-          row.questionType !== 'yes_no' && !disabled ? (
-            <div className="flex items-center justify-end">
-              <Button type="button" size="sm" onClick={save} disabled={pending}>
-                <GeneratedText id="m_1c4c76f00e3b16" />
-              </Button>
-            </div>
-          ) : null
         }
       />
     </li>
@@ -1866,6 +1792,7 @@ function MoveButton({
   action: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
+  const runOnline = useOnlineAction()
   const [pending, start] = useTransition()
   function go() {
     const fd = new FormData()
@@ -1873,7 +1800,7 @@ function MoveButton({
     fd.set('assessmentId', assessmentId)
     fd.set('direction', direction)
     start(async () => {
-      await action(fd)
+      await runOnline('finish', () => action(fd))
     })
   }
   return (
@@ -1901,13 +1828,14 @@ function DeleteButton({
   action: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
+  const runOnline = useOnlineAction()
   const [pending, start] = useTransition()
   function go() {
     const fd = new FormData()
     fd.set('id', id)
     fd.set('assessmentId', assessmentId)
     start(async () => {
-      await action(fd)
+      await runOnline('finish', () => action(fd))
     })
   }
   return (

@@ -1,11 +1,11 @@
 'use client'
 
-// Sync indicator + recovery banner for local-first form drafts
+// Sync indicator + recovery banner for local-first drafts and record edits
 // (see apps/web/src/lib/offline-drafts). The indicator tells a crew whether
-// it is safe to close the form: "Synced" means the server has everything,
+// it is safe to close the page: "Synced" means the server has everything,
 // "Saved on device · Pending (n)" means the phone has it and will send it.
 
-import { AlertTriangle, Check, Cloud, CloudOff, HardDrive, History } from 'lucide-react'
+import { AlertTriangle, Check, Cloud, CloudOff, HardDrive, History, Lock } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Button } from '@beaconhs/ui'
 import {
   GeneratedText,
@@ -135,18 +135,47 @@ export function DraftSyncIndicator({
 export function DraftRecoveryBanner({
   restored,
   conflict,
+  stranded = false,
   onDismiss,
   onDiscard,
   onTakeDeviceCopy,
   onTakeSavedVersion,
+  onDiscardStranded,
 }: {
   restored: { origin: 'new' | 'resume' } | null
   conflict: boolean
+  /** Device edits for a record that can no longer be edited here. */
+  stranded?: boolean
   onDismiss: () => void
   onDiscard: () => void
   onTakeDeviceCopy: () => void
   onTakeSavedVersion: () => void
+  onDiscardStranded?: () => void
 }) {
+  if (stranded && onDiscardStranded) {
+    return (
+      <Alert variant="warning">
+        <div className="flex gap-3">
+          <Lock size={18} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1 space-y-3">
+            <div>
+              <AlertTitle>
+                <GeneratedText id="m_1459f71a4c0ddd" />
+              </AlertTitle>
+              <AlertDescription>
+                <GeneratedText id="m_107e994a63e8f5" />
+              </AlertDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={onDiscardStranded}>
+                <GeneratedText id="m_1db59a2b95cf51" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Alert>
+    )
+  }
   if (conflict) {
     return (
       <Alert variant="warning">

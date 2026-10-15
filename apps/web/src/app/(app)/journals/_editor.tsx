@@ -43,6 +43,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { MAX_JOURNAL_AI_SOURCE_LENGTH } from '@/lib/journal-ai-policy'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { VoiceButton } from './_voice-button'
 
 type WritingMode = 'tidy' | 'expand' | 'continue' | 'fix' | 'bulletize' | 'summarize'
@@ -79,20 +80,27 @@ async function* streamAI(mode: WritingMode, text: string): AsyncGenerator<string
 }
 
 export function JournalEditor({
-  initialHtml,
+  value,
   editable = true,
   aiEnabled,
   placeholder = 'Start your entry… what did you work on, what hazards did you see, what got done?',
   onChange,
+  onBlur,
 }: {
-  initialHtml: string
+  /** The bound body (the editor's own edits, or a restored device copy). */
+  value: string
   editable?: boolean
   aiEnabled: boolean
   placeholder?: string
-  onChange: (html: string, text: string) => void
+  onChange: (html: string) => void
+  /** Typing stopped here: record any input still waiting to be written. */
+  onBlur?: () => void
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
+  const runOnline = useOnlineAction()
+  // The HTML the editor currently shows: what it last emitted, or last loaded.
+  const shownRef = useRef(value)
   const [aiBusy, setAiBusy] = useState<WritingMode | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
   const aiRef = useRef<HTMLDivElement>(null)
@@ -115,7 +123,7 @@ export function JournalEditor({
       Typography,
       CharacterCount,
     ],
-    content: initialHtml,
+    content: value,
     editable,
     immediatelyRender: false,
     editorProps: {
@@ -125,12 +133,26 @@ export function JournalEditor({
       },
     },
     onUpdate({ editor }) {
-      onChange(editor.getHTML(), editor.getText())
+      const html = editor.getHTML()
+      shownRef.current = html
+      onChange(html)
+    },
+    onBlur() {
+      onBlur?.()
     },
   })
 
-  // The parent keys this editor by entry ID. Content is loaded once; a photo
-  // or metadata refresh must never replace text the author is still writing.
+  // The parent keys this editor by entry ID and passes the bound body. The
+  // editor's own edits come back unchanged and are left alone (no cursor
+  // jumps); only a value it did not type — a device copy restored after a
+  // reload, a discarded one, or a locked entry's saved text — replaces the
+  // content, without counting as a new edit.
+  useEffect(() => {
+    if (!editor || value === shownRef.current) return
+    shownRef.current = value
+    editor.commands.setContent(value, { emitUpdate: false })
+  }, [editor, value])
+
   useEffect(() => {
     if (editor) editor.setEditable(editable, false)
   }, [editor, editable])
@@ -162,36 +184,39 @@ export function JournalEditor({
       )
       return
     }
-    setAiBusy(mode)
-    editor.setEditable(false, false)
-    try {
-      let generated = ''
-      for await (const chunk of streamAI(mode, source)) generated += chunk
-      if (!generated.trim())
-        throw new Error('AI returned an empty response. Your journal was not changed.')
-      if (editor.isDestroyed) return
+    // AI needs signal; the body's queued edits are pushed first.
+    await runOnline('finish', async () => {
+      setAiBusy(mode)
+      editor.setEditable(false, false)
+      try {
+        let generated = ''
+        for await (const chunk of streamAI(mode, source)) generated += chunk
+        if (!generated.trim())
+          throw new Error('AI returned an empty response. Your journal was not changed.')
+        if (editor.isDestroyed) return
 
-      if (mode === 'continue') {
-        editor.chain().focus('end').insertContent(` ${generated}`).run()
-      } else if (hasSelection) {
-        editor
-          .chain()
-          .focus()
-          .setTextSelection({ from: sel.from, to: sel.to })
-          .insertContent(generated)
-          .run()
-      } else {
-        editor.chain().focus().selectAll().insertContent(generated).run()
+        if (mode === 'continue') {
+          editor.chain().focus('end').insertContent(` ${generated}`).run()
+        } else if (hasSelection) {
+          editor
+            .chain()
+            .focus()
+            .setTextSelection({ from: sel.from, to: sel.to })
+            .insertContent(generated)
+            .run()
+        } else {
+          editor.chain().focus().selectAll().insertContent(generated).run()
+        }
+        editor.commands.focus()
+      } catch (err) {
+        toast.error(
+          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_144eb024879229')),
+        )
+      } finally {
+        if (!editor.isDestroyed) editor.setEditable(editable, false)
+        setAiBusy(null)
       }
-      editor.commands.focus()
-    } catch (err) {
-      toast.error(
-        tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_144eb024879229')),
-      )
-    } finally {
-      if (!editor.isDestroyed) editor.setEditable(editable, false)
-      setAiBusy(null)
-    }
+    })
   }
 
   function setLink() {

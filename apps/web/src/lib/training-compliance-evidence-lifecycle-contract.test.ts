@@ -14,7 +14,11 @@ function between(value: string, start: string, end: string): string {
 }
 
 const recordActions = source('../app/(app)/training/records/_actions.ts')
+const recordEdits = source('../app/(app)/training/records/_record-edits.ts')
+const courseEvidence = source('../app/(app)/training/records/_course-evidence.ts')
 const skillActions = source('../app/(app)/training/skills/_actions.ts')
+const skillEdits = source('../app/(app)/training/skills/_record-edits.ts')
+const skillEvidence = source('../app/(app)/training/skills/_skill-evidence.ts')
 const classActions = source('../app/(app)/training/classes/_actions.ts')
 const learnActions = source('../app/(app)/training/learn/_actions.ts')
 const completion = source('../app/(app)/training/learn/_lib/completion.ts')
@@ -25,11 +29,6 @@ const apiWrites = source('./api/write.ts')
 
 describe('training compliance evidence lifecycle', () => {
   it('refreshes course evidence atomically for every training-record mutation', () => {
-    const update = between(
-      recordActions,
-      'export async function updateTrainingRecordField',
-      'export async function renewTrainingRecord',
-    )
     const renew = between(
       recordActions,
       'export async function renewTrainingRecord',
@@ -51,22 +50,22 @@ describe('training compliance evidence lifecycle', () => {
       'export async function bulkExportTrainingRecordsCsv',
     )
 
-    expect(recordActions).toContain('materializeEvidenceTargetsObligations(')
-    expect(recordActions).toContain("sourceModule: 'training' as const")
-    expect(update).toContain('record.courseId')
-    expect(update).toContain("update.field === 'courseId' ? update.value : record.courseId")
-    for (const mutation of [update, renew, revoke, bulkRenew, bulkRevoke]) {
+    expect(courseEvidence).toContain('materializeEvidenceTargetsObligations(')
+    expect(courseEvidence).toContain("sourceModule: 'training' as const")
+    // Inline field edits (the record saver) refresh the old and new course in
+    // the edit transaction, after the batch's per-field audit entries.
+    expect(recordEdits).toContain('originalCourseId: row.courseId')
+    expect(recordEdits).toContain('await auditFieldChanges(')
+    expect(recordEdits).toContain(
+      'await materializeCourseEvidence(tx, ctx.tenantId, [originalCourseId, row.courseId])',
+    )
+    for (const mutation of [renew, revoke, bulkRenew, bulkRevoke]) {
       expect(mutation).toContain('await recordAuditInTransaction(tx, ctx')
       expect(mutation).toContain('await materializeCourseEvidence(')
     }
   })
 
   it('refreshes old and new skill types for grant, retarget, renewal, and revocation', () => {
-    const update = between(
-      skillActions,
-      'export async function updateSkillAssignmentField',
-      'export async function renewSkillAssignment',
-    )
     const renew = between(
       skillActions,
       'export async function renewSkillAssignment',
@@ -78,13 +77,18 @@ describe('training compliance evidence lifecycle', () => {
       '// ---------------------------------------------------------------------------\n// Files',
     )
 
-    expect(skillActions).toContain("sourceModule: 'skill_requirement' as const")
-    expect(skillActions).toContain('targetRef: { skillTypeId }')
-    expect(update).toContain('assignment.skillTypeId')
-    expect(update).toContain(
-      "update.field === 'skillTypeId' ? update.value : assignment.skillTypeId",
+    expect(skillEvidence).toContain("sourceModule: 'skill_requirement' as const")
+    expect(skillEvidence).toContain('targetRef: { skillTypeId }')
+    // Inline field edits (the skill saver) refresh the old and new skill type
+    // in the edit transaction, after the batch's per-field audit entries.
+    expect(skillEdits).toContain(
+      'original: { personId: row.personId, skillTypeId: row.skillTypeId }',
     )
-    for (const mutation of [update, renew, revoke]) {
+    expect(skillEdits).toContain('await auditFieldChanges(')
+    expect(skillEdits).toContain(
+      'await materializeSkillEvidence(tx, ctx.tenantId, [original.skillTypeId, row.skillTypeId])',
+    )
+    for (const mutation of [renew, revoke]) {
       expect(mutation).toContain('await recordAuditInTransaction(tx, ctx')
       expect(mutation).toContain('await materializeSkillEvidence(')
     }
@@ -94,7 +98,7 @@ describe('training compliance evidence lifecycle', () => {
     const markComplete = between(
       classActions,
       'export async function markClassComplete',
-      'function classFieldUpdate',
+      'export async function cancelClass',
     )
     expect(markComplete).toContain('.insert(trainingRecords)')
     expect(markComplete).toContain('await recordAuditInTransaction(tx, ctx')

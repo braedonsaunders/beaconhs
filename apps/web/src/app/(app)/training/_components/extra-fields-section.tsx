@@ -30,6 +30,7 @@ import {
   UrlDrawer,
 } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
@@ -195,16 +196,19 @@ function FieldRow({
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function remove() {
     startTransition(async () => {
-      const res = await deleteAction({ id: row.id, ownerType, ownerId })
-      if (res.ok) {
-        toast.success(tGenerated('m_1ca393d7995071'))
-        router.refresh()
-      } else {
-        toast.error(tGeneratedValue(res.error ?? tGenerated('m_03e9d2c82888d0')))
-      }
+      await runOnline('finish', async () => {
+        const res = await deleteAction({ id: row.id, ownerType, ownerId })
+        if (res.ok) {
+          toast.success(tGenerated('m_1ca393d7995071'))
+          router.refresh()
+        } else {
+          toast.error(tGeneratedValue(res.error ?? tGenerated('m_03e9d2c82888d0')))
+        }
+      })
     })
   }
 
@@ -262,6 +266,7 @@ function AddExtraFieldDrawer({
   const [fieldValue, setFieldValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -271,23 +276,25 @@ function AddExtraFieldDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        ownerType,
-        ownerId,
-        fieldKey: key,
-        fieldValue: fieldValue.trim() || null,
+      await runOnline('start', async () => {
+        const res = await action({
+          ownerType,
+          ownerId,
+          fieldKey: key,
+          fieldValue: fieldValue.trim() || null,
+        })
+        if (res.ok) {
+          toast.success(tGenerated('m_17da1c493490d8'))
+          setFieldKey('')
+          setFieldValue('')
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          const message = res.error ?? 'Failed to add field'
+          setError(tGeneratedValue(message))
+          toast.error(tGeneratedValue(message))
+        }
       })
-      if (res.ok) {
-        toast.success(tGenerated('m_17da1c493490d8'))
-        setFieldKey('')
-        setFieldValue('')
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        const message = res.error ?? 'Failed to add field'
-        setError(tGeneratedValue(message))
-        toast.error(tGeneratedValue(message))
-      }
     })
   }
 

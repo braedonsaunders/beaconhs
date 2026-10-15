@@ -8,7 +8,6 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { DownloadLink } from '@/components/download-link'
-import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, getTableColumns, isNull, ne, sql } from 'drizzle-orm'
 import {
   Award,
@@ -70,12 +69,10 @@ import {
   users,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
-import { materializeIdentityAudienceObligations } from '@beaconhs/compliance'
 import { attachmentUrl } from '@/lib/attachment-url'
-import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
-import { recentActivityForEntity, recordAuditInTransaction } from '@/lib/audit'
+import { recentActivityForEntity } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { RawImage } from '@/components/raw-image'
 import { Section } from '@/components/section'
@@ -86,7 +83,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { isUuid, pickString } from '@/lib/list-params'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
-import { assertCanManageModule, canManageModule } from '@/lib/module-admin/guard'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import {
   getPersonSyncOrigin,
@@ -100,8 +97,12 @@ import { getConfiguredDirectPrintProviders } from '@/lib/direct-printing'
 import { normalizePersonBadgeDesign } from '@/lib/person-badge-design'
 import { renderPersonBadgePreview } from '@/lib/person-badge'
 import { CredentialFlipCard } from '@/components/credential-flip-card'
-import { setPersonGroups } from '../_actions/groups'
-import { setPersonTitles, setPrimaryPersonTitle } from '../_actions/titles'
+import {
+  OfflineRecordProvider,
+  RecordSyncBanner,
+  RecordSyncStatus,
+} from '@/lib/offline-drafts/offline-record'
+import { orderIdsByName } from '../_lib/assignment-order'
 import { deletePersonFile } from '../_actions/files'
 import { PersonFilesDrawers } from './_files-drawers'
 import { canAccessPersonPrivateDetails } from '../_lib/person-access'
@@ -121,112 +122,9 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]
 
-// App-owned fields stay editable even while a person is synced. Everything in
-// SYNC_OWNED_PERSON_FIELDS is locked at the source. dateOfBirth and
-// terminationDate are manual/app-owned (no sync writes them).
-const APP_OWNED_FIELDS = new Set([
-  'formalName',
-  'externalEmployeeId',
-  'crewId',
-  'managerPersonId',
-  'emergencyContactName',
-  'emergencyContactPhone',
-  'notes',
-  'dateOfBirth',
-  'terminationDate',
-])
+// While a person is actively synced, the source system owns these identity
+// fields: their inputs are read-only here and the record saver refuses them.
 const SYNC_OWNED_FIELDS = new Set<string>(SYNC_OWNED_PERSON_FIELDS)
-const EDITABLE_FIELDS = new Set<string>([...APP_OWNED_FIELDS, ...SYNC_OWNED_FIELDS])
-const PERSON_STATUSES = ['active', 'inactive', 'terminated'] as const
-const COMPLIANCE_AUDIENCE_FIELDS = new Set(['status', 'departmentId', 'tradeId'])
-
-/**
- * Auto-save a single person field. Mirrors the incidents `updateTextField`
- * recipe, but layers the directory's sync-lock rule on top: while the person is
- * actively synced, the source system owns the identity fields and any write to
- * one is rejected server-side (the disabled inputs are only the UI half of this
- * guard). App-owned fields stay editable regardless.
- */
-async function updatePersonField(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'people')
-  const id = String(formData.get('id') ?? '')
-  const field = String(formData.get('field') ?? '')
-  const raw = formData.get('value')
-  const rawValue = typeof raw === 'string' ? raw.trim() : ''
-  if (!id || !field) throw new Error('Missing id/field')
-  if (!EDITABLE_FIELDS.has(field)) throw new Error('Field not allowed')
-
-  await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(people)
-      .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, id), isNull(people.deletedAt)))
-      .limit(1)
-      .for('update')
-    if (!row) throw new Error('Person not found')
-    const origin = row ? await getPersonSyncOrigin(tx, id) : null
-
-    // Server-side half of the sync lock: a synced person's identity fields are
-    // owned by the source — reject the write outright.
-    if (origin && SYNC_OWNED_FIELDS.has(field)) {
-      throw new Error('Field is managed by an external sync and is read-only')
-    }
-
-    // A person can never be their own manager.
-    if (field === 'managerPersonId' && rawValue === id) return
-
-    // Required identity fields must not be blanked (only reachable when not synced).
-    if ((field === 'firstName' || field === 'lastName') && !rawValue) {
-      throw new Error('First and last name are required')
-    }
-
-    let value: string | null = rawValue || null
-    if (field === 'firstName' || field === 'lastName') {
-      value = rawValue
-    } else if (field === 'notes') {
-      // Notes is a rich-text field — persist sanitized HTML (defense-in-depth
-      // alongside the render-side sanitize), or null when effectively blank.
-      value = rawValue ? sanitizeDocumentHtml(rawValue) : null
-    } else if (field === 'status') {
-      if (!(PERSON_STATUSES as readonly string[]).includes(rawValue)) {
-        throw new Error('Invalid status')
-      }
-      value = rawValue
-    }
-
-    const beforeValue = (row as Record<string, unknown>)[field]
-    if (beforeValue === value) return
-    if (field === 'managerPersonId' && value) {
-      if (!isUuid(value)) throw new Error('Choose an active manager')
-      const [manager] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.id, value), activePeopleWhere()))
-        .limit(1)
-      if (!manager) throw new Error('Choose an active manager')
-    }
-    const [updated] = await tx
-      .update(people)
-      .set({ [field]: value } as Partial<typeof people.$inferInsert>)
-      .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, id), isNull(people.deletedAt)))
-      .returning({ id: people.id })
-    if (!updated) throw new Error('Person no longer exists')
-    if (COMPLIANCE_AUDIENCE_FIELDS.has(field)) {
-      await materializeIdentityAudienceObligations(tx, ctx.tenantId, [id])
-    }
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'person',
-      entityId: id,
-      action: 'update',
-      summary: `Person ${field} updated`,
-      before: { [field]: beforeValue },
-      after: { [field]: value },
-    })
-  })
-  revalidatePath(`/people/${id}`)
-}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const tGenerated = await getGeneratedTranslations()
@@ -431,9 +329,13 @@ export default async function PersonDetailPage({
         .select({ membership: personGroupMemberships, group: personGroups })
         .from(personGroupMemberships)
         .innerJoin(personGroups, eq(personGroups.id, personGroupMemberships.groupId))
-        .where(eq(personGroupMemberships.personId, id))
+        .where(and(eq(personGroupMemberships.personId, id), isNull(personGroups.deletedAt)))
         .orderBy(asc(personGroups.name)),
-      tx.select().from(personGroups).orderBy(asc(personGroups.name)),
+      tx
+        .select()
+        .from(personGroups)
+        .where(isNull(personGroups.deletedAt))
+        .orderBy(asc(personGroups.name)),
       // Titles this person holds
       tx
         .select({ assignment: personTitleAssignments, title: personTitles })
@@ -691,705 +593,933 @@ export default async function PersonDetailPage({
   const badgeProvider = directPrintProvider(normalizePersonBadgeDesign(data.tenantSettings))
   const availablePrintProviders = await getConfiguredDirectPrintProviders(ctx)
   return (
-    <PageContainer>
-      <div className="space-y-5">
-        <DetailHeader
-          back={{ href: '/people', label: 'Back to people' }}
-          title={tGeneratedValue(`${person.firstName} ${person.lastName}`)}
-          badge={
-            canReadPrivate ? (
-              <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
-                <GeneratedValue value={person.status} />
-              </Badge>
-            ) : undefined
-          }
-          actions={
-            canEdit ? (
-              <div className="flex flex-wrap gap-2">
-                <DeletePersonButton id={id} synced={synced} />
-                <Button asChild variant="outline" size="sm">
-                  <DownloadLink href={`${basePath}/badge`} target="_blank" rel="noreferrer">
-                    <IdCard size={14} /> <GeneratedText id="m_1036403447ff0f" />
-                  </DownloadLink>
-                </Button>
-                <GeneratedValue
-                  value={
-                    badgeProvider ? (
-                      <DirectPrintButton
-                        endpoint={`${basePath}/badge/print`}
-                        provider={badgeProvider}
-                        disabled={!availablePrintProviders.includes(badgeProvider)}
-                      />
-                    ) : null
-                  }
-                />
-              </div>
-            ) : undefined
-          }
-        />
-
-        <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
-          <aside className="space-y-3">
-            <Card>
-              <CardContent className="space-y-3 p-5 text-sm">
-                <div className="flex flex-col items-center gap-2 pb-3">
+    <OfflineRecordProvider module="people" recordId={id} editable={canEdit}>
+      <PageContainer>
+        <div className="space-y-5">
+          <DetailHeader
+            back={{ href: '/people', label: 'Back to people' }}
+            title={tGeneratedValue(`${person.firstName} ${person.lastName}`)}
+            badge={
+              canReadPrivate ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
+                    <GeneratedValue value={person.status} />
+                  </Badge>
+                  <GeneratedValue value={canEdit ? <RecordSyncStatus /> : null} />
+                </div>
+              ) : undefined
+            }
+            actions={
+              canEdit ? (
+                <div className="flex flex-wrap gap-2">
+                  <DeletePersonButton id={id} synced={synced} />
+                  <Button asChild variant="outline" size="sm">
+                    <DownloadLink href={`${basePath}/badge`} target="_blank" rel="noreferrer">
+                      <IdCard size={14} /> <GeneratedText id="m_1036403447ff0f" />
+                    </DownloadLink>
+                  </Button>
                   <GeneratedValue
                     value={
-                      photoUrl ? (
-                        <RawImage
-                          src={photoUrl}
-                          alt={tGeneratedValue(`${person.firstName} ${person.lastName}`)}
-                          optimizationReason="authenticated"
-                          className="h-20 w-20 rounded-full object-cover"
+                      badgeProvider ? (
+                        <DirectPrintButton
+                          endpoint={`${basePath}/badge/print`}
+                          provider={badgeProvider}
+                          disabled={!availablePrintProviders.includes(badgeProvider)}
                         />
-                      ) : (
-                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-100 text-2xl font-semibold text-teal-800 dark:bg-teal-500/15 dark:text-teal-300">
-                          <GeneratedValue value={person.firstName[0]} />
-                          <GeneratedValue value={person.lastName[0]} />
-                        </div>
-                      )
+                      ) : null
                     }
                   />
-                  <div className="text-center">
-                    <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                      <GeneratedValue value={primaryTitle?.name ?? '—'} />
-                    </div>
+                </div>
+              ) : undefined
+            }
+          />
+
+          <RecordSyncBanner />
+
+          <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
+            <aside className="space-y-3">
+              <Card>
+                <CardContent className="space-y-3 p-5 text-sm">
+                  <div className="flex flex-col items-center gap-2 pb-3">
                     <GeneratedValue
                       value={
-                        trade?.name ? (
-                          <div className="text-xs text-slate-500">
-                            <GeneratedValue value={trade.name} />
+                        photoUrl ? (
+                          <RawImage
+                            src={photoUrl}
+                            alt={tGeneratedValue(`${person.firstName} ${person.lastName}`)}
+                            optimizationReason="authenticated"
+                            className="h-20 w-20 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-100 text-2xl font-semibold text-teal-800 dark:bg-teal-500/15 dark:text-teal-300">
+                            <GeneratedValue value={person.firstName[0]} />
+                            <GeneratedValue value={person.lastName[0]} />
                           </div>
-                        ) : null
+                        )
                       }
                     />
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                        <GeneratedValue value={primaryTitle?.name ?? '—'} />
+                      </div>
+                      <GeneratedValue
+                        value={
+                          trade?.name ? (
+                            <div className="text-xs text-slate-500">
+                              <GeneratedValue value={trade.name} />
+                            </div>
+                          ) : null
+                        }
+                      />
+                    </div>
                   </div>
-                </div>
-                <SidebarRow label={tGenerated('m_0230d1a18b5206')}>
-                  <GeneratedValue value={person.employeeNo ?? '—'} />
-                </SidebarRow>
-                <SidebarRow label={tGenerated('m_1af68228b8305a')}>
-                  <GeneratedValue value={department?.name ?? '—'} />
-                </SidebarRow>
-                <SidebarRow label={tGenerated('m_13fc63a82a07d0')}>
-                  <GeneratedValue value={crew?.name ?? '—'} />
-                </SidebarRow>
-                {canReadPrivate ? (
-                  <SidebarRow label={tGenerated('m_1bd874d72669b8')}>
-                    <GeneratedValue value={person.hireDate ?? '—'} />
+                  <SidebarRow label={tGenerated('m_0230d1a18b5206')}>
+                    <GeneratedValue value={person.employeeNo ?? '—'} />
                   </SidebarRow>
-                ) : null}
-                <SidebarRow label={tGenerated('m_10b68359e74254')}>
-                  <GeneratedValue
-                    value={
-                      managerRow ? (
-                        <Link
-                          href={`/people/${managerRow.id}`}
-                          className="text-teal-700 hover:underline"
-                        >
-                          <GeneratedValue value={managerRow.firstName} />{' '}
-                          <GeneratedValue value={managerRow.lastName} />
-                        </Link>
-                      ) : (
-                        '—'
-                      )
-                    }
-                  />
-                </SidebarRow>
-                {canReadPrivate ? (
-                  <SidebarRow label={tGenerated('m_0c147e34519f36')}>
+                  <SidebarRow label={tGenerated('m_1af68228b8305a')}>
+                    <GeneratedValue value={department?.name ?? '—'} />
+                  </SidebarRow>
+                  <SidebarRow label={tGenerated('m_13fc63a82a07d0')}>
+                    <GeneratedValue value={crew?.name ?? '—'} />
+                  </SidebarRow>
+                  {canReadPrivate ? (
+                    <SidebarRow label={tGenerated('m_1bd874d72669b8')}>
+                      <GeneratedValue value={person.hireDate ?? '—'} />
+                    </SidebarRow>
+                  ) : null}
+                  <SidebarRow label={tGenerated('m_10b68359e74254')}>
                     <GeneratedValue
                       value={
-                        linkedAccount ? (
-                          can(ctx, 'admin.users.manage') ? (
-                            <Link
-                              href={`/admin/users/${linkedAccount.membershipId}`}
-                              className="text-teal-700 hover:underline"
-                              title={tGeneratedValue(linkedAccount.email)}
-                            >
-                              <GeneratedValue value={linkedAccount.email} />
-                            </Link>
-                          ) : (
-                            <span title={tGeneratedValue(linkedAccount.email)}>
-                              <GeneratedValue value={linkedAccount.email} />
-                            </span>
-                          )
+                        managerRow ? (
+                          <Link
+                            href={`/people/${managerRow.id}`}
+                            className="text-teal-700 hover:underline"
+                          >
+                            <GeneratedValue value={managerRow.firstName} />{' '}
+                            <GeneratedValue value={managerRow.lastName} />
+                          </Link>
                         ) : (
-                          <GeneratedText id="m_061e6df5204794" />
+                          '—'
                         )
                       }
                     />
                   </SidebarRow>
-                ) : null}
-                <GeneratedValue
-                  value={
-                    person.email ? (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Mail size={14} className="text-slate-400" />
-                        <a
-                          href={`mailto:${person.email}`}
-                          className="text-teal-700 hover:underline"
-                        >
-                          <GeneratedValue value={person.email} />
-                        </a>
-                      </div>
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    person.phone ? (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone size={14} className="text-slate-400" />
-                        <a href={`tel:${person.phone}`} className="text-teal-700 hover:underline">
-                          <GeneratedValue value={person.phone} />
-                        </a>
-                      </div>
-                    ) : null
-                  }
-                />
-              </CardContent>
-            </Card>
-            <GeneratedValue
-              value={
-                badgePreview ? (
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">
-                        <GeneratedValue value="ID badge preview" />
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <CredentialFlipCard {...badgePreview} />
-                    </CardContent>
-                  </Card>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                canReadPrivate && (person.emergencyContactName || person.emergencyContactPhone) ? (
-                  <Card className="border-red-200">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm text-red-800">
-                        <GeneratedText id="m_1c4b8371cb1596" />
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 pt-0 text-sm">
-                      <div className="font-medium">
-                        <GeneratedValue value={person.emergencyContactName ?? '—'} />
-                      </div>
+                  {canReadPrivate ? (
+                    <SidebarRow label={tGenerated('m_0c147e34519f36')}>
                       <GeneratedValue
                         value={
-                          person.emergencyContactPhone ? (
-                            <a
-                              href={`tel:${person.emergencyContactPhone}`}
-                              className="text-teal-700 hover:underline"
-                            >
-                              <GeneratedValue value={person.emergencyContactPhone} />
-                            </a>
+                          linkedAccount ? (
+                            can(ctx, 'admin.users.manage') ? (
+                              <Link
+                                href={`/admin/users/${linkedAccount.membershipId}`}
+                                className="text-teal-700 hover:underline"
+                                title={tGeneratedValue(linkedAccount.email)}
+                              >
+                                <GeneratedValue value={linkedAccount.email} />
+                              </Link>
+                            ) : (
+                              <span title={tGeneratedValue(linkedAccount.email)}>
+                                <GeneratedValue value={linkedAccount.email} />
+                              </span>
+                            )
+                          ) : (
+                            <GeneratedText id="m_061e6df5204794" />
+                          )
+                        }
+                      />
+                    </SidebarRow>
+                  ) : null}
+                  <GeneratedValue
+                    value={
+                      person.email ? (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail size={14} className="text-slate-400" />
+                          <a
+                            href={`mailto:${person.email}`}
+                            className="text-teal-700 hover:underline"
+                          >
+                            <GeneratedValue value={person.email} />
+                          </a>
+                        </div>
+                      ) : null
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      person.phone ? (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone size={14} className="text-slate-400" />
+                          <a href={`tel:${person.phone}`} className="text-teal-700 hover:underline">
+                            <GeneratedValue value={person.phone} />
+                          </a>
+                        </div>
+                      ) : null
+                    }
+                  />
+                </CardContent>
+              </Card>
+              <GeneratedValue
+                value={
+                  badgePreview ? (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">
+                          <GeneratedValue value="ID badge preview" />
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <CredentialFlipCard {...badgePreview} />
+                      </CardContent>
+                    </Card>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  canReadPrivate &&
+                  (person.emergencyContactName || person.emergencyContactPhone) ? (
+                    <Card className="border-red-200">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-red-800">
+                          <GeneratedText id="m_1c4b8371cb1596" />
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-1 pt-0 text-sm">
+                        <div className="font-medium">
+                          <GeneratedValue value={person.emergencyContactName ?? '—'} />
+                        </div>
+                        <GeneratedValue
+                          value={
+                            person.emergencyContactPhone ? (
+                              <a
+                                href={`tel:${person.emergencyContactPhone}`}
+                                className="text-teal-700 hover:underline"
+                              >
+                                <GeneratedValue value={person.emergencyContactPhone} />
+                              </a>
+                            ) : null
+                          }
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : null
+                }
+              />
+            </aside>
+
+            <div className="space-y-4">
+              <TabNav
+                basePath={basePath}
+                currentParams={sp}
+                active={active}
+                variant="pills"
+                tabs={[
+                  { key: 'overview', label: 'Overview' },
+                  { key: 'compliance', label: 'Compliance' },
+                  {
+                    key: 'training',
+                    label: 'Transcript',
+                    count: transcript.length,
+                  },
+                  { key: 'skills', label: 'Skills', count: currentSkills.length },
+                  { key: 'ppe', label: 'PPE', count: ppeAssigned.length },
+                  {
+                    key: 'documents',
+                    label: 'Documents & files',
+                    count: fileRows.length,
+                  },
+                  {
+                    key: 'incidents',
+                    label: 'Incidents',
+                    count: allIncidents.length,
+                  },
+                  { key: 'activity', label: 'Activity' },
+                ].filter((tab) => visibleTabs.includes(tab.key as Tab))}
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'overview' ? (
+                    <div className="space-y-4">
+                      <GeneratedValue
+                        value={
+                          !canEdit ? (
+                            <Alert variant="info">
+                              <AlertTitle>
+                                <GeneratedText id="m_0fdc17678fae80" />
+                              </AlertTitle>
+                              <AlertDescription>
+                                <GeneratedText id="m_078315010f70e4" />
+                              </AlertDescription>
+                            </Alert>
                           ) : null
                         }
                       />
-                    </CardContent>
-                  </Card>
-                ) : null
-              }
-            />
-          </aside>
+                      <GeneratedValue
+                        value={
+                          syncOrigin ? (
+                            <Alert variant="info">
+                              <AlertTitle>
+                                <GeneratedText id="m_147b8803799f06" />{' '}
+                                <GeneratedValue value={syncOrigin.connectionName} />
+                              </AlertTitle>
+                              <AlertDescription>
+                                <GeneratedText id="m_02191f52e79239" />
+                              </AlertDescription>
+                            </Alert>
+                          ) : null
+                        }
+                      />
 
-          <div className="space-y-4">
-            <TabNav
-              basePath={basePath}
-              currentParams={sp}
-              active={active}
-              variant="pills"
-              tabs={[
-                { key: 'overview', label: 'Overview' },
-                { key: 'compliance', label: 'Compliance' },
-                {
-                  key: 'training',
-                  label: 'Transcript',
-                  count: transcript.length,
-                },
-                { key: 'skills', label: 'Skills', count: currentSkills.length },
-                { key: 'ppe', label: 'PPE', count: ppeAssigned.length },
-                {
-                  key: 'documents',
-                  label: 'Documents & files',
-                  count: fileRows.length,
-                },
-                {
-                  key: 'incidents',
-                  label: 'Incidents',
-                  count: allIncidents.length,
-                },
-                { key: 'activity', label: 'Activity' },
-              ].filter((tab) => visibleTabs.includes(tab.key as Tab))}
-            />
-
-            <GeneratedValue
-              value={
-                active === 'overview' ? (
-                  <div className="space-y-4">
-                    <GeneratedValue
-                      value={
-                        !canEdit ? (
-                          <Alert variant="info">
-                            <AlertTitle>
-                              <GeneratedText id="m_0fdc17678fae80" />
-                            </AlertTitle>
-                            <AlertDescription>
-                              <GeneratedText id="m_078315010f70e4" />
-                            </AlertDescription>
-                          </Alert>
-                        ) : null
-                      }
-                    />
-                    <GeneratedValue
-                      value={
-                        syncOrigin ? (
-                          <Alert variant="info">
-                            <AlertTitle>
-                              <GeneratedText id="m_147b8803799f06" />{' '}
-                              <GeneratedValue value={syncOrigin.connectionName} />
-                            </AlertTitle>
-                            <AlertDescription>
-                              <GeneratedText id="m_02191f52e79239" />
-                            </AlertDescription>
-                          </Alert>
-                        ) : null
-                      }
-                    />
-
-                    <Section
-                      title={tGenerated('m_1b2eb1ab6d7edc')}
-                      subtitle={tGenerated('m_11cc3c77f4e22f')}
-                    >
-                      <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                        <LiveField
-                          id={person.id}
-                          field="firstName"
-                          label={tGenerated('m_07cc2555a1b765')}
-                          initialValue={person.firstName}
-                          disabled={fieldDisabled('firstName')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveField
-                          id={person.id}
-                          field="lastName"
-                          label={tGenerated('m_0e7d90a2ba2038')}
-                          initialValue={person.lastName}
-                          disabled={fieldDisabled('lastName')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveField
-                          id={person.id}
-                          field="formalName"
-                          label={tGenerated('m_157d9bc83116b9')}
-                          initialValue={person.formalName}
-                          disabled={fieldDisabled('formalName')}
-                          updateAction={updatePersonField}
-                        />
-                        {canReadPrivate ? (
-                          <LiveField
-                            id={person.id}
-                            field="dateOfBirth"
-                            label={tGenerated('m_1c4bc57e4c9de9')}
-                            type="date"
-                            initialValue={person.dateOfBirth}
-                            disabled={fieldDisabled('dateOfBirth')}
-                            updateAction={updatePersonField}
-                          />
-                        ) : null}
-                        <LiveField
-                          id={person.id}
-                          field="employeeNo"
-                          label={tGenerated('m_0230d1a18b5206')}
-                          initialValue={person.employeeNo}
-                          disabled={fieldDisabled('employeeNo')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveField
-                          id={person.id}
-                          field="email"
-                          label={tGenerated('m_00a0ba9938bdff')}
-                          initialValue={person.email}
-                          disabled={fieldDisabled('email')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveField
-                          id={person.id}
-                          field="phone"
-                          label={tGenerated('m_129b102b56bf3a')}
-                          initialValue={person.phone}
-                          disabled={fieldDisabled('phone')}
-                          updateAction={updatePersonField}
-                        />
-                      </div>
-                    </Section>
-
-                    {canReadPrivate ? (
                       <Section
-                        title={tGenerated('m_04a447b0e8003b')}
-                        subtitle={tGenerated('m_1d7da8d570e8f4')}
+                        title={tGenerated('m_1b2eb1ab6d7edc')}
+                        subtitle={tGenerated('m_11cc3c77f4e22f')}
                       >
                         <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                          <LiveSelect
-                            id={person.id}
-                            field="primaryTitleId"
-                            label={tGenerated('m_1a4bbe2908d1a5')}
-                            initialValue={primaryTitle?.id ?? null}
-                            allowEmpty={personTitleRows.length === 0}
-                            options={allTitles.map((title) => ({
-                              value: title.id,
-                              label: title.name,
+                          <LiveField
+                            field="firstName"
+                            label={tGenerated('m_07cc2555a1b765')}
+                            initialValue={person.firstName}
+                            disabled={fieldDisabled('firstName')}
+                          />
+                          <LiveField
+                            field="lastName"
+                            label={tGenerated('m_0e7d90a2ba2038')}
+                            initialValue={person.lastName}
+                            disabled={fieldDisabled('lastName')}
+                          />
+                          <LiveField
+                            field="formalName"
+                            label={tGenerated('m_157d9bc83116b9')}
+                            initialValue={person.formalName}
+                            disabled={fieldDisabled('formalName')}
+                          />
+                          {canReadPrivate ? (
+                            <LiveField
+                              field="dateOfBirth"
+                              label={tGenerated('m_1c4bc57e4c9de9')}
+                              type="date"
+                              initialValue={person.dateOfBirth}
+                              disabled={fieldDisabled('dateOfBirth')}
+                            />
+                          ) : null}
+                          <LiveField
+                            field="employeeNo"
+                            label={tGenerated('m_0230d1a18b5206')}
+                            initialValue={person.employeeNo}
+                            disabled={fieldDisabled('employeeNo')}
+                          />
+                          <LiveField
+                            field="email"
+                            label={tGenerated('m_00a0ba9938bdff')}
+                            initialValue={person.email}
+                            disabled={fieldDisabled('email')}
+                          />
+                          <LiveField
+                            field="phone"
+                            label={tGenerated('m_129b102b56bf3a')}
+                            initialValue={person.phone}
+                            disabled={fieldDisabled('phone')}
+                          />
+                        </div>
+                      </Section>
+
+                      {canReadPrivate ? (
+                        <Section
+                          title={tGenerated('m_04a447b0e8003b')}
+                          subtitle={tGenerated('m_1d7da8d570e8f4')}
+                        >
+                          <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                            <LiveSelect
+                              field="primaryTitleId"
+                              label={tGenerated('m_1a4bbe2908d1a5')}
+                              initialValue={primaryTitle?.id ?? null}
+                              allowEmpty={personTitleRows.length === 0}
+                              options={allTitles.map((title) => ({
+                                value: title.id,
+                                label: title.name,
+                              }))}
+                              disabled={!canEdit || titlesManagedBySync}
+                            />
+                            <LiveSelect
+                              field="status"
+                              label={tGenerated('m_0b9da892d6faf0')}
+                              initialValue={person.status}
+                              allowEmpty={false}
+                              options={[
+                                { value: 'active', label: 'Active' },
+                                { value: 'inactive', label: 'Inactive' },
+                                { value: 'terminated', label: 'Terminated' },
+                              ]}
+                              disabled={fieldDisabled('status')}
+                            />
+                            <LiveField
+                              field="hireDate"
+                              label={tGenerated('m_1bd874d72669b8')}
+                              type="date"
+                              initialValue={person.hireDate}
+                              disabled={fieldDisabled('hireDate')}
+                            />
+                            <LiveField
+                              field="terminationDate"
+                              label={tGenerated('m_0cc426c0b81f98')}
+                              type="date"
+                              initialValue={person.terminationDate}
+                              disabled={fieldDisabled('terminationDate')}
+                            />
+                            <LiveSelect
+                              field="departmentId"
+                              label={tGenerated('m_1af68228b8305a')}
+                              initialValue={person.departmentId}
+                              options={deptOptions.map((d) => ({ value: d.id, label: d.name }))}
+                              disabled={fieldDisabled('departmentId')}
+                            />
+                            <LiveSelect
+                              field="tradeId"
+                              label={tGenerated('m_1f1e634a4380dc')}
+                              initialValue={person.tradeId}
+                              options={tradeOptions.map((t) => ({ value: t.id, label: t.name }))}
+                              disabled={fieldDisabled('tradeId')}
+                            />
+                            <LiveSelect
+                              field="crewId"
+                              label={tGenerated('m_13fc63a82a07d0')}
+                              initialValue={person.crewId}
+                              options={crewOptions.map((c) => ({ value: c.id, label: c.name }))}
+                              disabled={fieldDisabled('crewId')}
+                            />
+                            <LiveField
+                              field="externalEmployeeId"
+                              label={tGenerated('m_0ed5613d0cf4ad')}
+                              placeholder={tGenerated('m_0dedb96e55d57e')}
+                              initialValue={person.externalEmployeeId}
+                              disabled={fieldDisabled('externalEmployeeId')}
+                            />
+                            <LivePersonSelect
+                              field="managerPersonId"
+                              label={tGenerated('m_10b68359e74254')}
+                              initialValue={person.managerPersonId}
+                              initialOption={
+                                managerRow
+                                  ? {
+                                      value: managerRow.id,
+                                      label: `${managerRow.lastName}, ${managerRow.firstName}`,
+                                    }
+                                  : undefined
+                              }
+                              options={managerOptions.map((m) => ({
+                                value: m.id,
+                                label: `${m.lastName}, ${m.firstName}`,
+                                hint: m.employeeNo ?? undefined,
+                              }))}
+                              sheetTitle="Select manager"
+                              placeholder={tGenerated('m_0b842b664b4f3b')}
+                              disabled={fieldDisabled('managerPersonId')}
+                            />
+                          </div>
+                        </Section>
+                      ) : null}
+
+                      {canReadPrivate ? (
+                        <Section
+                          title={tGenerated('m_1c4b8371cb1596')}
+                          subtitle={tGenerated('m_08fe783cc4fa92')}
+                        >
+                          <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                            <LiveField
+                              field="emergencyContactName"
+                              label={tGenerated('m_102c76e353ed6c')}
+                              initialValue={person.emergencyContactName}
+                              disabled={fieldDisabled('emergencyContactName')}
+                            />
+                            <LiveField
+                              field="emergencyContactPhone"
+                              label={tGenerated('m_039e8d745aa6a6')}
+                              initialValue={person.emergencyContactPhone}
+                              disabled={fieldDisabled('emergencyContactPhone')}
+                            />
+                          </div>
+                        </Section>
+                      ) : null}
+
+                      <Section
+                        title={tGenerated('m_115785120a1462')}
+                        subtitle={tGenerated('m_04ab27496b7a08')}
+                      >
+                        <div className="space-y-4">
+                          <LiveMultiSelect
+                            field="groups"
+                            label={tGenerated('m_1668000fa2a811')}
+                            initialValue={orderIdsByName(
+                              personGroupRows.map((r) => r.group.id),
+                              new Map(allGroups.map((g) => [g.id, g.name])),
+                            )}
+                            options={allGroups.map((g) => ({
+                              value: g.id,
+                              label: g.name,
+                              color: g.color,
                             }))}
+                            disabled={!canEdit}
+                            placeholder={tGenerated('m_01c6e280f6d50a')}
+                            sheetTitle="Add to group"
+                          />
+                          <LiveMultiSelect
+                            field="titles"
+                            label={tGenerated('m_095c84f6f98817')}
+                            initialValue={orderIdsByName(
+                              personTitleRows.map((r) => r.title.id),
+                              new Map(allTitles.map((t) => [t.id, t.name])),
+                            )}
+                            options={allTitles.map((t) => ({ value: t.id, label: t.name }))}
                             disabled={!canEdit || titlesManagedBySync}
-                            updateAction={setPrimaryPersonTitle}
-                          />
-                          <LiveSelect
-                            id={person.id}
-                            field="status"
-                            label={tGenerated('m_0b9da892d6faf0')}
-                            initialValue={person.status}
-                            allowEmpty={false}
-                            options={[
-                              { value: 'active', label: 'Active' },
-                              { value: 'inactive', label: 'Inactive' },
-                              { value: 'terminated', label: 'Terminated' },
-                            ]}
-                            disabled={fieldDisabled('status')}
-                            updateAction={updatePersonField}
-                          />
-                          <LiveField
-                            id={person.id}
-                            field="hireDate"
-                            label={tGenerated('m_1bd874d72669b8')}
-                            type="date"
-                            initialValue={person.hireDate}
-                            disabled={fieldDisabled('hireDate')}
-                            updateAction={updatePersonField}
-                          />
-                          <LiveField
-                            id={person.id}
-                            field="terminationDate"
-                            label={tGenerated('m_0cc426c0b81f98')}
-                            type="date"
-                            initialValue={person.terminationDate}
-                            disabled={fieldDisabled('terminationDate')}
-                            updateAction={updatePersonField}
-                          />
-                          <LiveSelect
-                            id={person.id}
-                            field="departmentId"
-                            label={tGenerated('m_1af68228b8305a')}
-                            initialValue={person.departmentId}
-                            options={deptOptions.map((d) => ({ value: d.id, label: d.name }))}
-                            disabled={fieldDisabled('departmentId')}
-                            updateAction={updatePersonField}
-                          />
-                          <LiveSelect
-                            id={person.id}
-                            field="tradeId"
-                            label={tGenerated('m_1f1e634a4380dc')}
-                            initialValue={person.tradeId}
-                            options={tradeOptions.map((t) => ({ value: t.id, label: t.name }))}
-                            disabled={fieldDisabled('tradeId')}
-                            updateAction={updatePersonField}
-                          />
-                          <LiveSelect
-                            id={person.id}
-                            field="crewId"
-                            label={tGenerated('m_13fc63a82a07d0')}
-                            initialValue={person.crewId}
-                            options={crewOptions.map((c) => ({ value: c.id, label: c.name }))}
-                            disabled={fieldDisabled('crewId')}
-                            updateAction={updatePersonField}
-                          />
-                          <LiveField
-                            id={person.id}
-                            field="externalEmployeeId"
-                            label={tGenerated('m_0ed5613d0cf4ad')}
-                            placeholder={tGenerated('m_0dedb96e55d57e')}
-                            initialValue={person.externalEmployeeId}
-                            disabled={fieldDisabled('externalEmployeeId')}
-                            updateAction={updatePersonField}
-                          />
-                          <LivePersonSelect
-                            id={person.id}
-                            field="managerPersonId"
-                            label={tGenerated('m_10b68359e74254')}
-                            initialValue={person.managerPersonId}
-                            initialOption={
-                              managerRow
-                                ? {
-                                    value: managerRow.id,
-                                    label: `${managerRow.lastName}, ${managerRow.firstName}`,
-                                  }
-                                : undefined
-                            }
-                            options={managerOptions.map((m) => ({
-                              value: m.id,
-                              label: `${m.lastName}, ${m.firstName}`,
-                              hint: m.employeeNo ?? undefined,
-                            }))}
-                            sheetTitle="Select manager"
-                            placeholder={tGenerated('m_0b842b664b4f3b')}
-                            disabled={fieldDisabled('managerPersonId')}
-                            updateAction={updatePersonField}
+                            placeholder={tGenerated('m_1d8fbe8844cf23')}
+                            sheetTitle="Assign title"
                           />
                         </div>
                       </Section>
-                    ) : null}
 
-                    {canReadPrivate ? (
-                      <Section
-                        title={tGenerated('m_1c4b8371cb1596')}
-                        subtitle={tGenerated('m_08fe783cc4fa92')}
-                      >
-                        <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                          <LiveField
-                            id={person.id}
-                            field="emergencyContactName"
-                            label={tGenerated('m_102c76e353ed6c')}
-                            initialValue={person.emergencyContactName}
-                            disabled={fieldDisabled('emergencyContactName')}
-                            updateAction={updatePersonField}
+                      {canReadPrivate ? (
+                        <Section
+                          title={tGenerated('m_0b8dadcb78cd08')}
+                          subtitle={tGenerated('m_1fb45a84c0088e')}
+                        >
+                          <LiveRichText
+                            field="notes"
+                            label={tGenerated('m_0b8dadcb78cd08')}
+                            initialValue={person.notes}
+                            placeholder={tGenerated('m_022870b5381457')}
+                            disabled={fieldDisabled('notes')}
                           />
-                          <LiveField
-                            id={person.id}
-                            field="emergencyContactPhone"
-                            label={tGenerated('m_039e8d745aa6a6')}
-                            initialValue={person.emergencyContactPhone}
-                            disabled={fieldDisabled('emergencyContactPhone')}
-                            updateAction={updatePersonField}
-                          />
-                        </div>
-                      </Section>
-                    ) : null}
+                        </Section>
+                      ) : null}
 
-                    <Section
-                      title={tGenerated('m_115785120a1462')}
-                      subtitle={tGenerated('m_04ab27496b7a08')}
-                    >
-                      <div className="space-y-4">
-                        <LiveMultiSelect
-                          id={person.id}
-                          label={tGenerated('m_1668000fa2a811')}
-                          initialValue={personGroupRows.map((r) => r.group.id)}
-                          options={allGroups.map((g) => ({
-                            value: g.id,
-                            label: g.name,
-                            color: g.color,
-                          }))}
-                          disabled={!canEdit}
-                          updateAction={setPersonGroups}
-                          placeholder={tGenerated('m_01c6e280f6d50a')}
-                          sheetTitle="Add to group"
+                      {canReadPrivate ? (
+                        <CustomFieldsSection
+                          ctx={ctx}
+                          entityKind="person"
+                          subtypeId={null}
+                          metadata={person.metadata}
+                          locked={!canEdit}
                         />
-                        <LiveMultiSelect
-                          id={person.id}
-                          label={tGenerated('m_095c84f6f98817')}
-                          initialValue={personTitleRows.map((r) => r.title.id)}
-                          options={allTitles.map((t) => ({ value: t.id, label: t.name }))}
-                          disabled={!canEdit || titlesManagedBySync}
-                          updateAction={setPersonTitles}
-                          placeholder={tGenerated('m_1d8fbe8844cf23')}
-                          sheetTitle="Assign title"
+                      ) : null}
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'compliance' ? (
+                    <ComplianceTab
+                      trainingTotal={transcript.length}
+                      trainingValid={transcript.filter((t) => t.status === 'ok').length}
+                      trainingExpiring={expiringCount}
+                      trainingExpired={expiredCount}
+                      documentsAcked={canReadPrivate ? ackedDocs.length : undefined}
+                      ppeCount={ppeAssigned.length}
+                      incidentsCount={canReadPrivate ? allIncidents.length : undefined}
+                    />
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'training' ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+                        <span className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                          <GeneratedText id="m_096d47f60747b3" />
+                        </span>
+                        <CompactStat
+                          label={tGenerated('m_1e418d0475450c')}
+                          value={validCount}
+                          tone="success"
+                        />
+                        <CompactStat
+                          label={tGenerated('m_1c459e8d8a0fdf')}
+                          value={expiringCount}
+                          tone="warning"
+                        />
+                        <CompactStat
+                          label={tGenerated('m_13f7150c94b182')}
+                          value={expiredCount}
+                          tone="destructive"
                         />
                       </div>
-                    </Section>
-
-                    {canReadPrivate ? (
-                      <Section
-                        title={tGenerated('m_0b8dadcb78cd08')}
-                        subtitle={tGenerated('m_1fb45a84c0088e')}
-                      >
-                        <LiveRichText
-                          id={person.id}
-                          field="notes"
-                          label={tGenerated('m_0b8dadcb78cd08')}
-                          initialValue={person.notes}
-                          placeholder={tGenerated('m_022870b5381457')}
-                          disabled={fieldDisabled('notes')}
-                          updateAction={updatePersonField}
-                        />
-                      </Section>
-                    ) : null}
-
-                    {canReadPrivate ? (
-                      <CustomFieldsSection
-                        ctx={ctx}
-                        entityKind="person"
-                        recordId={person.id}
-                        subtypeId={null}
-                        metadata={person.metadata}
-                        locked={!canEdit}
-                      />
-                    ) : null}
-                  </div>
-                ) : null
-              }
-            />
-
-            <GeneratedValue
-              value={
-                active === 'compliance' ? (
-                  <ComplianceTab
-                    trainingTotal={transcript.length}
-                    trainingValid={transcript.filter((t) => t.status === 'ok').length}
-                    trainingExpiring={expiringCount}
-                    trainingExpired={expiredCount}
-                    documentsAcked={canReadPrivate ? ackedDocs.length : undefined}
-                    ppeCount={ppeAssigned.length}
-                    incidentsCount={canReadPrivate ? allIncidents.length : undefined}
-                  />
-                ) : null
-              }
-            />
-
-            <GeneratedValue
-              value={
-                active === 'training' ? (
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
-                      <span className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                        <GeneratedText id="m_096d47f60747b3" />
-                      </span>
-                      <CompactStat
-                        label={tGenerated('m_1e418d0475450c')}
-                        value={validCount}
-                        tone="success"
-                      />
-                      <CompactStat
-                        label={tGenerated('m_1c459e8d8a0fdf')}
-                        value={expiringCount}
-                        tone="warning"
-                      />
-                      <CompactStat
-                        label={tGenerated('m_13f7150c94b182')}
-                        value={expiredCount}
-                        tone="destructive"
-                      />
+                      <Card>
+                        <CardHeader className="flex flex-row items-center justify-between gap-3">
+                          <CardTitle>
+                            <GeneratedText id="m_03f65fe93c92ce" />
+                          </CardTitle>
+                          <SearchInput
+                            placeholder={tGenerated('m_030db64e0bf790')}
+                            paramKey="tq"
+                            pageParamKey="tpage"
+                          />
+                        </CardHeader>
+                        <CardContent>
+                          <GeneratedValue
+                            value={
+                              transcript.length === 0 ? (
+                                <EmptyState
+                                  icon={<FileText size={24} />}
+                                  title={tGenerated('m_049950ab11f977')}
+                                  description={tGenerated('m_030cf08a1e2186')}
+                                  action={
+                                    <Link href={`/training/records?personId=${id}` as any}>
+                                      <Button variant="outline" size="sm">
+                                        <GeneratedText id="m_0364a8e21f8023" />
+                                      </Button>
+                                    </Link>
+                                  }
+                                />
+                              ) : filteredTranscript.length === 0 ? (
+                                <EmptyState
+                                  icon={<FileText size={24} />}
+                                  title={tGenerated('m_0868e7364f9501', {
+                                    value0: pickString(sp.tq) ?? '',
+                                  })}
+                                  description={tGenerated('m_0dcfd55260344b')}
+                                />
+                              ) : (
+                                <>
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>
+                                          <GeneratedText id="m_14fc1e0739b60e" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_0ba7a5e1b2fa32" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_14f3858b0a9ad6" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_0b9da892d6faf0" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_0d49c43e2afdff" />
+                                        </TableHead>
+                                        <TableHead></TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      <GeneratedValue
+                                        value={transcriptPageRows.map((row) => (
+                                          <TableRow key={row.record.id}>
+                                            <TableCell className="font-medium">
+                                              <Link
+                                                href={`/training/records/${row.record.id}`}
+                                                className="hover:underline"
+                                              >
+                                                <GeneratedValue value={row.course.name} />
+                                              </Link>
+                                              <div className="text-xs text-slate-500">
+                                                <GeneratedValue value={row.course.code} />
+                                              </div>
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue value={row.record.completedOn} />
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue value={row.record.expiresOn ?? '—'} />
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue
+                                                value={
+                                                  row.status === 'expired' ? (
+                                                    <Badge variant="destructive">
+                                                      <GeneratedText id="m_13f7150c94b182" />{' '}
+                                                      {Math.abs(row.daysLeft!)}
+                                                      <GeneratedText id="m_0ced4968a01894" />
+                                                    </Badge>
+                                                  ) : row.status === 'expiring' ? (
+                                                    <Badge variant="warning">
+                                                      {row.daysLeft}
+                                                      <GeneratedText id="m_0a3d63460246cf" />
+                                                    </Badge>
+                                                  ) : row.status === 'ok' ? (
+                                                    <Badge variant="success">
+                                                      <GeneratedText id="m_1e418d0475450c" />
+                                                    </Badge>
+                                                  ) : (
+                                                    <Badge variant="secondary">
+                                                      <GeneratedText id="m_1bbc44c1ce26a7" />
+                                                    </Badge>
+                                                  )
+                                                }
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue
+                                                value={
+                                                  row.record.grade != null
+                                                    ? `${row.record.grade}%`
+                                                    : '—'
+                                                }
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <Link
+                                                href={`/training/records/${row.record.id}`}
+                                                className="text-xs text-teal-700 hover:underline"
+                                              >
+                                                <GeneratedText id="m_1be345fc118df8" />
+                                              </Link>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      />
+                                    </TableBody>
+                                  </Table>
+                                  <Pagination
+                                    basePath={basePath}
+                                    currentParams={sp}
+                                    total={filteredTranscript.length}
+                                    page={transcriptPage}
+                                    perPage={TRANSCRIPT_PER_PAGE}
+                                    pageParamKey="tpage"
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      supersededCount > 0 ? (
+                                        <p className="px-3 pt-1 text-xs text-slate-400 dark:text-slate-500">
+                                          <GeneratedText id="m_1aafa78531c465" />{' '}
+                                          <GeneratedValue value={supersededCount} />{' '}
+                                          <GeneratedText id="m_0299e96cf3e305" />{' '}
+                                          <GeneratedValue
+                                            value={
+                                              supersededCount === 1 ? (
+                                                <GeneratedText id="m_09177ac36b3a87" />
+                                              ) : (
+                                                <GeneratedText id="m_12d361efef01d0" />
+                                              )
+                                            }
+                                          />{' '}
+                                          <GeneratedText id="m_064b15de5768de" />
+                                          <GeneratedValue value={' '} />
+                                          <Link
+                                            href={`/training/records?personId=${id}` as any}
+                                            className="text-teal-700 hover:underline dark:text-teal-400"
+                                          >
+                                            <GeneratedText id="m_11d6bcf3c30fe0" />
+                                          </Link>
+                                          <GeneratedValue value={' '} />
+                                          <GeneratedText id="m_0203f1d56c0546" />
+                                        </p>
+                                      ) : null
+                                    }
+                                  />
+                                </>
+                              )
+                            }
+                          />
+                        </CardContent>
+                      </Card>
                     </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'skills' ? (
                     <Card>
-                      <CardHeader className="flex flex-row items-center justify-between gap-3">
+                      <CardHeader>
                         <CardTitle>
-                          <GeneratedText id="m_03f65fe93c92ce" />
+                          <GeneratedText id="m_08ac3bc5c6d094" />
                         </CardTitle>
-                        <SearchInput
-                          placeholder={tGenerated('m_030db64e0bf790')}
-                          paramKey="tq"
-                          pageParamKey="tpage"
-                        />
                       </CardHeader>
                       <CardContent>
+                        <TableToolbar className="mb-3">
+                          <SearchInput
+                            paramKey="skillQ"
+                            pageParamKey="skillPage"
+                            placeholder={tGenerated('m_03c7ed9e23235a')}
+                          />
+                          <FilterChips
+                            basePath={basePath}
+                            currentParams={sp}
+                            paramKey="skillStatus"
+                            label={tGenerated('m_0b9da892d6faf0')}
+                            options={[
+                              { value: 'valid', label: 'Valid' },
+                              { value: 'expiring', label: 'Expiring' },
+                              { value: 'expired', label: 'Expired' },
+                              { value: 'missing', label: 'Not complete' },
+                            ]}
+                          />
+                        </TableToolbar>
                         <GeneratedValue
                           value={
-                            transcript.length === 0 ? (
+                            skillsWithStatus.length === 0 ? (
                               <EmptyState
-                                icon={<FileText size={24} />}
-                                title={tGenerated('m_049950ab11f977')}
-                                description={tGenerated('m_030cf08a1e2186')}
-                                action={
-                                  <Link href={`/training/records?personId=${id}` as any}>
-                                    <Button variant="outline" size="sm">
-                                      <GeneratedText id="m_0364a8e21f8023" />
-                                    </Button>
-                                  </Link>
-                                }
-                              />
-                            ) : filteredTranscript.length === 0 ? (
-                              <EmptyState
-                                icon={<FileText size={24} />}
-                                title={tGenerated('m_0868e7364f9501', {
-                                  value0: pickString(sp.tq) ?? '',
-                                })}
-                                description={tGenerated('m_0dcfd55260344b')}
+                                icon={<Award size={24} />}
+                                title={tGenerated('m_1ac1d9ebeaea06')}
+                                description={tGenerated('m_0e10fa6d700bf4')}
                               />
                             ) : (
-                              <>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>
+                                      <GeneratedText id="m_02e36ef7395a78" />
+                                    </TableHead>
+                                    <TableHead>
+                                      <GeneratedText id="m_012397255c5bd0" />
+                                    </TableHead>
+                                    <TableHead>
+                                      <GeneratedText id="m_10633978809d91" />
+                                    </TableHead>
+                                    <TableHead>
+                                      <GeneratedText id="m_14f3858b0a9ad6" />
+                                    </TableHead>
+                                    <TableHead>
+                                      <GeneratedText id="m_0b9da892d6faf0" />
+                                    </TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  <GeneratedValue
+                                    value={skillsWithStatus.map((row) => (
+                                      <TableRow key={row.assignment.id}>
+                                        <TableCell className="font-medium">
+                                          <Link
+                                            href={`/training/skills/${row.assignment.id}`}
+                                            className="hover:underline"
+                                          >
+                                            <GeneratedValue value={row.skillType.name} />
+                                          </Link>
+                                          <GeneratedValue
+                                            value={
+                                              row.skillType.code ? (
+                                                <div className="font-mono text-xs text-slate-500">
+                                                  {row.skillType.code}
+                                                </div>
+                                              ) : null
+                                            }
+                                          />
+                                        </TableCell>
+                                        <TableCell className="text-slate-600">
+                                          <GeneratedValue value={row.authority?.name ?? '—'} />
+                                        </TableCell>
+                                        <TableCell>
+                                          <GeneratedValue value={row.assignment.grantedOn} />
+                                        </TableCell>
+                                        <TableCell>
+                                          <GeneratedValue value={row.assignment.expiresOn ?? '—'} />
+                                        </TableCell>
+                                        <TableCell>
+                                          <GeneratedValue
+                                            value={
+                                              row.status === 'expired' ? (
+                                                <Badge variant="destructive">
+                                                  <GeneratedText id="m_13f7150c94b182" />{' '}
+                                                  {Math.abs(row.daysLeft!)}
+                                                  <GeneratedText id="m_0ced4968a01894" />
+                                                </Badge>
+                                              ) : row.status === 'expiring' ? (
+                                                <Badge variant="warning">
+                                                  {row.daysLeft}
+                                                  <GeneratedText id="m_0a3d63460246cf" />
+                                                </Badge>
+                                              ) : row.status === 'ok' ||
+                                                row.status === 'no_expiry' ? (
+                                                <Badge variant="success">
+                                                  <GeneratedText id="m_1e418d0475450c" />
+                                                </Badge>
+                                              ) : (
+                                                <Badge variant="secondary">
+                                                  <GeneratedValue value={row.assignment.status} />
+                                                </Badge>
+                                              )
+                                            }
+                                          />
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  />
+                                </TableBody>
+                              </Table>
+                            )
+                          }
+                        />
+                        <Pagination
+                          basePath={basePath}
+                          currentParams={sp}
+                          pageParamKey="skillPage"
+                          total={filteredSkills.length}
+                          page={skillPage}
+                          perPage={10}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'ppe' ? (
+                    <div className="space-y-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>
+                            <GeneratedText id="m_00410f4adc7873" />
+                            <GeneratedValue value={ppeAssigned.length} />)
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <GeneratedValue
+                            value={
+                              ppeAssigned.length === 0 ? (
+                                <p className="text-sm text-slate-500">
+                                  <GeneratedText id="m_155a2629c588fd" />
+                                </p>
+                              ) : (
                                 <Table>
                                   <TableHeader>
                                     <TableRow>
                                       <TableHead>
-                                        <GeneratedText id="m_14fc1e0739b60e" />
+                                        <GeneratedText id="m_074ba2f160c506" />
                                       </TableHead>
                                       <TableHead>
-                                        <GeneratedText id="m_0ba7a5e1b2fa32" />
+                                        <GeneratedText id="m_179218139b624a" />
                                       </TableHead>
                                       <TableHead>
-                                        <GeneratedText id="m_14f3858b0a9ad6" />
+                                        <GeneratedText id="m_11ad4bbeced31b" />
                                       </TableHead>
                                       <TableHead>
                                         <GeneratedText id="m_0b9da892d6faf0" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0d49c43e2afdff" />
                                       </TableHead>
                                       <TableHead></TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
                                     <GeneratedValue
-                                      value={transcriptPageRows.map((row) => (
-                                        <TableRow key={row.record.id}>
+                                      value={ppeAssigned.map((row) => (
+                                        <TableRow key={row.item.id}>
                                           <TableCell className="font-medium">
-                                            <Link
-                                              href={`/training/records/${row.record.id}`}
-                                              className="hover:underline"
-                                            >
-                                              <GeneratedValue value={row.course.name} />
-                                            </Link>
-                                            <div className="text-xs text-slate-500">
-                                              <GeneratedValue value={row.course.code} />
-                                            </div>
+                                            <GeneratedValue value={row.type.name} />
                                           </TableCell>
                                           <TableCell>
-                                            <GeneratedValue value={row.record.completedOn} />
+                                            <GeneratedValue value={row.item.serialNumber ?? '—'} />
                                           </TableCell>
                                           <TableCell>
-                                            <GeneratedValue value={row.record.expiresOn ?? '—'} />
+                                            <GeneratedValue value={row.item.size ?? '—'} />
                                           </TableCell>
                                           <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                row.status === 'expired' ? (
-                                                  <Badge variant="destructive">
-                                                    <GeneratedText id="m_13f7150c94b182" />{' '}
-                                                    {Math.abs(row.daysLeft!)}
-                                                    <GeneratedText id="m_0ced4968a01894" />
-                                                  </Badge>
-                                                ) : row.status === 'expiring' ? (
-                                                  <Badge variant="warning">
-                                                    {row.daysLeft}
-                                                    <GeneratedText id="m_0a3d63460246cf" />
-                                                  </Badge>
-                                                ) : row.status === 'ok' ? (
-                                                  <Badge variant="success">
-                                                    <GeneratedText id="m_1e418d0475450c" />
-                                                  </Badge>
-                                                ) : (
-                                                  <Badge variant="secondary">
-                                                    <GeneratedText id="m_1bbc44c1ce26a7" />
-                                                  </Badge>
-                                                )
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                row.record.grade != null
-                                                  ? `${row.record.grade}%`
-                                                  : '—'
-                                              }
-                                            />
+                                            <Badge variant="secondary">
+                                              <GeneratedValue
+                                                value={row.item.status.replace('_', ' ')}
+                                              />
+                                            </Badge>
                                           </TableCell>
                                           <TableCell>
                                             <Link
-                                              href={`/training/records/${row.record.id}`}
+                                              href={`/ppe/${row.item.id}`}
                                               className="text-xs text-teal-700 hover:underline"
                                             >
                                               <GeneratedText id="m_1be345fc118df8" />
@@ -1400,463 +1530,311 @@ export default async function PersonDetailPage({
                                     />
                                   </TableBody>
                                 </Table>
-                                <Pagination
-                                  basePath={basePath}
-                                  currentParams={sp}
-                                  total={filteredTranscript.length}
-                                  page={transcriptPage}
-                                  perPage={TRANSCRIPT_PER_PAGE}
-                                  pageParamKey="tpage"
-                                />
-                                <GeneratedValue
-                                  value={
-                                    supersededCount > 0 ? (
-                                      <p className="px-3 pt-1 text-xs text-slate-400 dark:text-slate-500">
-                                        <GeneratedText id="m_1aafa78531c465" />{' '}
-                                        <GeneratedValue value={supersededCount} />{' '}
-                                        <GeneratedText id="m_0299e96cf3e305" />{' '}
-                                        <GeneratedValue
-                                          value={
-                                            supersededCount === 1 ? (
-                                              <GeneratedText id="m_09177ac36b3a87" />
-                                            ) : (
-                                              <GeneratedText id="m_12d361efef01d0" />
-                                            )
-                                          }
-                                        />{' '}
-                                        <GeneratedText id="m_064b15de5768de" />
-                                        <GeneratedValue value={' '} />
-                                        <Link
-                                          href={`/training/records?personId=${id}` as any}
-                                          className="text-teal-700 hover:underline dark:text-teal-400"
-                                        >
-                                          <GeneratedText id="m_11d6bcf3c30fe0" />
-                                        </Link>
-                                        <GeneratedValue value={' '} />
-                                        <GeneratedText id="m_0203f1d56c0546" />
-                                      </p>
-                                    ) : null
-                                  }
-                                />
-                              </>
-                            )
-                          }
-                        />
-                      </CardContent>
-                    </Card>
-                  </div>
-                ) : null
-              }
-            />
-
-            <GeneratedValue
-              value={
-                active === 'skills' ? (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>
-                        <GeneratedText id="m_08ac3bc5c6d094" />
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <TableToolbar className="mb-3">
-                        <SearchInput
-                          paramKey="skillQ"
-                          pageParamKey="skillPage"
-                          placeholder={tGenerated('m_03c7ed9e23235a')}
-                        />
-                        <FilterChips
-                          basePath={basePath}
-                          currentParams={sp}
-                          paramKey="skillStatus"
-                          label={tGenerated('m_0b9da892d6faf0')}
-                          options={[
-                            { value: 'valid', label: 'Valid' },
-                            { value: 'expiring', label: 'Expiring' },
-                            { value: 'expired', label: 'Expired' },
-                            { value: 'missing', label: 'Not complete' },
-                          ]}
-                        />
-                      </TableToolbar>
-                      <GeneratedValue
-                        value={
-                          skillsWithStatus.length === 0 ? (
-                            <EmptyState
-                              icon={<Award size={24} />}
-                              title={tGenerated('m_1ac1d9ebeaea06')}
-                              description={tGenerated('m_0e10fa6d700bf4')}
-                            />
-                          ) : (
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>
-                                    <GeneratedText id="m_02e36ef7395a78" />
-                                  </TableHead>
-                                  <TableHead>
-                                    <GeneratedText id="m_012397255c5bd0" />
-                                  </TableHead>
-                                  <TableHead>
-                                    <GeneratedText id="m_10633978809d91" />
-                                  </TableHead>
-                                  <TableHead>
-                                    <GeneratedText id="m_14f3858b0a9ad6" />
-                                  </TableHead>
-                                  <TableHead>
-                                    <GeneratedText id="m_0b9da892d6faf0" />
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                <GeneratedValue
-                                  value={skillsWithStatus.map((row) => (
-                                    <TableRow key={row.assignment.id}>
-                                      <TableCell className="font-medium">
-                                        <Link
-                                          href={`/training/skills/${row.assignment.id}`}
-                                          className="hover:underline"
-                                        >
-                                          <GeneratedValue value={row.skillType.name} />
-                                        </Link>
-                                        <GeneratedValue
-                                          value={
-                                            row.skillType.code ? (
-                                              <div className="font-mono text-xs text-slate-500">
-                                                {row.skillType.code}
-                                              </div>
-                                            ) : null
-                                          }
-                                        />
-                                      </TableCell>
-                                      <TableCell className="text-slate-600">
-                                        <GeneratedValue value={row.authority?.name ?? '—'} />
-                                      </TableCell>
-                                      <TableCell>
-                                        <GeneratedValue value={row.assignment.grantedOn} />
-                                      </TableCell>
-                                      <TableCell>
-                                        <GeneratedValue value={row.assignment.expiresOn ?? '—'} />
-                                      </TableCell>
-                                      <TableCell>
-                                        <GeneratedValue
-                                          value={
-                                            row.status === 'expired' ? (
-                                              <Badge variant="destructive">
-                                                <GeneratedText id="m_13f7150c94b182" />{' '}
-                                                {Math.abs(row.daysLeft!)}
-                                                <GeneratedText id="m_0ced4968a01894" />
-                                              </Badge>
-                                            ) : row.status === 'expiring' ? (
-                                              <Badge variant="warning">
-                                                {row.daysLeft}
-                                                <GeneratedText id="m_0a3d63460246cf" />
-                                              </Badge>
-                                            ) : row.status === 'ok' ||
-                                              row.status === 'no_expiry' ? (
-                                              <Badge variant="success">
-                                                <GeneratedText id="m_1e418d0475450c" />
-                                              </Badge>
-                                            ) : (
-                                              <Badge variant="secondary">
-                                                <GeneratedValue value={row.assignment.status} />
-                                              </Badge>
-                                            )
-                                          }
-                                        />
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                />
-                              </TableBody>
-                            </Table>
-                          )
-                        }
-                      />
-                      <Pagination
-                        basePath={basePath}
-                        currentParams={sp}
-                        pageParamKey="skillPage"
-                        total={filteredSkills.length}
-                        page={skillPage}
-                        perPage={10}
-                      />
-                    </CardContent>
-                  </Card>
-                ) : null
-              }
-            />
-
-            <GeneratedValue
-              value={
-                active === 'ppe' ? (
-                  <div className="space-y-4">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>
-                          <GeneratedText id="m_00410f4adc7873" />
-                          <GeneratedValue value={ppeAssigned.length} />)
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <GeneratedValue
-                          value={
-                            ppeAssigned.length === 0 ? (
-                              <p className="text-sm text-slate-500">
-                                <GeneratedText id="m_155a2629c588fd" />
-                              </p>
-                            ) : (
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>
-                                      <GeneratedText id="m_074ba2f160c506" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_179218139b624a" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_11ad4bbeced31b" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_0b9da892d6faf0" />
-                                    </TableHead>
-                                    <TableHead></TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  <GeneratedValue
-                                    value={ppeAssigned.map((row) => (
-                                      <TableRow key={row.item.id}>
-                                        <TableCell className="font-medium">
-                                          <GeneratedValue value={row.type.name} />
-                                        </TableCell>
-                                        <TableCell>
-                                          <GeneratedValue value={row.item.serialNumber ?? '—'} />
-                                        </TableCell>
-                                        <TableCell>
-                                          <GeneratedValue value={row.item.size ?? '—'} />
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge variant="secondary">
-                                            <GeneratedValue
-                                              value={row.item.status.replace('_', ' ')}
-                                            />
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                          <Link
-                                            href={`/ppe/${row.item.id}`}
-                                            className="text-xs text-teal-700 hover:underline"
-                                          >
-                                            <GeneratedText id="m_1be345fc118df8" />
-                                          </Link>
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  />
-                                </TableBody>
-                              </Table>
-                            )
-                          }
-                        />
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>
-                          <GeneratedText id="m_0057e65a990510" />
-                          <GeneratedValue value={ppeIssueLog.length} />)
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <GeneratedValue
-                          value={
-                            ppeIssueLog.length === 0 ? (
-                              <p className="text-sm text-slate-500">
-                                <GeneratedText id="m_0b73660bafdcc9" />
-                              </p>
-                            ) : (
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>
-                                      <GeneratedText id="m_13cc128f69897c" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_0bad495a7046e9" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_074ba2f160c506" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_179218139b624a" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_16d241f76641bb" />
-                                    </TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  <GeneratedValue
-                                    value={ppeIssueLog.map((row) => (
-                                      <TableRow key={row.issue.id}>
-                                        <TableCell>
-                                          <GeneratedValue
-                                            value={formatDate(
-                                              new Date(row.issue.occurredAt),
-                                              ctx.timezone,
-                                              ctx.locale,
-                                            )}
-                                          />
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge variant="secondary">
-                                            <GeneratedValue
-                                              value={row.issue.action.replace('_', ' ')}
-                                            />
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                          <GeneratedValue value={row.type.name} />
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs">
-                                          <GeneratedValue value={row.item.serialNumber ?? '—'} />
-                                        </TableCell>
-                                        <TableCell className="text-xs text-slate-600">
-                                          <GeneratedValue value={row.issue.note ?? '—'} />
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  />
-                                </TableBody>
-                              </Table>
-                            )
-                          }
-                        />
-                      </CardContent>
-                    </Card>
-                  </div>
-                ) : null
-              }
-            />
-
-            <GeneratedValue
-              value={
-                active === 'documents' ? (
-                  <div className="space-y-4">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center justify-between text-base">
-                          <span className="flex items-center gap-2">
-                            <Paperclip size={16} />
-                            <GeneratedText id="m_0247856c772e2c" />
-                            <GeneratedValue value={fileRows.length} />)
-                          </span>
-                          <GeneratedValue
-                            value={
-                              canEditFiles ? (
-                                <Link href={`${basePath}?tab=documents&drawer=upload-person-file`}>
-                                  <Button size="sm">
-                                    <GeneratedText id="m_06dc5804d9c769" />
-                                  </Button>
-                                </Link>
-                              ) : null
+                              )
                             }
                           />
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>
+                            <GeneratedText id="m_0057e65a990510" />
+                            <GeneratedValue value={ppeIssueLog.length} />)
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <GeneratedValue
+                            value={
+                              ppeIssueLog.length === 0 ? (
+                                <p className="text-sm text-slate-500">
+                                  <GeneratedText id="m_0b73660bafdcc9" />
+                                </p>
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>
+                                        <GeneratedText id="m_13cc128f69897c" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0bad495a7046e9" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_074ba2f160c506" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_179218139b624a" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_16d241f76641bb" />
+                                      </TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <GeneratedValue
+                                      value={ppeIssueLog.map((row) => (
+                                        <TableRow key={row.issue.id}>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={formatDate(
+                                                new Date(row.issue.occurredAt),
+                                                ctx.timezone,
+                                                ctx.locale,
+                                              )}
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge variant="secondary">
+                                              <GeneratedValue
+                                                value={row.issue.action.replace('_', ' ')}
+                                              />
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue value={row.type.name} />
+                                          </TableCell>
+                                          <TableCell className="font-mono text-xs">
+                                            <GeneratedValue value={row.item.serialNumber ?? '—'} />
+                                          </TableCell>
+                                          <TableCell className="text-xs text-slate-600">
+                                            <GeneratedValue value={row.issue.note ?? '—'} />
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    />
+                                  </TableBody>
+                                </Table>
+                              )
+                            }
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'documents' ? (
+                    <div className="space-y-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center justify-between text-base">
+                            <span className="flex items-center gap-2">
+                              <Paperclip size={16} />
+                              <GeneratedText id="m_0247856c772e2c" />
+                              <GeneratedValue value={fileRows.length} />)
+                            </span>
+                            <GeneratedValue
+                              value={
+                                canEditFiles ? (
+                                  <Link
+                                    href={`${basePath}?tab=documents&drawer=upload-person-file`}
+                                  >
+                                    <Button size="sm">
+                                      <GeneratedText id="m_06dc5804d9c769" />
+                                    </Button>
+                                  </Link>
+                                ) : null
+                              }
+                            />
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <GeneratedValue
+                            value={
+                              fileRows.length === 0 ? (
+                                <EmptyState
+                                  icon={<Paperclip size={24} />}
+                                  title={tGenerated('m_1192d4035da0ad')}
+                                  description={tGenerated('m_10c0695d606c85')}
+                                />
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>
+                                        <GeneratedText id="m_1d088977412efb" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_1e578efe1574cd" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0bd52c07efd4da" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_028e286aa7b299" />
+                                      </TableHead>
+                                      <TableHead></TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <GeneratedValue
+                                      value={fileRows.map(({ file, attachment }) => (
+                                        <TableRow key={file.id}>
+                                          <TableCell className="font-medium">
+                                            <GeneratedValue value={file.label} />
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge variant="secondary">
+                                              <GeneratedValue value={file.kind.replace('_', ' ')} />
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell className="text-xs text-slate-600">
+                                            <GeneratedValue
+                                              value={
+                                                attachment ? (
+                                                  <a
+                                                    href={attachmentUrl(attachment.id)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-teal-700 hover:underline"
+                                                  >
+                                                    {attachment.filename}
+                                                  </a>
+                                                ) : (
+                                                  <span className="text-slate-400">
+                                                    <GeneratedText id="m_0d47513e440f05" />
+                                                  </span>
+                                                )
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-xs text-slate-600">
+                                            <GeneratedValue
+                                              value={formatDate(
+                                                new Date(file.uploadedAt),
+                                                ctx.timezone,
+                                                ctx.locale,
+                                              )}
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={
+                                                canEditFiles ? (
+                                                  <form
+                                                    action={deletePersonFile}
+                                                    className="inline"
+                                                  >
+                                                    <input
+                                                      type="hidden"
+                                                      name="id"
+                                                      value={file.id}
+                                                    />
+                                                    <input
+                                                      type="hidden"
+                                                      name="personId"
+                                                      value={person.id}
+                                                    />
+                                                    <Button
+                                                      type="submit"
+                                                      size="sm"
+                                                      variant="ghost"
+                                                      className="text-red-500 hover:text-red-700"
+                                                      title={tGenerated('m_0c470a36b6b277')}
+                                                    >
+                                                      <Trash2 size={14} />
+                                                    </Button>
+                                                  </form>
+                                                ) : null
+                                              }
+                                            />
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    />
+                                  </TableBody>
+                                </Table>
+                              )
+                            }
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'incidents' ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          <GeneratedText id="m_0017d89362992e" />
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
                         <GeneratedValue
                           value={
-                            fileRows.length === 0 ? (
+                            allIncidents.length === 0 ? (
                               <EmptyState
-                                icon={<Paperclip size={24} />}
-                                title={tGenerated('m_1192d4035da0ad')}
-                                description={tGenerated('m_10c0695d606c85')}
+                                icon={<HardHat size={24} />}
+                                title={tGenerated('m_00c432de87ecf5')}
                               />
                             ) : (
                               <Table>
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead>
-                                      <GeneratedText id="m_1d088977412efb" />
+                                      <GeneratedText id="m_036b564bb88dfe" />
                                     </TableHead>
                                     <TableHead>
-                                      <GeneratedText id="m_1e578efe1574cd" />
+                                      <GeneratedText id="m_14a5e97535a15a" />
                                     </TableHead>
                                     <TableHead>
-                                      <GeneratedText id="m_0bd52c07efd4da" />
+                                      <GeneratedText id="m_0decefd558c355" />
                                     </TableHead>
                                     <TableHead>
-                                      <GeneratedText id="m_028e286aa7b299" />
+                                      <GeneratedText id="m_1099c1fe8b6614" />
                                     </TableHead>
-                                    <TableHead></TableHead>
+                                    <TableHead>
+                                      <GeneratedText id="m_0b9da892d6faf0" />
+                                    </TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                   <GeneratedValue
-                                    value={fileRows.map(({ file, attachment }) => (
-                                      <TableRow key={file.id}>
-                                        <TableCell className="font-medium">
-                                          <GeneratedValue value={file.label} />
+                                    value={allIncidents.map(({ incident, injured }) => (
+                                      <TableRow key={incident.id}>
+                                        <TableCell className="font-mono text-xs">
+                                          <Link
+                                            href={`/incidents/${incident.id}`}
+                                            className="hover:underline"
+                                          >
+                                            <GeneratedValue value={incident.reference} />
+                                          </Link>
                                         </TableCell>
                                         <TableCell>
-                                          <Badge variant="secondary">
-                                            <GeneratedValue value={file.kind.replace('_', ' ')} />
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-xs text-slate-600">
-                                          <GeneratedValue
-                                            value={
-                                              attachment ? (
-                                                <a
-                                                  href={attachmentUrl(attachment.id)}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="text-teal-700 hover:underline"
-                                                >
-                                                  {attachment.filename}
-                                                </a>
-                                              ) : (
-                                                <span className="text-slate-400">
-                                                  <GeneratedText id="m_0d47513e440f05" />
-                                                </span>
-                                              )
-                                            }
-                                          />
-                                        </TableCell>
-                                        <TableCell className="text-xs text-slate-600">
                                           <GeneratedValue
                                             value={formatDate(
-                                              new Date(file.uploadedAt),
+                                              new Date(incident.occurredAt),
                                               ctx.timezone,
                                               ctx.locale,
                                             )}
                                           />
                                         </TableCell>
                                         <TableCell>
+                                          <GeneratedValue value={incident.title} />
+                                        </TableCell>
+                                        <TableCell>
+                                          <Badge variant={injured ? 'destructive' : 'secondary'}>
+                                            <GeneratedValue
+                                              value={
+                                                injured ? (
+                                                  <GeneratedText id="m_07b3d718b13c62" />
+                                                ) : (
+                                                  <GeneratedText id="m_0bf0175836c8c5" />
+                                                )
+                                              }
+                                            />
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-slate-600">
                                           <GeneratedValue
-                                            value={
-                                              canEditFiles ? (
-                                                <form action={deletePersonFile} className="inline">
-                                                  <input type="hidden" name="id" value={file.id} />
-                                                  <input
-                                                    type="hidden"
-                                                    name="personId"
-                                                    value={person.id}
-                                                  />
-                                                  <Button
-                                                    type="submit"
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="text-red-500 hover:text-red-700"
-                                                    title={tGenerated('m_0c470a36b6b277')}
-                                                  >
-                                                    <Trash2 size={14} />
-                                                  </Button>
-                                                </form>
-                                              ) : null
-                                            }
+                                            value={incident.status.replace(/_/g, ' ')}
                                           />
                                         </TableCell>
                                       </TableRow>
@@ -1869,140 +1847,46 @@ export default async function PersonDetailPage({
                         />
                       </CardContent>
                     </Card>
-                  </div>
-                ) : null
-              }
-            />
+                  ) : null
+                }
+              />
 
-            <GeneratedValue
-              value={
-                active === 'incidents' ? (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>
-                        <GeneratedText id="m_0017d89362992e" />
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <GeneratedValue
-                        value={
-                          allIncidents.length === 0 ? (
-                            <EmptyState
-                              icon={<HardHat size={24} />}
-                              title={tGenerated('m_00c432de87ecf5')}
-                            />
-                          ) : (
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>
-                                    <GeneratedText id="m_036b564bb88dfe" />
-                                  </TableHead>
-                                  <TableHead>
-                                    <GeneratedText id="m_14a5e97535a15a" />
-                                  </TableHead>
-                                  <TableHead>
-                                    <GeneratedText id="m_0decefd558c355" />
-                                  </TableHead>
-                                  <TableHead>
-                                    <GeneratedText id="m_1099c1fe8b6614" />
-                                  </TableHead>
-                                  <TableHead>
-                                    <GeneratedText id="m_0b9da892d6faf0" />
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                <GeneratedValue
-                                  value={allIncidents.map(({ incident, injured }) => (
-                                    <TableRow key={incident.id}>
-                                      <TableCell className="font-mono text-xs">
-                                        <Link
-                                          href={`/incidents/${incident.id}`}
-                                          className="hover:underline"
-                                        >
-                                          <GeneratedValue value={incident.reference} />
-                                        </Link>
-                                      </TableCell>
-                                      <TableCell>
-                                        <GeneratedValue
-                                          value={formatDate(
-                                            new Date(incident.occurredAt),
-                                            ctx.timezone,
-                                            ctx.locale,
-                                          )}
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        <GeneratedValue value={incident.title} />
-                                      </TableCell>
-                                      <TableCell>
-                                        <Badge variant={injured ? 'destructive' : 'secondary'}>
-                                          <GeneratedValue
-                                            value={
-                                              injured ? (
-                                                <GeneratedText id="m_07b3d718b13c62" />
-                                              ) : (
-                                                <GeneratedText id="m_0bf0175836c8c5" />
-                                              )
-                                            }
-                                          />
-                                        </Badge>
-                                      </TableCell>
-                                      <TableCell className="text-slate-600">
-                                        <GeneratedValue
-                                          value={incident.status.replace(/_/g, ' ')}
-                                        />
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                />
-                              </TableBody>
-                            </Table>
-                          )
-                        }
-                      />
-                    </CardContent>
-                  </Card>
-                ) : null
-              }
-            />
-
-            <GeneratedValue
-              value={
-                active === 'activity' ? (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>
-                        <GeneratedText id="m_14b78af1b2f95e" />
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ActivityFeed
-                        entries={activity}
-                        timeZone={ctx.timezone}
-                        locale={ctx.locale}
-                      />
-                    </CardContent>
-                  </Card>
-                ) : null
-              }
-            />
+              <GeneratedValue
+                value={
+                  active === 'activity' ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          <GeneratedText id="m_14b78af1b2f95e" />
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ActivityFeed
+                          entries={activity}
+                          timeZone={ctx.timezone}
+                          locale={ctx.locale}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : null
+                }
+              />
+            </div>
           </div>
         </div>
-      </div>
-      <GeneratedValue
-        value={
-          canEditFiles ? (
-            <PersonFilesDrawers
-              personId={person.id}
-              openDrawer={openDrawer === 'upload-person-file' ? openDrawer : null}
-              closeHref={basePathForDrawer}
-            />
-          ) : null
-        }
-      />
-    </PageContainer>
+        <GeneratedValue
+          value={
+            canEditFiles ? (
+              <PersonFilesDrawers
+                personId={person.id}
+                openDrawer={openDrawer === 'upload-person-file' ? openDrawer : null}
+                closeHref={basePathForDrawer}
+              />
+            ) : null
+          }
+        />
+      </PageContainer>
+    </OfflineRecordProvider>
   )
 }
 

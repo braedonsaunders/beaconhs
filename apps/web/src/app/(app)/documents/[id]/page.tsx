@@ -955,7 +955,6 @@ export default async function DocumentDetailPage({
                 active === 'overview' ? (
                   <DocumentOverview
                     key={id}
-                    documentId={id}
                     categories={categories}
                     types={types}
                     hasMaster={Boolean(doc.sourceAttachmentId)}

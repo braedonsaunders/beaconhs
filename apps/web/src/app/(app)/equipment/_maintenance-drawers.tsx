@@ -14,6 +14,7 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { Loader2, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
@@ -126,23 +127,26 @@ function ScheduleForm({
   const [isActive, setIsActive] = useState(editing?.isActive ?? true)
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
 
   function submit() {
     setError(tGeneratedValue(null))
     start(async () => {
-      const res = await saveEquipmentSchedule({
-        id: editing?.id,
-        equipmentItemId: itemId,
-        inspectionTypeId: inspectionTypeId || null,
-        label: label.trim() || null,
-        intervalValue: interval.intervalValue ?? 1,
-        intervalUnit: interval.intervalUnit ?? 'year',
-        nextDueOn,
-        notes: notes.trim() || null,
-        isActive,
+      await runOnline('finish', async () => {
+        const res = await saveEquipmentSchedule({
+          id: editing?.id,
+          equipmentItemId: itemId,
+          inspectionTypeId: inspectionTypeId || null,
+          label: label.trim() || null,
+          intervalValue: interval.intervalValue ?? 1,
+          intervalUnit: interval.intervalUnit ?? 'year',
+          nextDueOn,
+          notes: notes.trim() || null,
+          isActive,
+        })
+        if (res.ok) onDone()
+        else setError(tGeneratedValue(res.error))
       })
-      if (res.ok) onDone()
-      else setError(tGeneratedValue(res.error))
     })
   }
 
@@ -156,9 +160,11 @@ function ScheduleForm({
     )
       return
     start(async () => {
-      const res = await deleteEquipmentSchedule({ id: editing.id, equipmentItemId: itemId })
-      if (res.ok) onDone()
-      else setError(tGeneratedValue(res.error))
+      await runOnline('finish', async () => {
+        const res = await deleteEquipmentSchedule({ id: editing.id, equipmentItemId: itemId })
+        if (res.ok) onDone()
+        else setError(tGeneratedValue(res.error))
+      })
     })
   }
 
@@ -387,6 +393,7 @@ function ReminderForm({
   const [assignedToPersonId, setAssignedToPersonId] = useState(editing?.assignedToPersonId ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -399,18 +406,20 @@ function ReminderForm({
       return
     }
     start(async () => {
-      const res = await saveEquipmentReminder({
-        id: editing?.id,
-        equipmentItemId,
-        title: title.trim(),
-        details: details.trim() || null,
-        dueOn,
-        repeatIntervalValue: repeat.intervalValue,
-        repeatIntervalUnit: repeat.intervalUnit,
-        assignedToPersonId: assignedToPersonId || null,
+      await runOnline('finish', async () => {
+        const res = await saveEquipmentReminder({
+          id: editing?.id,
+          equipmentItemId,
+          title: title.trim(),
+          details: details.trim() || null,
+          dueOn,
+          repeatIntervalValue: repeat.intervalValue,
+          repeatIntervalUnit: repeat.intervalUnit,
+          assignedToPersonId: assignedToPersonId || null,
+        })
+        if (res.ok) onDone()
+        else setError(tGeneratedValue(res.error))
       })
-      if (res.ok) onDone()
-      else setError(tGeneratedValue(res.error))
     })
   }
 
@@ -418,12 +427,14 @@ function ReminderForm({
     if (!editing) return
     if (!(await confirmDialog({ message: 'Delete this reminder?', tone: 'danger' }))) return
     start(async () => {
-      const res = await deleteEquipmentReminder({
-        id: editing.id,
-        equipmentItemId: editing.equipmentItemId,
+      await runOnline('finish', async () => {
+        const res = await deleteEquipmentReminder({
+          id: editing.id,
+          equipmentItemId: editing.equipmentItemId,
+        })
+        if (res.ok) onDone()
+        else setError(tGeneratedValue(res.error))
       })
-      if (res.ok) onDone()
-      else setError(tGeneratedValue(res.error))
     })
   }
 

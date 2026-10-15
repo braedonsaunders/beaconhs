@@ -18,17 +18,28 @@ const sharedHeaderActions = readFileSync(
   new URL('../components/record-header-actions.tsx', import.meta.url),
   'utf8',
 )
+const rules = readFileSync(
+  new URL('../app/(app)/hazard-assessments/_assessment-rules.ts', import.meta.url),
+  'utf8',
+)
+const saver = readFileSync(
+  new URL('../app/(app)/hazard-assessments/_record-edits.ts', import.meta.url),
+  'utf8',
+)
 
-function between(start: string, end: string): string {
-  const startIndex = actions.indexOf(start)
-  const endIndex = actions.indexOf(end, startIndex + start.length)
+function betweenIn(source: string, start: string, end: string): string {
+  const startIndex = source.indexOf(start)
+  const endIndex = source.indexOf(end, startIndex + start.length)
   expect(startIndex).toBeGreaterThanOrEqual(0)
   expect(endIndex).toBeGreaterThan(startIndex)
-  return actions.slice(startIndex, endIndex)
+  return source.slice(startIndex, endIndex)
+}
+
+function between(start: string, end: string): string {
+  return betweenIn(actions, start, end)
 }
 
 const editableMutations = [
-  between('export async function updateTextField', 'export async function lockAssessment'),
   between('export async function addTask', 'export async function updateTask'),
   between('export async function updateTask', 'export async function deleteTask'),
   between('export async function deleteTask', 'export async function moveTask'),
@@ -37,11 +48,9 @@ const editableMutations = [
   between('export async function updateHazard', 'export async function deleteHazard'),
   between('export async function deleteHazard', 'export async function moveHazard'),
   between('export async function addPPE', 'export async function updatePPE'),
-  between('export async function updatePPE', 'export async function answerPPE'),
-  between('export async function answerPPE', 'export async function deletePPE'),
+  between('export async function updatePPE', 'export async function deletePPE'),
   between('export async function deletePPE', 'export async function movePPE'),
-  between('export async function addQuestion', 'export async function answerQuestion'),
-  between('export async function answerQuestion', 'export async function updateQuestion'),
+  between('export async function addQuestion', 'export async function updateQuestion'),
   between('export async function updateQuestion', 'export async function deleteQuestion'),
   between('export async function deleteQuestion', 'export async function moveQuestion'),
   between('export async function attachPhotos', 'export async function deletePhoto'),
@@ -50,21 +59,58 @@ const editableMutations = [
 
 describe('hazard-assessment transactional locking contract', () => {
   it('locks the tenant-owned, visible parent row before testing editability', () => {
-    const lockVisible = between(
-      'async function lockVisibleAssessment',
-      'async function lockEditableAssessment',
+    const lockRow = betweenIn(
+      rules,
+      'export async function lockVisibleAssessmentRow',
+      'export async function lockVisibleAssessment(',
     )
-    const lockEditable = between(
-      'async function lockEditableAssessment',
+    const lockVisible = betweenIn(
+      rules,
+      'export async function lockVisibleAssessment(',
+      'export async function lockEditableAssessment',
+    )
+    const lockEditable = betweenIn(
+      rules,
+      'export async function lockEditableAssessment',
       'async function latestTemplateVersion',
     )
 
-    expect(lockVisible).toContain('eq(hazidAssessments.tenantId, ctx.tenantId)')
-    expect(lockVisible).toContain('isNull(hazidAssessments.deletedAt)')
-    expect(lockVisible).toContain(".for('update')")
-    expect(lockVisible).toContain('await canSeeRecord(ctx, tx')
+    expect(lockRow).toContain('eq(hazidAssessments.tenantId, ctx.tenantId)')
+    expect(lockRow).toContain('isNull(hazidAssessments.deletedAt)')
+    expect(lockRow).toContain(".for('update')")
+    expect(lockRow).toContain('await canSeeRecord(ctx, tx')
+    expect(lockVisible).toContain('await lockVisibleAssessmentRow(ctx, tx, assessmentId)')
     expect(lockEditable).toContain('await lockVisibleAssessment(ctx, tx, assessmentId)')
     expect(lockEditable).toContain('if (row.locked)')
+    expect(actions).not.toMatch(/\nasync function lock(?:Visible|Editable)Assessment/u)
+  })
+
+  it('applies inline record edits under the same parent lock, child scoping and audit', () => {
+    const load = betweenIn(saver, 'async load(', 'resolve(')
+    expect(saver).toContain("authorize: (ctx) => can(ctx, 'hazid.update')")
+    expect(load).toContain('await lockVisibleAssessmentRow(ctx, tx, assessmentId)')
+    expect(load).toContain('if (row.locked) throw recordLocked(ASSESSMENT_LOCKED_MESSAGE)')
+    for (const table of [
+      'hazidAssessmentHazards',
+      'hazidAssessmentPPE',
+      'hazidAssessmentQuestions',
+    ]) {
+      expect(saver).toContain(`eq(${table}.tenantId, ctx.tenantId)`)
+      expect(saver).toContain(`eq(${table}.assessmentId, assessment.id)`)
+    }
+    expect(saver.match(/\.for\('update'\)/gu)).toHaveLength(3)
+    const afterWrites = betweenIn(saver, 'async afterWrites(', 'revalidate:')
+    expect(afterWrites).toContain('await recordAuditInTransaction(tx, ctx')
+    expect(afterWrites).toContain('await createAutoAssessmentApps(tx, {')
+    expect(saver).not.toContain('await recordAudit(ctx')
+    // The edit drawer and the inline checklist share one hazard-row writer.
+    expect(
+      between('export async function updateHazard', 'export async function deleteHazard'),
+    ).toContain('await updateAssessmentHazardRow(tx, ctx,')
+    expect(saver).toContain('updateAssessmentHazardRow(tx, ctx,')
+    for (const removed of ['updateTextField', 'answerPPE', 'answerQuestion']) {
+      expect(actions).not.toContain(`export async function ${removed}`)
+    }
   })
 
   it('revalidates every direct child mutation after acquiring the parent lock', () => {
@@ -147,7 +193,7 @@ describe('hazard-assessment transactional locking contract', () => {
     )
     const openApp = between(
       'export async function openAssessmentApp',
-      'export async function updateTextField',
+      'export async function lockAssessment',
     )
     const copy = between(
       'export async function copyAssessment',

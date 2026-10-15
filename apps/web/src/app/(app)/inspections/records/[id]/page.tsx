@@ -1,4 +1,3 @@
-import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -37,16 +36,15 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
-import { dateIsoInTimeZone, formatDate, formatDateTime } from '@/lib/datetime'
+import { dateIsoInTimeZone, datetimeLocalValue, formatDate, formatDateTime } from '@/lib/datetime'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { isUuid, pickString } from '@/lib/list-params'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import {
   inspectionCriterionIsAnswered,
   inspectionCompliancePercent,
+  inspectionNumberAnswerWire,
   isInspectionOutcomeResponseType,
-  normalizeInspectionNumberAnswer,
-  normalizeInspectionTextAnswer,
 } from '@/lib/inspection-response-config'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
@@ -59,18 +57,23 @@ import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { PremiumSection as Section } from '@/components/premium-section'
 import { SectionNav, type SectionNavItem } from '@/components/section-nav'
 import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
+import { OnlineActionForm } from '@/components/online-action-form'
+import {
+  OfflineRecordProvider,
+  RecordSyncBanner,
+  RecordSyncStatus,
+} from '@/lib/offline-drafts/offline-record'
 import {
   assertInspectionStatusTransitionInTx,
   InspectionTransitionError,
   inspectionStatusMilestonePatch,
+  lockInspectionCriterionForMutation,
   lockVisibleInspectionRecordForMutation,
-  parseAnswer,
-  parseSeverity,
+  markInspectionInProgressIfDraft,
   reconcileSubmittedInspectionInTx,
   syncInspectionCorrectiveActionsOnSubmitInTx,
   validateInspectionPhotoAttachmentIdsInTx,
 } from '../../_lib'
-import { localDatetimeValue } from '../../_datetime'
 import { CustomerSignatureCard } from './customer-signature'
 import { CriterionCard, type CriterionResponseType, type CriterionSeverity } from './_criteria'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
@@ -99,25 +102,22 @@ function groupCriteriaByLabel<T extends { c: { groupLabelSnapshot: string | null
 /**
  * A finding is overdue when it's a `fail`, has an assigned due date in the
  * past, and has NOT been corrected. The inspection's `occurredAt` is the floor
- * so a due date that pre-dates the inspection isn't flagged.
+ * so a due date that pre-dates the inspection isn't flagged. Calendar days are
+ * the worker's, compared as `YYYY-MM-DD`.
  */
 function isOverdue(args: {
   answer: 'pass' | 'fail' | 'n_a' | null
   assignedDueDate: string | null
   correctedOn: string | null
   recordOccurredAt: Date
+  today: string
+  timeZone: string
 }): boolean {
   if (args.answer !== 'fail') return false
   if (args.correctedOn) return false
-  if (!args.assignedDueDate) return false
-  const due = new Date(args.assignedDueDate + 'T00:00:00')
-  if (Number.isNaN(due.getTime())) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  if (due >= today) return false
-  const floor = new Date(args.recordOccurredAt)
-  floor.setHours(0, 0, 0, 0)
-  return due >= floor
+  if (!args.assignedDueDate || !/^\d{4}-\d{2}-\d{2}$/.test(args.assignedDueDate)) return false
+  if (args.assignedDueDate >= args.today) return false
+  return args.assignedDueDate >= dateIsoInTimeZone(args.recordOccurredAt, args.timeZone)
 }
 
 // ----------------------------------------------------------------------------
@@ -127,27 +127,6 @@ function isOverdue(args: {
 type InspectionTx = Parameters<
   Parameters<Awaited<ReturnType<typeof requireRequestContext>>['db']>[0]
 >[0]
-
-async function criterionForMutationInTx(
-  tx: InspectionTx,
-  tenantId: string,
-  recordId: string,
-  rowId: string,
-) {
-  const [criterion] = await tx
-    .select()
-    .from(inspectionRecordCriteria)
-    .where(
-      and(
-        eq(inspectionRecordCriteria.tenantId, tenantId),
-        eq(inspectionRecordCriteria.id, rowId),
-        eq(inspectionRecordCriteria.recordId, recordId),
-      ),
-    )
-    .limit(1)
-  if (!criterion) throw new Error('Inspection criterion not found')
-  return criterion
-}
 
 async function withLockedCriterionMutation(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
@@ -162,48 +141,12 @@ async function withLockedCriterionMutation(
   if (!isUuid(recordId) || !isUuid(rowId)) throw new Error('Inspection criterion not found')
   return ctx.db(async (tx) => {
     const record = await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
-    const criterion = await criterionForMutationInTx(tx, ctx.tenantId, recordId, rowId)
+    const criterion = await lockInspectionCriterionForMutation(tx, ctx.tenantId, recordId, rowId)
+    if (!criterion) throw new Error('Inspection criterion not found')
     const changed = await mutate(tx, record, criterion)
     if (changed) await reconcileSubmittedInspectionInTx(tx, ctx, record)
     return changed
   })
-}
-
-async function markInspectionInProgressIfDraft(
-  tx: InspectionTx,
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-  record: typeof inspectionRecords.$inferSelect,
-): Promise<boolean> {
-  if (record.status !== 'draft') return false
-  const [updated] = await tx
-    .update(inspectionRecords)
-    .set({ status: 'in_progress' })
-    .where(
-      and(
-        eq(inspectionRecords.tenantId, ctx.tenantId),
-        eq(inspectionRecords.id, record.id),
-        eq(inspectionRecords.status, 'draft'),
-        isNull(inspectionRecords.deletedAt),
-      ),
-    )
-    .returning({ id: inspectionRecords.id })
-  if (!updated) throw new Error('Inspection status changed before work could begin')
-  await recordModuleFlowEvent(tx, ctx, {
-    subjectId: record.id,
-    moduleKey: 'inspections',
-    event: 'status_change',
-    toStatus: 'in_progress',
-    occurrenceKey: randomUUID(),
-  })
-  await recordAuditInTransaction(tx, ctx, {
-    entityType: 'inspection_record',
-    entityId: record.id,
-    action: 'update',
-    summary: 'Started inspection work',
-    before: { status: 'draft' },
-    after: { status: 'in_progress' },
-  })
-  return true
 }
 
 async function toggleLock(formData: FormData) {
@@ -343,630 +286,6 @@ async function sendInspectionEmailAction(formData: FormData) {
     messageOverride: String(formData.get('messageOverride') ?? '').trim() || undefined,
   })
   revalidatePath(`/inspections/records/${id}`)
-}
-
-// Generic inline field save for the single-page general-info live fields.
-async function updateRecordField(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const id = String(formData.get('id') ?? '')
-  const field = String(formData.get('field') ?? '')
-  const value = String(formData.get('value') ?? '')
-  if (!isUuid(id) || !field) throw new Error('Missing or invalid id/field')
-  const ALLOWED = new Set([
-    'occurredAt',
-    'siteOrgUnitId',
-    'locationOnSite',
-    'foremanText',
-    'notes',
-    'supervisorTenantUserId',
-  ])
-  if (!ALLOWED.has(field)) throw new Error('Field not allowed')
-
-  const NULLABLE_IDS = new Set(['siteOrgUnitId', 'supervisorTenantUserId'])
-  const DATES = new Set(['occurredAt'])
-
-  let val: unknown = value.trim() || null
-  if (NULLABLE_IDS.has(field)) val = value || null
-  if (NULLABLE_IDS.has(field) && val && !isUuid(String(val))) throw new Error('Invalid reference')
-  if (DATES.has(field)) {
-    const d = value ? new Date(value) : null
-    if (!d || Number.isNaN(d.getTime())) throw new Error('Invalid date')
-    val = d
-  }
-
-  const changed = await ctx.db(async (tx) => {
-    const current = await lockVisibleInspectionRecordForMutation(tx, ctx, id)
-    if (field === 'supervisorTenantUserId' && val) {
-      const [supervisor] = await tx
-        .select({ id: tenantUsers.id })
-        .from(tenantUsers)
-        .where(
-          and(
-            eq(tenantUsers.tenantId, ctx.tenantId),
-            eq(tenantUsers.id, String(val)),
-            activeTenantUsersWhere(),
-          ),
-        )
-        .limit(1)
-      if (!supervisor) throw new Error('Choose an active supervisor in this tenant.')
-    }
-    if (field === 'siteOrgUnitId' && val) {
-      const [location] = await tx
-        .select({ id: orgUnits.id })
-        .from(orgUnits)
-        .where(
-          and(
-            eq(orgUnits.tenantId, ctx.tenantId),
-            eq(orgUnits.id, String(val)),
-            isNull(orgUnits.deletedAt),
-          ),
-        )
-        .limit(1)
-      if (!location) throw new Error('Location not found')
-    }
-    const beforeValue = current[field as keyof typeof current]
-    const same =
-      beforeValue instanceof Date && val instanceof Date
-        ? beforeValue.getTime() === val.getTime()
-        : beforeValue === val
-    if (same) return false
-    const [updated] = await tx
-      .update(inspectionRecords)
-      .set({ [field]: val } as Record<string, unknown>)
-      .where(
-        and(
-          eq(inspectionRecords.tenantId, ctx.tenantId),
-          eq(inspectionRecords.id, id),
-          isNull(inspectionRecords.deletedAt),
-        ),
-      )
-      .returning({ typeId: inspectionRecords.typeId })
-    if (!updated) throw new Error('Inspection record not found')
-    if (field === 'occurredAt') {
-      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
-        sourceModule: 'inspection',
-        targetRef: { inspectionTypeId: updated.typeId },
-      })
-    }
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'inspection_record',
-      entityId: id,
-      action: 'update',
-      summary: `Updated ${field}`,
-      before: { [field]: beforeValue },
-      after: { [field]: val },
-    })
-    return true
-  })
-  if (!changed) return
-  revalidatePath(`/inspections/records/${id}`)
-}
-
-async function setCriterionAnswer(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const answer = parseAnswer(formData.get('answer'))
-  if (!recordId || !rowId || !answer) return
-  const clear = answer !== 'fail'
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, record, criterion) => {
-      if (!isInspectionOutcomeResponseType(criterion.responseType)) {
-        throw new Error('This criterion does not accept a pass/fail outcome')
-      }
-      const clearFieldsChanged =
-        clear &&
-        Boolean(
-          criterion.severity ||
-          criterion.nonComplianceDescription ||
-          criterion.actionTaken ||
-          criterion.assignedToPersonId ||
-          criterion.assignedToTenantUserId ||
-          criterion.assignedDueDate ||
-          criterion.correctedOn,
-        )
-      if (criterion.answer === answer && !clearFieldsChanged) return false
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({
-          answer,
-          answeredAt: new Date(),
-          answeredByTenantUserId: ctx.membership?.id ?? null,
-          ...(clear
-            ? {
-                severity: null,
-                nonComplianceDescription: null,
-                actionTaken: null,
-                assignedToPersonId: null,
-                assignedToTenantUserId: null,
-                assignedDueDate: null,
-                correctedOn: null,
-              }
-            : {}),
-        })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection criterion changed before it could be answered')
-      await markInspectionInProgressIfDraft(tx, ctx, record)
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: `Answered "${criterion.questionTextSnapshot.slice(0, 50)}" — ${answer}`,
-        before: { rowId, answer: criterion.answer },
-        after: { rowId, answer },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
-}
-
-async function setCriterionChoiceAnswer(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const choiceAnswer = String(formData.get('choiceAnswer') ?? '').trim() || null
-  if (!recordId || !rowId) return
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, record, criterion) => {
-      if (criterion.responseType !== 'choice') {
-        throw new Error('This criterion does not accept a configured choice')
-      }
-      if (choiceAnswer && !(criterion.choiceOptionsSnapshot ?? []).includes(choiceAnswer)) {
-        throw new Error('Select one of the configured options')
-      }
-      if (criterion.choiceAnswer === choiceAnswer) return false
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({
-          choiceAnswer,
-          answeredAt: choiceAnswer ? new Date() : null,
-          answeredByTenantUserId: choiceAnswer ? (ctx.membership?.id ?? null) : null,
-        })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection criterion changed before it could be answered')
-      if (choiceAnswer) await markInspectionInProgressIfDraft(tx, ctx, record)
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: `Answered "${criterion.questionTextSnapshot.slice(0, 50)}" — ${choiceAnswer ?? 'cleared'}`,
-        before: { rowId, choiceAnswer: criterion.choiceAnswer },
-        after: { rowId, choiceAnswer },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
-}
-
-async function setCriterionValueAnswer(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  if (!recordId || !rowId) return
-  const rawValue = formData.get('value')
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, record, criterion) => {
-      const isText = criterion.responseType === 'text' || criterion.responseType === 'long_text'
-      const isNumber = criterion.responseType === 'number'
-      if (!isText && !isNumber) {
-        throw new Error('This criterion does not accept a text or number value')
-      }
-      const value = isNumber
-        ? normalizeInspectionNumberAnswer(rawValue)
-        : normalizeInspectionTextAnswer(rawValue)
-      const beforeValue = isNumber ? criterion.numberAnswer : criterion.textAnswer
-      if (beforeValue === value) return false
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({
-          textAnswer: isText ? value : null,
-          numberAnswer: isNumber ? value : null,
-          answeredAt: value === null ? null : new Date(),
-          answeredByTenantUserId: value === null ? null : (ctx.membership?.id ?? null),
-        })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection criterion changed before it could be answered')
-      if (value !== null) await markInspectionInProgressIfDraft(tx, ctx, record)
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: `Answered "${criterion.questionTextSnapshot.slice(0, 50)}" — ${value ?? 'cleared'}`,
-        before: { rowId, responseType: criterion.responseType, value: beforeValue },
-        after: { rowId, responseType: criterion.responseType, value },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
-}
-
-async function setCriterionSeverity(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const rawSeverity = String(formData.get('severity') ?? '').trim()
-  const severity = parseSeverity(rawSeverity)
-  if (!recordId || !rowId) return
-  if (rawSeverity && !severity) throw new Error('Severity is invalid')
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (severity && criterion.answer !== 'fail') {
-        throw new Error('Severity applies only to a failed criterion')
-      }
-      if (criterion.severity === severity) return false
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({ severity })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection criterion changed before severity could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: `Set severity to "${severity ?? 'cleared'}" on a finding`,
-        before: { rowId, severity: criterion.severity },
-        after: { rowId, severity },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
-}
-
-async function setCriterionNonCompliance(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const value = String(formData.get('value') ?? '').trim() || null
-  if (!recordId || !rowId) return
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (value && criterion.answer !== 'fail') {
-        throw new Error('A non-compliance description applies only to a failed criterion')
-      }
-      if (criterion.nonComplianceDescription === value) return false
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({ nonComplianceDescription: value })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated)
-        throw new Error('Inspection criterion changed before description could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: 'Updated non-compliance description',
-        before: { rowId, value: criterion.nonComplianceDescription },
-        after: { rowId, value },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
-}
-
-async function setCriterionActionTaken(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const value = String(formData.get('value') ?? '').trim() || null
-  if (!recordId || !rowId) return
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (value && criterion.answer !== 'fail') {
-        throw new Error('An action taken applies only to a failed criterion')
-      }
-      if (criterion.actionTaken === value) return false
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({ actionTaken: value })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated)
-        throw new Error('Inspection criterion changed before action taken could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: 'Updated action taken',
-        before: { rowId, value: criterion.actionTaken },
-        after: { rowId, value },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
-}
-
-async function setCriterionCompliantNote(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const value = String(formData.get('value') ?? '').trim() || null
-  if (!recordId || !rowId) return
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (criterion.compliantNote === value) return false
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({ compliantNote: value })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection criterion changed before note could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: 'Updated compliant note',
-        before: { rowId, value: criterion.compliantNote },
-        after: { rowId, value },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
-}
-
-async function setCriterionAssignment(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const assignedToPersonId = String(formData.get('assignedToPersonId') ?? '').trim() || null
-  const assignedDueDate = String(formData.get('assignedDueDate') ?? '').trim() || null
-  if (!recordId || !rowId) return
-  if (assignedToPersonId && !isUuid(assignedToPersonId)) throw new Error('Assignee is invalid')
-  if (assignedDueDate && !/^\d{4}-\d{2}-\d{2}$/.test(assignedDueDate)) {
-    throw new Error('Due date is invalid')
-  }
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if ((assignedToPersonId || assignedDueDate) && criterion.answer !== 'fail') {
-        throw new Error('An assignment applies only to a failed criterion')
-      }
-      let assignedToTenantUserId: string | null = null
-      if (assignedToPersonId) {
-        const [person] = await tx
-          .select({ id: people.id, tenantUserId: tenantUsers.id })
-          .from(people)
-          .leftJoin(
-            tenantUsers,
-            and(
-              eq(tenantUsers.tenantId, people.tenantId),
-              eq(tenantUsers.userId, people.userId),
-              activeTenantUsersWhere(),
-            ),
-          )
-          .where(
-            and(
-              eq(people.tenantId, ctx.tenantId),
-              eq(people.id, assignedToPersonId),
-              activePeopleWhere(),
-            ),
-          )
-          .limit(1)
-        if (!person) throw new Error('Assignee not found')
-        assignedToTenantUserId = person.tenantUserId
-      }
-      if (
-        criterion.assignedToPersonId === assignedToPersonId &&
-        criterion.assignedToTenantUserId === assignedToTenantUserId &&
-        criterion.assignedDueDate === assignedDueDate
-      ) {
-        return false
-      }
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({ assignedToPersonId, assignedToTenantUserId, assignedDueDate })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection criterion changed before assignment could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: 'Updated assignment',
-        before: {
-          rowId,
-          assignedToPersonId: criterion.assignedToPersonId,
-          assignedToTenantUserId: criterion.assignedToTenantUserId,
-          assignedDueDate: criterion.assignedDueDate,
-        },
-        after: { rowId, assignedToPersonId, assignedToTenantUserId, assignedDueDate },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
-}
-
-async function setCriterionCorrectedOn(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'inspections.update')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const value = String(formData.get('correctedOn') ?? '').trim() || null
-  if (!recordId || !rowId) return
-  if (
-    value &&
-    (!/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-      !Number.isFinite(Date.parse(value)) ||
-      new Date(value).toISOString().slice(0, 10) !== value ||
-      value > dateIsoInTimeZone(new Date(), ctx.timezone))
-  ) {
-    throw new Error('Correction date must be a valid date that is not in the future')
-  }
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (value && criterion.answer !== 'fail') {
-        throw new Error('A correction date applies only to a failed criterion')
-      }
-      if (criterion.correctedOn === value) return false
-      if (criterion.correctiveActionId) {
-        assertCan(ctx, 'ca.update')
-        const [ca] = await tx
-          .select()
-          .from(correctiveActions)
-          .where(
-            and(
-              eq(correctiveActions.tenantId, ctx.tenantId),
-              eq(correctiveActions.id, criterion.correctiveActionId),
-              isNull(correctiveActions.deletedAt),
-            ),
-          )
-          .limit(1)
-          .for('update')
-        if (ca && (ca.locked || ca.status === 'closed' || ca.status === 'cancelled')) {
-          throw new Error(
-            'Manage the linked corrective action to change its resolution. Closed actions keep their history.',
-          )
-        }
-        if (
-          ca &&
-          !(await canSeeRecord(ctx, tx, {
-            prefix: 'ca',
-            ownerIds: [ca.ownerTenantUserId],
-            siteId: ca.siteOrgUnitId,
-          }))
-        ) {
-          throw new Error('Corrective action not found.')
-        }
-      }
-      const [updated] = await tx
-        .update(inspectionRecordCriteria)
-        .set({ correctedOn: value })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: inspectionRecordCriteria.id })
-      if (!updated)
-        throw new Error('Inspection criterion changed before correction date could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: value ? `Marked finding corrected on ${value}` : 'Cleared corrected-on date',
-        before: { rowId, correctedOn: criterion.correctedOn },
-        after: { rowId, correctedOn: value },
-      })
-      return true
-    },
-  )
-  if (!changed) return
-  revalidatePath(`/inspections/records/${recordId}`)
 }
 
 async function addCriterionPhotos(formData: FormData) {
@@ -1799,16 +1118,7 @@ export default async function InspectionRecordDetailPage({
     height: p.attachment.height,
   }))
 
-  const criterionActions = {
-    setAnswer: setCriterionAnswer,
-    setChoiceAnswer: setCriterionChoiceAnswer,
-    setValueAnswer: setCriterionValueAnswer,
-    setSeverity: setCriterionSeverity,
-    setNonCompliance: setCriterionNonCompliance,
-    setActionTaken: setCriterionActionTaken,
-    setCompliantNote: setCriterionCompliantNote,
-    setAssignment: setCriterionAssignment,
-    setCorrected: setCriterionCorrectedOn,
+  const criterionPhotoActions = {
     addPhotos: addCriterionPhotos,
     updatePhoto: updateCriterionPhoto,
     removePhoto: removeCriterionPhoto,
@@ -1818,6 +1128,9 @@ export default async function InspectionRecordDetailPage({
   const needsSignature = type.requiresCustomerSignature
   const signed = Boolean(record.customerSignatureAttachmentId)
   const recordImmutable = record.locked || record.status === 'closed'
+  // Field edits are queued on the device and synced (see _record-edits.ts).
+  const editable = !recordImmutable && canUpdate
+  const today = dateIsoInTimeZone(new Date(), ctx.timezone)
   const updateRecordPhotoAction = updateRecordPhoto.bind(null, id)
   const removeRecordPhotoAction = removeRecordPhoto.bind(null, id)
   const reorderRecordPhotosAction = reorderRecordPhotos.bind(null, id)
@@ -1836,640 +1149,647 @@ export default async function InspectionRecordDetailPage({
   ]
 
   return (
-    <DetailPageLayout
-      header={
-        <DetailHeader
-          back={{ href: '/inspections/records', label: 'Back to inspection records' }}
-          title={tGeneratedValue(`${type.name}`)}
-          subtitle={tGeneratedValue(
-            `${record.reference} · ${formatDateTime(new Date(record.occurredAt), ctx.timezone, ctx.locale)}`,
-          )}
-          badge={
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={
-                  record.status === 'closed' || record.status === 'submitted'
-                    ? 'success'
-                    : record.status === 'in_progress'
-                      ? 'warning'
-                      : 'secondary'
-                }
-              >
-                <GeneratedValue value={record.status.replace(/_/g, ' ')} />
-              </Badge>
-              <GeneratedValue
-                value={
-                  recordImmutable ? (
-                    <Badge variant="success">
-                      <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
-                    </Badge>
-                  ) : null
-                }
-              />
-              <GeneratedValue
-                value={
-                  failCount > 0 ? (
-                    <Badge variant="destructive">
-                      <ShieldAlert size={10} /> <GeneratedValue value={failCount} />{' '}
-                      <GeneratedText id="m_14d24a7af36317" />
-                      <GeneratedValue
-                        value={failCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
-                      />
-                    </Badge>
-                  ) : null
-                }
-              />
-            </div>
-          }
-          actions={
-            <RecordHeaderActions
-              id={id}
-              locked={recordImmutable}
-              canDelete={canDelete}
-              canCopy={canCreate}
-              canEmail={canUpdate}
-              canLock={canUpdate}
-              pdfHref={`/inspections/records/${id}/pdf`}
-              emailHref={`/inspections/records/${id}?send=1`}
-              deleteHref={`/inspections/records/${id}?drawer=confirm-delete`}
-              copyAction={copyInspection}
-              copyLabel="Copy inspection"
-              lockAction={lockInspection}
-              unlockAction={unlockInspection}
-              lockLabel={record.status === 'submitted' ? 'Resubmit & lock' : 'Submit & lock'}
-            />
-          }
-        />
-      }
-      alerts={
-        <>
-          <GeneratedValue
-            value={
-              recordImmutable ? (
-                <Alert variant="warning">
-                  <AlertTitle>
-                    <GeneratedValue
-                      value={
-                        record.status === 'closed' ? (
-                          <GeneratedText id="m_0ebf07876cd391" />
-                        ) : (
-                          <GeneratedText id="m_1a9deab2633a94" />
-                        )
-                      }
-                    />
-                  </AlertTitle>
-                  <AlertDescription>
-                    <GeneratedValue
-                      value={
-                        record.status === 'closed' ? (
-                          <>
-                            <GeneratedText id="m_01381607e25f0d" />
-                            <GeneratedValue value={' '} />
-                            <GeneratedValue
-                              value={
-                                record.closedAt ? (
-                                  formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
-                                ) : (
-                                  <GeneratedText id="m_15e0a049681b58" />
-                                )
-                              }
-                            />
-                            <GeneratedText id="m_0be94f4d1ad8da" />
-                          </>
-                        ) : (
-                          <>
-                            <GeneratedText id="m_16987bb5ddf0c8" />
-                          </>
-                        )
-                      }
-                    />
-                  </AlertDescription>
-                </Alert>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              needsSignature && !signed ? (
-                <Alert variant="info">
-                  <AlertTitle>
-                    <GeneratedText id="m_02ffe91f500dc8" />
-                  </AlertTitle>
-                  <AlertDescription>
-                    <GeneratedText id="m_1ed6655040e79e" />
-                  </AlertDescription>
-                </Alert>
-              ) : null
-            }
-          />
-        </>
-      }
-      subtabs={<SectionNav sections={sectionItems} />}
-    >
-      <div className="ff-surface space-y-5">
-        <GeneratedValue
-          value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
-        />
-
-        {/* ---------------------------------------------------------------- */}
-        {/* Overview — completion hero + compliance tiles + general info    */}
-        {/* ---------------------------------------------------------------- */}
-        <section id="section-overview" className="scroll-mt-2 space-y-5">
-          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center gap-4">
-              <div className="relative h-16 w-16 shrink-0">
-                <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
-                  <circle
-                    cx="32"
-                    cy="32"
-                    r="26"
-                    fill="none"
-                    strokeWidth="6"
-                    className="stroke-slate-200 dark:stroke-slate-700"
-                  />
-                  <circle
-                    cx="32"
-                    cy="32"
-                    r="26"
-                    fill="none"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                    strokeDasharray={ringCirc}
-                    strokeDashoffset={ringCirc * (1 - completionPct / 100)}
-                    className={completionPct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  <GeneratedValue value={completionPct} />%
-                </span>
-              </div>
-              <div className="min-w-0">
-                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  <GeneratedValue value={answeredCount} /> <GeneratedText id="m_00e704d1194796" />{' '}
-                  <GeneratedValue value={total} /> <GeneratedText id="m_02fc780b01e239" />
-                </div>
-                <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                  <GeneratedValue value={type.name} />
-                  <GeneratedValue value={site ? ` · ${site.name}` : ''} />
-                  <GeneratedValue value={inspector?.name ? ` · ${inspector.name}` : ''} />
-                </div>
-              </div>
-            </div>
-            <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
-              <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
-                <GeneratedText id="m_07f2b2ca960987" />
-              </div>
-              <div className="mt-1 flex items-baseline gap-1">
-                <span
-                  className={`text-2xl font-semibold ${
-                    failCount === 0
-                      ? 'text-emerald-600'
-                      : compliantPct >= 60
-                        ? 'text-amber-600'
-                        : 'text-red-600'
-                  }`}
+    <OfflineRecordProvider module="inspections" recordId={id} editable={editable}>
+      <DetailPageLayout
+        header={
+          <DetailHeader
+            back={{ href: '/inspections/records', label: 'Back to inspection records' }}
+            title={tGeneratedValue(`${type.name}`)}
+            subtitle={tGeneratedValue(
+              `${record.reference} · ${formatDateTime(new Date(record.occurredAt), ctx.timezone, ctx.locale)}`,
+            )}
+            badge={
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={
+                    record.status === 'closed' || record.status === 'submitted'
+                      ? 'success'
+                      : record.status === 'in_progress'
+                        ? 'warning'
+                        : 'secondary'
+                  }
                 >
-                  <GeneratedValue value={compliantPct} />%
-                </span>
-                <span className="text-xs text-slate-400">
-                  <GeneratedValue value={passCount} />/<GeneratedValue value={failCount} />/
-                  <GeneratedValue value={naCount} />
-                </span>
+                  <GeneratedValue value={record.status.replace(/_/g, ' ')} />
+                </Badge>
+                <RecordSyncStatus />
+                <GeneratedValue
+                  value={
+                    recordImmutable ? (
+                      <Badge variant="success">
+                        <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
+                      </Badge>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    failCount > 0 ? (
+                      <Badge variant="destructive">
+                        <ShieldAlert size={10} /> <GeneratedValue value={failCount} />{' '}
+                        <GeneratedText id="m_14d24a7af36317" />
+                        <GeneratedValue
+                          value={failCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                        />
+                      </Badge>
+                    ) : null
+                  }
+                />
               </div>
-            </div>
-          </div>
-
-          {/* Compliance tiles */}
-          <div
-            className={`grid grid-cols-2 gap-3 ${hasSupplementalCriteria ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
-          >
-            <StatTile label={tGenerated('m_0e4b19568a01bf')} value={passCount} accent="emerald" />
-            <StatTile label={tGenerated('m_169669494a86f8')} value={failCount} accent="red" />
-            <StatTile label={tGenerated('m_06702e4064e393')} value={naCount} accent="slate" />
+            }
+            actions={
+              <RecordHeaderActions
+                id={id}
+                locked={recordImmutable}
+                canDelete={canDelete}
+                canCopy={canCreate}
+                canEmail={canUpdate}
+                canLock={canUpdate}
+                pdfHref={`/inspections/records/${id}/pdf`}
+                emailHref={`/inspections/records/${id}?send=1`}
+                deleteHref={`/inspections/records/${id}?drawer=confirm-delete`}
+                copyAction={copyInspection}
+                copyLabel="Copy inspection"
+                lockAction={lockInspection}
+                unlockAction={unlockInspection}
+                lockLabel={record.status === 'submitted' ? 'Resubmit & lock' : 'Submit & lock'}
+              />
+            }
+          />
+        }
+        alerts={
+          <>
+            <RecordSyncBanner />
             <GeneratedValue
               value={
-                hasSupplementalCriteria ? (
-                  <StatTile
-                    label={tGenerated('m_0cbfa10af93f84')}
-                    value={supplementalAnsweredCount}
-                    accent="emerald"
-                  />
+                recordImmutable ? (
+                  <Alert variant="warning">
+                    <AlertTitle>
+                      <GeneratedValue
+                        value={
+                          record.status === 'closed' ? (
+                            <GeneratedText id="m_0ebf07876cd391" />
+                          ) : (
+                            <GeneratedText id="m_1a9deab2633a94" />
+                          )
+                        }
+                      />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedValue
+                        value={
+                          record.status === 'closed' ? (
+                            <>
+                              <GeneratedText id="m_01381607e25f0d" />
+                              <GeneratedValue value={' '} />
+                              <GeneratedValue
+                                value={
+                                  record.closedAt ? (
+                                    formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
+                                  ) : (
+                                    <GeneratedText id="m_15e0a049681b58" />
+                                  )
+                                }
+                              />
+                              <GeneratedText id="m_0be94f4d1ad8da" />
+                            </>
+                          ) : (
+                            <>
+                              <GeneratedText id="m_16987bb5ddf0c8" />
+                            </>
+                          )
+                        }
+                      />
+                    </AlertDescription>
+                  </Alert>
                 ) : null
               }
             />
-            <StatTile
-              label={tGenerated('m_19224fcc639fd1')}
-              value={unansweredCount}
-              accent="amber"
+            <GeneratedValue
+              value={
+                needsSignature && !signed ? (
+                  <Alert variant="info">
+                    <AlertTitle>
+                      <GeneratedText id="m_02ffe91f500dc8" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_1ed6655040e79e" />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
             />
-          </div>
+          </>
+        }
+        subtabs={<SectionNav sections={sectionItems} />}
+      >
+        <div className="ff-surface space-y-5">
+          <GeneratedValue
+            value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
+          />
 
-          <Section
-            title={tGenerated('m_14d50eff4a957b')}
-            subtitle={tGenerated('m_1cf9885ac52ebd')}
-            icon={<Building2 size={20} />}
-            tone="slate"
-          >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <LiveDateTime
-                id={record.id}
-                field="occurredAt"
-                label={tGenerated('m_03f174df92cf82')}
-                initialValue={localDatetimeValue(new Date(record.occurredAt))}
-                disabled={recordImmutable}
-                updateAction={updateRecordField}
-              />
-              <LiveRemoteSelect
-                id={record.id}
-                field="siteOrgUnitId"
-                label={tGenerated('m_055f11420b2da4')}
-                initialValue={record.siteOrgUnitId}
-                initialOption={
-                  data.site
-                    ? {
-                        value: data.site.id,
-                        label: data.site.name,
-                        hint: data.site.code ?? undefined,
-                      }
-                    : undefined
-                }
-                lookup="inspection-sites"
-                disabled={recordImmutable}
-                updateAction={updateRecordField}
-              />
-              <div className="sm:col-span-2">
-                <LiveField
-                  id={record.id}
-                  field="locationOnSite"
-                  label={tGenerated('m_0300804afcc3bb')}
-                  initialValue={record.locationOnSite}
-                  placeholder={tGenerated('m_0300804afcc3bb')}
-                  disabled={recordImmutable}
-                  updateAction={updateRecordField}
-                />
+          {/* ---------------------------------------------------------------- */}
+          {/* Overview — completion hero + compliance tiles + general info    */}
+          {/* ---------------------------------------------------------------- */}
+          <section id="section-overview" className="scroll-mt-2 space-y-5">
+            <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center gap-4">
+                <div className="relative h-16 w-16 shrink-0">
+                  <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="26"
+                      fill="none"
+                      strokeWidth="6"
+                      className="stroke-slate-200 dark:stroke-slate-700"
+                    />
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="26"
+                      fill="none"
+                      strokeWidth="6"
+                      strokeLinecap="round"
+                      strokeDasharray={ringCirc}
+                      strokeDashoffset={ringCirc * (1 - completionPct / 100)}
+                      className={completionPct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={completionPct} />%
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={answeredCount} /> <GeneratedText id="m_00e704d1194796" />{' '}
+                    <GeneratedValue value={total} /> <GeneratedText id="m_02fc780b01e239" />
+                  </div>
+                  <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={type.name} />
+                    <GeneratedValue value={site ? ` · ${site.name}` : ''} />
+                    <GeneratedValue value={inspector?.name ? ` · ${inspector.name}` : ''} />
+                  </div>
+                </div>
               </div>
-              <LiveRemoteSelect
-                id={record.id}
-                field="supervisorTenantUserId"
-                label={tGeneratedValue('Supervisor')}
-                initialValue={record.supervisorTenantUserId}
-                initialOption={
-                  supervisor && record.supervisorTenantUserId
-                    ? { value: record.supervisorTenantUserId, label: supervisor.name }
-                    : undefined
-                }
-                lookup="inspection-supervisors"
-                disabled={recordImmutable}
-                updateAction={updateRecordField}
-              />
-              <div className="sm:col-span-2">
-                <LiveField
-                  id={record.id}
-                  field="foremanText"
-                  label={tGenerated('m_184fa8d9234543')}
-                  initialValue={record.foremanText}
-                  placeholder={tGenerated('m_075c37024b0c8f')}
-                  disabled={recordImmutable}
-                  updateAction={updateRecordField}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <LiveField
-                  id={record.id}
-                  field="notes"
-                  label={tGenerated('m_0b8dadcb78cd08')}
-                  initialValue={record.notes}
-                  multiline
-                  rows={3}
-                  placeholder={tGenerated('m_006d3808edf66d')}
-                  disabled={recordImmutable}
-                  updateAction={updateRecordField}
-                />
+              <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+                <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+                  <GeneratedText id="m_07f2b2ca960987" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span
+                    className={`text-2xl font-semibold ${
+                      failCount === 0
+                        ? 'text-emerald-600'
+                        : compliantPct >= 60
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                    }`}
+                  >
+                    <GeneratedValue value={compliantPct} />%
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    <GeneratedValue value={passCount} />/<GeneratedValue value={failCount} />/
+                    <GeneratedValue value={naCount} />
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Read-only context */}
-            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800">
-              <Meta
-                label={tGenerated('m_17dc61a19b605c')}
-                value={
-                  <span className="font-mono">
-                    <GeneratedValue value={record.reference} />
-                  </span>
-                }
-              />
-              <Meta
-                label={tGenerated('m_074ba2f160c506')}
-                value={
-                  <Link
-                    className="text-teal-700 hover:underline dark:text-teal-400"
-                    href={`/inspections/types/${record.typeId}`}
-                  >
-                    <GeneratedValue value={type.name} />
-                  </Link>
-                }
-              />
-              <Meta
-                label={tGenerated('m_0c823c3949ebd6')}
-                value={
-                  record.submittedAt
-                    ? formatDate(new Date(record.submittedAt), ctx.timezone, ctx.locale)
-                    : '—'
-                }
-              />
-              <Meta
-                label={tGenerated('m_003ea77d773d2d')}
-                value={
-                  record.closedAt
-                    ? formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
-                    : '—'
-                }
-              />
-            </dl>
-          </Section>
-        </section>
-
-        {/* ---------------------------------------------------------------- */}
-        {/* Criteria — one live card per criterion, grouped by section      */}
-        {/* ---------------------------------------------------------------- */}
-        <section id="section-criteria" className="scroll-mt-2">
-          {passableUnansweredCount > 0 && !recordImmutable ? (
-            <form action={passAll} className="mb-3">
-              <input type="hidden" name="recordId" value={id} />
-              <Button type="submit" variant="outline">
-                <GeneratedValue value={'Mark remaining items Pass ('} />
-                {passableUnansweredCount})
-              </Button>
-            </form>
-          ) : null}
-
-          <Section
-            title={tGenerated('m_04f78c562a8b56', { value0: total })}
-            subtitle={tGenerated('m_1a1f624e1388c1')}
-            icon={<ListChecks size={20} />}
-            tone="blue"
-            defaultOpen
-          >
-            <GeneratedValue
-              value={
-                criteria.length === 0 ? (
-                  <Alert variant="info">
-                    <AlertTitle>
-                      <GeneratedText id="m_09abab0bd4ecdf" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_1d25507d45162d" />
-                      <GeneratedValue value={' '} />
-                      <Link
-                        href={`/inspections/types/${record.typeId}`}
-                        className="text-teal-700 hover:underline dark:text-teal-400"
-                      >
-                        <GeneratedText id="m_0834705a18681d" />
-                      </Link>
-                      <GeneratedText id="m_1fe3e4d8851426" />
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <div className="space-y-4">
-                    <GeneratedValue
-                      value={criteriaGroups.map((group, gi) => {
-                        const sectionNaCount = group.label
-                          ? group.rows.filter(
-                              (row) =>
-                                isInspectionOutcomeResponseType(row.c.responseType) &&
-                                !row.c.answer,
-                            ).length
-                          : 0
-                        return (
-                          <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-2">
-                            <GeneratedValue
-                              value={
-                                group.label || multiSection ? (
-                                  <div className="sticky top-0 z-[1] -mx-1 flex items-center gap-2 bg-white/90 px-1 py-1 backdrop-blur dark:bg-slate-900/90">
-                                    <h3 className="text-xs font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
-                                      <GeneratedValue
-                                        value={
-                                          group.label ?? <GeneratedText id="m_124ee6c18e0195" />
-                                        }
-                                      />
-                                    </h3>
-                                    <span className="text-xs text-slate-400">
-                                      <GeneratedValue value={group.rows.length} />{' '}
-                                      <GeneratedText id="m_089f2b1abdb347" />
-                                      <GeneratedValue
-                                        value={
-                                          group.rows.length === 1 ? (
-                                            ''
-                                          ) : (
-                                            <GeneratedText id="m_00ded356f0f424" />
-                                          )
-                                        }
-                                      />
-                                    </span>
-                                    <GeneratedValue
-                                      value={
-                                        sectionNaCount > 0 && !recordImmutable ? (
-                                          <form action={markSectionNa} className="ml-auto">
-                                            <input type="hidden" name="recordId" value={id} />
-                                            <input
-                                              type="hidden"
-                                              name="groupLabel"
-                                              value={group.label ?? ''}
-                                            />
-                                            <Button type="submit" variant="outline" size="sm">
-                                              <GeneratedText id="m_14001de0aa07db" />{' '}
-                                              <GeneratedText id="m_02f67a0e8ba5ce" />{' '}
-                                              <GeneratedText id="m_06702e4064e393" />
-                                            </Button>
-                                          </form>
-                                        ) : null
-                                      }
-                                    />
-                                  </div>
-                                ) : null
-                              }
-                            />
-                            <GeneratedValue
-                              value={group.rows.map((row) => (
-                                <CriterionCard
-                                  key={row.c.id}
-                                  recordId={id}
-                                  rowId={row.c.id}
-                                  index={indexById.get(row.c.id) ?? 0}
-                                  question={row.c.questionTextSnapshot}
-                                  responseType={row.c.responseType as CriterionResponseType}
-                                  choiceOptions={row.c.choiceOptionsSnapshot}
-                                  choiceAnswer={row.c.choiceAnswer}
-                                  textAnswer={row.c.textAnswer}
-                                  numberAnswer={row.c.numberAnswer}
-                                  requiresPhoto={row.c.requiresPhoto ?? false}
-                                  requiresComment={row.c.requiresComment ?? false}
-                                  answer={row.c.answer}
-                                  severity={row.c.severity as CriterionSeverity | null}
-                                  nonComplianceDescription={row.c.nonComplianceDescription}
-                                  actionTaken={row.c.actionTaken}
-                                  compliantNote={row.c.compliantNote}
-                                  assignedToPersonId={row.c.assignedToPersonId}
-                                  assignedDueDate={row.c.assignedDueDate}
-                                  correctedOn={row.c.correctedOn}
-                                  overdue={isOverdue({
-                                    answer: row.c.answer,
-                                    assignedDueDate: row.c.assignedDueDate,
-                                    correctedOn: row.c.correctedOn,
-                                    recordOccurredAt: record.occurredAt,
-                                  })}
-                                  photoPreviews={(row.c.photoAttachmentIds ?? [])
-                                    .map((aid) => data.criterionPhotoMap.get(aid))
-                                    .filter((p): p is NonNullable<typeof p> => Boolean(p))}
-                                  correctiveActionRef={row.ca?.reference ?? null}
-                                  correctiveActionId={row.c.correctiveActionId}
-                                  correctiveActionStatus={row.ca?.status ?? null}
-                                  canResolveAction={can(ctx, 'ca.update')}
-                                  today={dateIsoInTimeZone(new Date(), ctx.timezone)}
-                                  locked={recordImmutable}
-                                  allowCompliantNotes={type.allowCompliantNotes}
-                                  actions={criterionActions}
-                                />
-                              ))}
-                            />
-                          </div>
-                        )
-                      })}
-                    />
-                  </div>
-                )
-              }
-            />
-          </Section>
-        </section>
-
-        {/* ---------------------------------------------------------------- */}
-        {/* Photos                                                          */}
-        {/* ---------------------------------------------------------------- */}
-        <section id="section-photos" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_0705e8a460ad79', { value0: photos.length })}
-            icon={<Camera size={20} />}
-            tone="slate"
-            defaultOpen={photos.length > 0}
-          >
-            <div className="space-y-3">
-              <PhotoGallery
-                photos={galleryPhotos}
-                editable={!recordImmutable}
-                onUpdate={updateRecordPhotoAction}
-                onRemove={removeRecordPhotoAction}
-                onReorder={reorderRecordPhotosAction}
-              />
+            {/* Compliance tiles */}
+            <div
+              className={`grid grid-cols-2 gap-3 ${hasSupplementalCriteria ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
+            >
+              <StatTile label={tGenerated('m_0e4b19568a01bf')} value={passCount} accent="emerald" />
+              <StatTile label={tGenerated('m_169669494a86f8')} value={failCount} accent="red" />
+              <StatTile label={tGenerated('m_06702e4064e393')} value={naCount} accent="slate" />
               <GeneratedValue
                 value={
-                  !recordImmutable ? (
-                    <PhotoUploaderSection
-                      attachAction={async (ids) => {
-                        'use server'
-                        await attachRecordPhotos(id, ids)
-                      }}
+                  hasSupplementalCriteria ? (
+                    <StatTile
+                      label={tGenerated('m_0cbfa10af93f84')}
+                      value={supplementalAnsweredCount}
+                      accent="emerald"
                     />
                   ) : null
                 }
               />
+              <StatTile
+                label={tGenerated('m_19224fcc639fd1')}
+                value={unansweredCount}
+                accent="amber"
+              />
             </div>
-          </Section>
-        </section>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Customer signature                                              */}
-        {/* ---------------------------------------------------------------- */}
-        <GeneratedValue
-          value={
-            needsSignature ? (
-              <section id="section-signature" className="scroll-mt-2">
-                <Section
-                  title={tGenerated('m_12a3bdfedff1f8')}
-                  icon={<PenLine size={20} />}
-                  tone="emerald"
-                  defaultOpen
-                >
-                  <CustomerSignatureCard
-                    recordId={id}
-                    currentSignature={
-                      record.customerSignatureAttachmentId
-                        ? attachmentUrl(record.customerSignatureAttachmentId)
-                        : null
-                    }
-                    currentSignerName={record.customerSignerName}
-                    signedAt={record.customerSignedAt}
-                    locked={recordImmutable}
-                    saveAction={saveCustomerSignature}
+            <Section
+              title={tGenerated('m_14d50eff4a957b')}
+              subtitle={tGenerated('m_1cf9885ac52ebd')}
+              icon={<Building2 size={20} />}
+              tone="slate"
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <LiveDateTime
+                  field="occurredAt"
+                  label={tGenerated('m_03f174df92cf82')}
+                  initialValue={datetimeLocalValue(new Date(record.occurredAt), ctx.timezone)}
+                  disabled={!editable}
+                />
+                <LiveRemoteSelect
+                  field="siteOrgUnitId"
+                  label={tGenerated('m_055f11420b2da4')}
+                  initialValue={record.siteOrgUnitId}
+                  initialOption={
+                    data.site
+                      ? {
+                          value: data.site.id,
+                          label: data.site.name,
+                          hint: data.site.code ?? undefined,
+                        }
+                      : undefined
+                  }
+                  lookup="inspection-sites"
+                  disabled={!editable}
+                />
+                <div className="sm:col-span-2">
+                  <LiveField
+                    field="locationOnSite"
+                    label={tGenerated('m_0300804afcc3bb')}
+                    initialValue={record.locationOnSite}
+                    placeholder={tGenerated('m_0300804afcc3bb')}
+                    disabled={!editable}
                   />
-                </Section>
-              </section>
-            ) : null
-          }
-        />
+                </div>
+                <LiveRemoteSelect
+                  field="supervisorTenantUserId"
+                  label={tGeneratedValue('Supervisor')}
+                  initialValue={record.supervisorTenantUserId}
+                  initialOption={
+                    supervisor && record.supervisorTenantUserId
+                      ? { value: record.supervisorTenantUserId, label: supervisor.name }
+                      : undefined
+                  }
+                  lookup="inspection-supervisors"
+                  disabled={!editable}
+                />
+                <div className="sm:col-span-2">
+                  <LiveField
+                    field="foremanText"
+                    label={tGenerated('m_184fa8d9234543')}
+                    initialValue={record.foremanText}
+                    placeholder={tGenerated('m_075c37024b0c8f')}
+                    disabled={!editable}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <LiveField
+                    field="notes"
+                    label={tGenerated('m_0b8dadcb78cd08')}
+                    initialValue={record.notes}
+                    multiline
+                    rows={3}
+                    placeholder={tGenerated('m_006d3808edf66d')}
+                    disabled={!editable}
+                  />
+                </div>
+              </div>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Activity                                                        */}
-        {/* ---------------------------------------------------------------- */}
-        <section id="section-activity" className="scroll-mt-2">
-          <Section
-            title={tGeneratedValue('Activity')}
-            icon={<History size={20} />}
-            tone={tGeneratedValue('slate')}
-            defaultOpen={false}
-          >
-            <RecordActivity
-              ctx={ctx}
-              entityType="inspection_record"
-              entityId={id}
-              basePath={`/inspections/records/${id}`}
-              searchParams={sp}
-            />
-          </Section>
-        </section>
-      </div>
+              {/* Read-only context */}
+              <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800">
+                <Meta
+                  label={tGenerated('m_17dc61a19b605c')}
+                  value={
+                    <span className="font-mono">
+                      <GeneratedValue value={record.reference} />
+                    </span>
+                  }
+                />
+                <Meta
+                  label={tGenerated('m_074ba2f160c506')}
+                  value={
+                    <Link
+                      className="text-teal-700 hover:underline dark:text-teal-400"
+                      href={`/inspections/types/${record.typeId}`}
+                    >
+                      <GeneratedValue value={type.name} />
+                    </Link>
+                  }
+                />
+                <Meta
+                  label={tGenerated('m_0c823c3949ebd6')}
+                  value={
+                    record.submittedAt
+                      ? formatDate(new Date(record.submittedAt), ctx.timezone, ctx.locale)
+                      : '—'
+                  }
+                />
+                <Meta
+                  label={tGenerated('m_003ea77d773d2d')}
+                  value={
+                    record.closedAt
+                      ? formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
+                      : '—'
+                  }
+                />
+              </dl>
+            </Section>
+          </section>
 
-      <UrlDrawer
-        open={pickString(sp.drawer) === 'confirm-delete' && canDelete}
-        closeHref={`/inspections/records/${id}`}
-        title={tGenerated('m_03f20477ddbf1f')}
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            <GeneratedText id="m_11773f3c3f7558" />{' '}
-            <span className="font-mono font-medium">{record.reference}</span>
-            <GeneratedText id="m_1879aa51c63378" />
-          </p>
-          <div className="flex justify-end gap-2">
-            <Link href={`/inspections/records/${id}` as never}>
-              <Button type="button" variant="outline">
-                <GeneratedText id="m_112e2e8ecda428" />
-              </Button>
-            </Link>
-            <form action={deleteInspection}>
-              <input type="hidden" name="id" value={id} />
-              <Button type="submit" className="bg-red-600 text-white hover:bg-red-700">
-                <GeneratedText id="m_03f20477ddbf1f" />
-              </Button>
-            </form>
-          </div>
+          {/* ---------------------------------------------------------------- */}
+          {/* Criteria — one live card per criterion, grouped by section      */}
+          {/* ---------------------------------------------------------------- */}
+          <section id="section-criteria" className="scroll-mt-2">
+            {passableUnansweredCount > 0 && editable ? (
+              // Queued answers go first, so the shortcut only fills what is still blank.
+              <OnlineActionForm action={passAll} purpose="finish" className="mb-3">
+                <input type="hidden" name="recordId" value={id} />
+                <Button type="submit" variant="outline">
+                  <GeneratedValue value={'Mark remaining items Pass ('} />
+                  {passableUnansweredCount})
+                </Button>
+              </OnlineActionForm>
+            ) : null}
+
+            <Section
+              title={tGenerated('m_04f78c562a8b56', { value0: total })}
+              subtitle={tGenerated('m_1a1f624e1388c1')}
+              icon={<ListChecks size={20} />}
+              tone="blue"
+              defaultOpen
+            >
+              <GeneratedValue
+                value={
+                  criteria.length === 0 ? (
+                    <Alert variant="info">
+                      <AlertTitle>
+                        <GeneratedText id="m_09abab0bd4ecdf" />
+                      </AlertTitle>
+                      <AlertDescription>
+                        <GeneratedText id="m_1d25507d45162d" />
+                        <GeneratedValue value={' '} />
+                        <Link
+                          href={`/inspections/types/${record.typeId}`}
+                          className="text-teal-700 hover:underline dark:text-teal-400"
+                        >
+                          <GeneratedText id="m_0834705a18681d" />
+                        </Link>
+                        <GeneratedText id="m_1fe3e4d8851426" />
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="space-y-4">
+                      <GeneratedValue
+                        value={criteriaGroups.map((group, gi) => {
+                          const sectionNaCount = group.label
+                            ? group.rows.filter(
+                                (row) =>
+                                  isInspectionOutcomeResponseType(row.c.responseType) &&
+                                  !row.c.answer,
+                              ).length
+                            : 0
+                          return (
+                            <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-2">
+                              <GeneratedValue
+                                value={
+                                  group.label || multiSection ? (
+                                    <div className="sticky top-0 z-[1] -mx-1 flex items-center gap-2 bg-white/90 px-1 py-1 backdrop-blur dark:bg-slate-900/90">
+                                      <h3 className="text-xs font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
+                                        <GeneratedValue
+                                          value={
+                                            group.label ?? <GeneratedText id="m_124ee6c18e0195" />
+                                          }
+                                        />
+                                      </h3>
+                                      <span className="text-xs text-slate-400">
+                                        <GeneratedValue value={group.rows.length} />{' '}
+                                        <GeneratedText id="m_089f2b1abdb347" />
+                                        <GeneratedValue
+                                          value={
+                                            group.rows.length === 1 ? (
+                                              ''
+                                            ) : (
+                                              <GeneratedText id="m_00ded356f0f424" />
+                                            )
+                                          }
+                                        />
+                                      </span>
+                                      <GeneratedValue
+                                        value={
+                                          sectionNaCount > 0 && editable ? (
+                                            <OnlineActionForm
+                                              action={markSectionNa}
+                                              purpose="finish"
+                                              className="ml-auto"
+                                            >
+                                              <input type="hidden" name="recordId" value={id} />
+                                              <input
+                                                type="hidden"
+                                                name="groupLabel"
+                                                value={group.label ?? ''}
+                                              />
+                                              <Button type="submit" variant="outline" size="sm">
+                                                <GeneratedText id="m_14001de0aa07db" />{' '}
+                                                <GeneratedText id="m_02f67a0e8ba5ce" />{' '}
+                                                <GeneratedText id="m_06702e4064e393" />
+                                              </Button>
+                                            </OnlineActionForm>
+                                          ) : null
+                                        }
+                                      />
+                                    </div>
+                                  ) : null
+                                }
+                              />
+                              <GeneratedValue
+                                value={group.rows.map((row) => (
+                                  <CriterionCard
+                                    key={row.c.id}
+                                    recordId={id}
+                                    rowId={row.c.id}
+                                    index={indexById.get(row.c.id) ?? 0}
+                                    question={row.c.questionTextSnapshot}
+                                    responseType={row.c.responseType as CriterionResponseType}
+                                    choiceOptions={row.c.choiceOptionsSnapshot}
+                                    choiceAnswer={row.c.choiceAnswer}
+                                    textAnswer={row.c.textAnswer}
+                                    numberAnswer={inspectionNumberAnswerWire(row.c.numberAnswer)}
+                                    requiresPhoto={row.c.requiresPhoto ?? false}
+                                    requiresComment={row.c.requiresComment ?? false}
+                                    answer={row.c.answer}
+                                    severity={row.c.severity as CriterionSeverity | null}
+                                    nonComplianceDescription={row.c.nonComplianceDescription}
+                                    actionTaken={row.c.actionTaken}
+                                    compliantNote={row.c.compliantNote}
+                                    assignedToPersonId={row.c.assignedToPersonId}
+                                    assignedDueDate={row.c.assignedDueDate}
+                                    correctedOn={row.c.correctedOn}
+                                    overdue={isOverdue({
+                                      answer: row.c.answer,
+                                      assignedDueDate: row.c.assignedDueDate,
+                                      correctedOn: row.c.correctedOn,
+                                      recordOccurredAt: record.occurredAt,
+                                      today,
+                                      timeZone: ctx.timezone,
+                                    })}
+                                    photoPreviews={(row.c.photoAttachmentIds ?? [])
+                                      .map((aid) => data.criterionPhotoMap.get(aid))
+                                      .filter((p): p is NonNullable<typeof p> => Boolean(p))}
+                                    correctiveActionRef={row.ca?.reference ?? null}
+                                    correctiveActionId={row.c.correctiveActionId}
+                                    correctiveActionStatus={row.ca?.status ?? null}
+                                    canResolveAction={can(ctx, 'ca.update')}
+                                    today={today}
+                                    locked={!editable}
+                                    allowCompliantNotes={type.allowCompliantNotes}
+                                    actions={criterionPhotoActions}
+                                  />
+                                ))}
+                              />
+                            </div>
+                          )
+                        })}
+                      />
+                    </div>
+                  )
+                }
+              />
+            </Section>
+          </section>
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Photos                                                          */}
+          {/* ---------------------------------------------------------------- */}
+          <section id="section-photos" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_0705e8a460ad79', { value0: photos.length })}
+              icon={<Camera size={20} />}
+              tone="slate"
+              defaultOpen={photos.length > 0}
+            >
+              <div className="space-y-3">
+                <PhotoGallery
+                  photos={galleryPhotos}
+                  editable={editable}
+                  onUpdate={updateRecordPhotoAction}
+                  onRemove={removeRecordPhotoAction}
+                  onReorder={reorderRecordPhotosAction}
+                />
+                <GeneratedValue
+                  value={
+                    editable ? (
+                      <PhotoUploaderSection
+                        attachAction={async (ids) => {
+                          'use server'
+                          await attachRecordPhotos(id, ids)
+                        }}
+                      />
+                    ) : null
+                  }
+                />
+              </div>
+            </Section>
+          </section>
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Customer signature                                              */}
+          {/* ---------------------------------------------------------------- */}
+          <GeneratedValue
+            value={
+              needsSignature ? (
+                <section id="section-signature" className="scroll-mt-2">
+                  <Section
+                    title={tGenerated('m_12a3bdfedff1f8')}
+                    icon={<PenLine size={20} />}
+                    tone="emerald"
+                    defaultOpen
+                  >
+                    <CustomerSignatureCard
+                      recordId={id}
+                      currentSignature={
+                        record.customerSignatureAttachmentId
+                          ? attachmentUrl(record.customerSignatureAttachmentId)
+                          : null
+                      }
+                      currentSignerName={record.customerSignerName}
+                      signedAtDisplay={
+                        record.customerSignedAt
+                          ? formatDateTime(
+                              new Date(record.customerSignedAt),
+                              ctx.timezone,
+                              ctx.locale,
+                            )
+                          : null
+                      }
+                      locked={!editable}
+                      saveAction={saveCustomerSignature}
+                    />
+                  </Section>
+                </section>
+              ) : null
+            }
+          />
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Activity                                                        */}
+          {/* ---------------------------------------------------------------- */}
+          <section id="section-activity" className="scroll-mt-2">
+            <Section
+              title={tGeneratedValue('Activity')}
+              icon={<History size={20} />}
+              tone={tGeneratedValue('slate')}
+              defaultOpen={false}
+            >
+              <RecordActivity
+                ctx={ctx}
+                entityType="inspection_record"
+                entityId={id}
+                basePath={`/inspections/records/${id}`}
+                searchParams={sp}
+              />
+            </Section>
+          </section>
         </div>
-      </UrlDrawer>
 
-      <GenericSendEmailDialog
-        open={pickString(sp.send) === '1' && canUpdate}
-        title={tGenerated('m_10ed98a684040e')}
-        description={tGenerated('m_0ebf382d7f253f')}
-        reference={record.reference}
-        defaultSubjectPrefix="Inspection"
-        sendAction={async (formData) => {
-          'use server'
-          formData.set('id', id)
-          await sendInspectionEmailAction(formData)
-        }}
-      />
-    </DetailPageLayout>
+        <UrlDrawer
+          open={pickString(sp.drawer) === 'confirm-delete' && canDelete}
+          closeHref={`/inspections/records/${id}`}
+          title={tGenerated('m_03f20477ddbf1f')}
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              <GeneratedText id="m_11773f3c3f7558" />{' '}
+              <span className="font-mono font-medium">{record.reference}</span>
+              <GeneratedText id="m_1879aa51c63378" />
+            </p>
+            <div className="flex justify-end gap-2">
+              <Link href={`/inspections/records/${id}` as never}>
+                <Button type="button" variant="outline">
+                  <GeneratedText id="m_112e2e8ecda428" />
+                </Button>
+              </Link>
+              <form action={deleteInspection}>
+                <input type="hidden" name="id" value={id} />
+                <Button type="submit" className="bg-red-600 text-white hover:bg-red-700">
+                  <GeneratedText id="m_03f20477ddbf1f" />
+                </Button>
+              </form>
+            </div>
+          </div>
+        </UrlDrawer>
+
+        <GenericSendEmailDialog
+          open={pickString(sp.send) === '1' && canUpdate}
+          title={tGenerated('m_10ed98a684040e')}
+          description={tGenerated('m_0ebf382d7f253f')}
+          reference={record.reference}
+          defaultSubjectPrefix="Inspection"
+          sendAction={async (formData) => {
+            'use server'
+            formData.set('id', id)
+            await sendInspectionEmailAction(formData)
+          }}
+        />
+      </DetailPageLayout>
+    </OfflineRecordProvider>
   )
 }
 

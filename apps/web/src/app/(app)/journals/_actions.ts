@@ -5,22 +5,23 @@ import { activePeopleWhere } from '@beaconhs/db'
 // Server actions for the Journals workspace: entry mutations, AI analysis,
 // photos, and thin data-fetch wrappers the client calls on interaction.
 // Every mutation runs inside ctx.db() (tenant + RLS), records an audit row, and
-// is scope-checked via scopedWhere() so a self-scoped user can't touch others'
-// entries even though RLS only bounds to the tenant.
+// is scope-checked via journalMutationWhere() (./_mutation-scope.ts) so a
+// self-scoped user can't touch others' entries even though RLS only bounds to
+// the tenant. Field edits (body, date, log type, location, supervisor, tags)
+// are local-first and go through the `journals` record saver
+// (./_record-edits.ts), not an action.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import {
   attachments,
   journalEntries,
   journalEntryPhotos,
   journalEntryTags,
-  orgUnits,
   people,
 } from '@beaconhs/db/schema'
 import { AI_VISION_LIMITS, describePhoto, extractEntryMeta } from '@beaconhs/ai'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
-import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { getObject, headObject } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -28,19 +29,12 @@ import { getTenantAiConfig, getTenantAutoJournalAi } from '@/lib/ai-config'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { journalEntrySubmittedEvent } from '@beaconhs/integrations'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
-import { getAuthorPersonId, htmlToText } from './_lib'
-import {
-  journalCanBrowseAll,
-  journalCanReadAll,
-  journalSelfScopeWhere,
-  journalScopeWhere,
-} from '@beaconhs/tenant/journal-scope'
+import { journalCanBrowseAll } from '@beaconhs/tenant/journal-scope'
 import { buildTree, getEntry, getOrCreateEntryForDate, getWorkspaceData } from './_data'
 import { sendJournalEntryEmail } from './_send-email'
 import type {
   AuthorRef,
   EntryMetaResult,
-  EntryPatch,
   JournalEntryDetail,
   TreePage,
   WorkspaceData,
@@ -48,12 +42,8 @@ import type {
 import { isTreeCursor } from './_tree-pages'
 import { normalizeJournalTags } from './_tag-policy'
 import { isUuid } from '@/lib/list-params'
-import {
-  canCreateJournal,
-  canEmailJournal,
-  journalMutationScope,
-  type JournalMutation,
-} from './_mutation-policy'
+import { canCreateJournal, canEmailJournal, journalMutationScope } from './_mutation-policy'
+import { isJournalDate, journalMutationWhere, journalReadWhere } from './_mutation-scope'
 import { normalizeJournalFilters, normalizeJournalGroupBy } from './_query-input'
 import { parsePhotoEdits } from '@/lib/photo-edits'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
@@ -75,50 +65,6 @@ function authorRefFromEntry(entry: JournalEntryDetail): AuthorRef {
   }
 }
 
-/** Visibility-scoped WHERE for a single live entry (tenant + author/site/self).
- *  Always excludes soft-deleted entries — a deleted journal is not editable. */
-async function scopedWhere(ctx: RequestContext, id: string): Promise<SQL> {
-  if (!isUuid(id)) return sql`false`
-  const authorPersonId = journalCanReadAll(ctx) ? null : await getAuthorPersonId(ctx)
-  const scope = journalScopeWhere(ctx, authorPersonId)
-  return and(eq(journalEntries.id, id), isNull(journalEntries.deletedAt), scope)!
-}
-
-/**
- * Mutations cannot reuse the read predicate blindly: `journals.update.own`
- * remains own-only even when a custom role also has site/all read access.
- * `journals.assign` is the explicit permission that widens writes to the
- * caller's normal read scope.
- */
-async function mutationWhere(
-  ctx: RequestContext,
-  id: string,
-  mutation: JournalMutation,
-  requireDraft = true,
-): Promise<SQL> {
-  if (!isUuid(id)) return sql`false`
-  const scope = journalMutationScope(ctx, mutation)
-  if (scope === 'none') return sql`false`
-  const authorPersonId = await getAuthorPersonId(ctx)
-  const owned =
-    scope === 'read_scope'
-      ? await scopedWhere(ctx, id)
-      : and(
-          eq(journalEntries.id, id),
-          isNull(journalEntries.deletedAt),
-          journalSelfScopeWhere(ctx, authorPersonId),
-        )!
-  return mutation === 'edit' && requireDraft
-    ? and(owned, eq(journalEntries.status, 'draft'), isNull(journalEntries.lockedAt))!
-    : owned
-}
-
-function validDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const date = new Date(`${value}T00:00:00.000Z`)
-  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
-}
-
 // ---- create -----------------------------------------------------------------
 
 const NO_AUTHOR_IDENTITY =
@@ -129,7 +75,7 @@ export async function createEntryForDate(
 ): Promise<ActionOk<{ entry: JournalEntryDetail }> | ActionErr> {
   const ctx = await requireRequestContext()
   if (!canCreateJournal(ctx)) return { ok: false, error: 'You cannot create journal entries.' }
-  if (dateISO !== undefined && (typeof dateISO !== 'string' || !validDate(dateISO))) {
+  if (dateISO !== undefined && (typeof dateISO !== 'string' || !isJournalDate(dateISO))) {
     return { ok: false, error: 'Choose a valid journal date.' }
   }
   const id = await getOrCreateEntryForDate(ctx, dateISO)
@@ -143,17 +89,9 @@ export async function createEntryForDate(
 export async function unlockEntry(id: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
   // Author edit permission is required even when the entry is visible to a team.
-  const scope = journalMutationScope(ctx, 'edit')
-  if (scope === 'none' || !isUuid(id))
+  if (journalMutationScope(ctx, 'edit') === 'none' || !isUuid(id))
     return { ok: false, error: 'You cannot unlock this journal.' }
-  const owned =
-    scope === 'read_scope'
-      ? await scopedWhere(ctx, id)
-      : and(
-          eq(journalEntries.id, id),
-          isNull(journalEntries.deletedAt),
-          journalSelfScopeWhere(ctx, await getAuthorPersonId(ctx)),
-        )!
+  const owned = await journalMutationWhere(ctx, id, 'edit', { requireDraft: false })
   const changed = await ctx.db(async (tx) => {
     const [entry] = await tx
       .update(journalEntries)
@@ -176,127 +114,9 @@ export async function unlockEntry(id: string): Promise<ActionOk | ActionErr> {
   return { ok: true }
 }
 
-// ---- update (autosave) ------------------------------------------------------
-
-export async function updateEntry(input: {
-  id: string
-  patch: EntryPatch
-}): Promise<ActionOk<{ updatedAt: string }> | ActionErr> {
-  const ctx = await requireRequestContext()
-  if (
-    !input ||
-    typeof input !== 'object' ||
-    !isUuid(input.id) ||
-    !input.patch ||
-    typeof input.patch !== 'object'
-  ) {
-    return { ok: false, error: 'Invalid journal update.' }
-  }
-  const { id, patch } = input
-
-  const values: Record<string, unknown> = {}
-  let cleanTags: string[] | undefined
-  if (patch.bodyHtml !== undefined) {
-    if (typeof patch.bodyHtml !== 'string' || patch.bodyHtml.length > 1_000_000) {
-      return { ok: false, error: 'Journal content is invalid or too large.' }
-    }
-    // Server-side sanitisation — this action accepts arbitrary strings, so never
-    // trust the client editor. Shared allow-list sanitiser (same as Documents)
-    // strips scripts/event handlers while keeping every TipTap node and mark.
-    const clean = sanitizeDocumentHtml(patch.bodyHtml)
-    values.bodyHtml = clean
-    values.bodyText = htmlToText(clean)
-  }
-  if (patch.definition !== undefined) {
-    if (patch.definition !== 'worker' && patch.definition !== 'supervisor') {
-      return { ok: false, error: 'Invalid journal definition.' }
-    }
-    values.definition = patch.definition
-  }
-  if (patch.siteOrgUnitId !== undefined) {
-    if (patch.siteOrgUnitId && !isUuid(patch.siteOrgUnitId)) {
-      return { ok: false, error: 'Invalid site.' }
-    }
-    values.siteOrgUnitId = patch.siteOrgUnitId || null
-  }
-  if (patch.supervisorPersonId !== undefined) {
-    if (patch.supervisorPersonId && !isUuid(patch.supervisorPersonId)) {
-      return { ok: false, error: 'Invalid supervisor.' }
-    }
-    values.supervisorPersonId = patch.supervisorPersonId || null
-  }
-  if (patch.entryDate !== undefined) {
-    if (!validDate(patch.entryDate)) return { ok: false, error: 'Invalid journal date.' }
-    values.entryDate = patch.entryDate
-  }
-  if (patch.tags !== undefined) {
-    cleanTags = normalizeJournalTags(patch.tags) ?? undefined
-    if (!cleanTags) return { ok: false, error: 'Invalid journal tags.' }
-    values.tagsCache = cleanTags
-  }
-  if (Object.keys(values).length === 0) return { ok: false, error: 'Nothing to update.' }
-
-  const where = await mutationWhere(ctx, id, 'edit')
-  const [row] = await ctx.db(async (tx) => {
-    if (typeof values.siteOrgUnitId === 'string') {
-      const [site] = await tx
-        .select({ id: orgUnits.id })
-        .from(orgUnits)
-        .where(and(eq(orgUnits.id, values.siteOrgUnitId), isNull(orgUnits.deletedAt)))
-        .limit(1)
-      if (!site) return []
-    }
-    if (typeof values.supervisorPersonId === 'string') {
-      const [supervisor] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.id, values.supervisorPersonId), activePeopleWhere()))
-        .limit(1)
-      if (!supervisor) return []
-    }
-    const rows = await tx
-      .update(journalEntries)
-      .set(values)
-      .where(where)
-      .returning({ updatedAt: journalEntries.updatedAt })
-    if (!rows[0]) return []
-    if (cleanTags) {
-      await tx.delete(journalEntryTags).where(eq(journalEntryTags.entryId, id))
-      if (cleanTags.length > 0) {
-        await tx.insert(journalEntryTags).values(
-          cleanTags.map((tag) => ({
-            tenantId: ctx.tenantId,
-            entryId: id,
-            tag,
-            source: 'user' as const,
-          })),
-        )
-      }
-    }
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'journal_entry',
-      entityId: id,
-      action: 'update',
-      summary: 'Autosaved journal entry',
-      metadata: { fields: Object.keys(values) },
-    })
-    if (values.entryDate !== undefined) {
-      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
-        sourceModule: 'journal',
-        targetRef: {},
-      })
-    }
-    return rows
-  })
-  if (!row) return { ok: false, error: 'Entry not found.' }
-  // Autosave is high-frequency — the client owns optimistic state, so we skip
-  // revalidatePath here to avoid thrashing the route cache.
-  return { ok: true, updatedAt: row.updatedAt.toISOString() }
-}
-
 export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
-  const where = await mutationWhere(ctx, id, 'submit')
+  const where = await journalMutationWhere(ctx, id, 'submit')
   const submittedAt = new Date()
   // Draft guard: re-submitting (double-click, replayed request) must not reset
   // submittedAt or re-fire flows / integrations / AI for the same submission.
@@ -379,7 +199,7 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
 
 export async function deleteEntry(id: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
-  const where = await mutationWhere(ctx, id, 'edit', false)
+  const where = await journalMutationWhere(ctx, id, 'edit', { requireDraft: false })
   const [row] = await ctx.db(async (tx) => {
     const rows = await tx
       .update(journalEntries)
@@ -422,7 +242,7 @@ async function applyEntryAi(ctx: RequestContext, id: string): Promise<EntryMetaR
   const aiConfig = await getTenantAiConfig(ctx)
   if (!aiConfig) return null
 
-  const where = await scopedWhere(ctx, id)
+  const where = await journalReadWhere(ctx, id)
   const [entry] = await ctx.db((tx) =>
     tx.select({ bodyText: journalEntries.bodyText }).from(journalEntries).where(where).limit(1),
   )
@@ -488,7 +308,7 @@ export async function attachJournalPhotos(input: {
   }
   const attachmentIds = Array.from(new Set(input.attachmentIds))
   if (attachmentIds.length === 0) return { ok: true, photoIds: [] }
-  const where = await mutationWhere(ctx, input.entryId, 'edit')
+  const where = await journalMutationWhere(ctx, input.entryId, 'edit')
 
   const ids = await ctx.db(async (tx) => {
     const [e] = await tx
@@ -555,7 +375,7 @@ export async function removeJournalPhoto(photoId: string): Promise<ActionOk | Ac
 
   // Visibility check on the parent entry — a photo id alone must never allow
   // mutating another user's journal.
-  const where = await mutationWhere(ctx, photo.entryId, 'edit')
+  const where = await journalMutationWhere(ctx, photo.entryId, 'edit')
   const done = await ctx.db(async (tx) => {
     const [e] = await tx
       .select({ id: journalEntries.id })
@@ -592,7 +412,7 @@ export async function reorderJournalPhotos(
   ) {
     return { ok: false, error: 'Photo order is invalid.' }
   }
-  const where = await mutationWhere(ctx, entryId, 'edit')
+  const where = await journalMutationWhere(ctx, entryId, 'edit')
   const changed = await ctx.db(async (tx) => {
     const [entry] = await tx
       .select({ id: journalEntries.id })
@@ -664,7 +484,7 @@ export async function updateJournalPhoto(
     return photo ?? null
   })
   if (!photoHead) return { ok: false, error: 'Photo not found.' }
-  const where = await mutationWhere(ctx, photoHead.entryId, 'edit')
+  const where = await journalMutationWhere(ctx, photoHead.entryId, 'edit')
   const changed = await ctx.db(async (tx) => {
     const [photo] = await tx
       .select({
@@ -741,7 +561,7 @@ export async function describeJournalPhoto(
 
   // Visibility check on the parent entry before mutating it (or spending AI
   // budget) — mirrors attachJournalPhotos / removeJournalPhoto.
-  const where = await mutationWhere(ctx, photo.entryId, 'edit')
+  const where = await journalMutationWhere(ctx, photo.entryId, 'edit')
   const visible = await ctx.db(async (tx) => {
     const [e] = await tx
       .select({ id: journalEntries.id })
@@ -883,7 +703,7 @@ export async function emailEntry(id: string): Promise<ActionOk<{ sent: number }>
   if (!canEmailJournal(ctx)) {
     return { ok: false, error: 'You cannot email journal entries.' }
   }
-  const where = await mutationWhere(ctx, id, 'submit')
+  const where = await journalMutationWhere(ctx, id, 'submit')
   const [visible] = await ctx.db((tx) =>
     tx.select({ id: journalEntries.id }).from(journalEntries).where(where).limit(1),
   )

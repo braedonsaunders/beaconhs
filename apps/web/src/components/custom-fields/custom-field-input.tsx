@@ -7,12 +7,12 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 
-// Always-editable, auto-saving input for a single custom field — the
-// custom-field counterpart of <LiveField>. Saves through the generic
-// `updateCustomFieldValueAction` (entityKind + id + key + value). Renders the
+// Always-editable input for a single custom field — the custom-field
+// counterpart of <LiveField>. Local-first like every record field: it binds
+// to the record's <OfflineRecordProvider> as `custom:<key>`, and the host
+// module's saver applies it (see @/lib/custom-fields/record-op). Renders the
 // right control per field type; a status dot mirrors the rest of the app.
 
-import { useEffect, useRef, useState } from 'react'
 import { Star } from 'lucide-react'
 import { Input, Select, Textarea, cn } from '@beaconhs/ui'
 import {
@@ -22,7 +22,10 @@ import {
   type CustomFieldEntityKind,
   type CustomFieldType,
 } from '@beaconhs/forms-core'
-import { SaveDot, useAutoSave, type SaveState } from '@/components/live-field'
+import { SaveDot } from '@/components/live-field'
+import { RecordFieldError } from '@/components/record-field-error'
+import { customFieldOpKey, customFieldWireValue } from '@/lib/custom-fields/wire'
+import { useRecordField, type RecordFieldHandle } from '@/lib/offline-drafts/offline-record'
 
 type CustomFieldInputDef = {
   key: string
@@ -35,42 +38,18 @@ type CustomFieldInputDef = {
 
 export function CustomFieldInput({
   entityKind,
-  recordId,
   def,
   initialValue,
   disabled,
-  updateAction,
 }: {
   entityKind: CustomFieldEntityKind
-  recordId: string
   def: CustomFieldInputDef
   initialValue: unknown
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
-  // Last successfully persisted value (text-like controls only) — advanced in
-  // onSaved so a failed save keeps the field dirty and retry works.
-  const baseline = useRef(
-    typeof initialValue === 'string' || typeof initialValue === 'number'
-      ? String(initialValue)
-      : '',
-  )
-  const { state, setState, save, retry, hasPending } = useAutoSave({
-    prepare: (value) => {
-      const fd = new FormData()
-      fd.set('entityKind', entityKind)
-      fd.set('id', recordId)
-      fd.set('key', def.key)
-      fd.set('value', value)
-      return fd
-    },
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v
-    },
-  })
-
+  const f = useRecordField(customFieldOpKey(def.key), customFieldWireValue(def, initialValue))
   const meta = CUSTOM_FIELD_TYPE_META[def.fieldType]
+  const off = disabled || f.paused
 
   return (
     <div className="space-y-1">
@@ -79,27 +58,14 @@ export function CustomFieldInput({
           <GeneratedValue value={def.label} />
           <GeneratedValue value={def.required ? <span className="text-red-600"> *</span> : null} />
         </label>
-        <SaveDot state={state} onRetry={retry} />
+        <SaveDot state={f.saveState} error={f.error} onRetry={f.retry} />
       </div>
       {entityKind === 'equipment' && def.key === 'condition' ? (
-        <ConditionRating
-          initialValue={initialValue}
-          disabled={disabled}
-          persist={save}
-          hasPending={hasPending}
-        />
+        <ConditionRating field={f} disabled={off} />
       ) : (
-        <Control
-          def={def}
-          meta={meta}
-          disabled={disabled}
-          initialValue={initialValue}
-          setState={setState}
-          persist={save}
-          baseline={baseline}
-          hasPending={hasPending}
-        />
+        <Control def={def} meta={meta} disabled={off} field={f} />
       )}
+      <RecordFieldError error={f.error} />
       <GeneratedValue
         value={
           def.helpText ? (
@@ -113,99 +79,42 @@ export function CustomFieldInput({
   )
 }
 
-// Dispatcher only — no hooks here, so each concrete control owns its own state
-// and hooks run unconditionally (rules-of-hooks).
+// Dispatcher only — no hooks here, so each concrete control renders
+// unconditionally (rules-of-hooks).
 function Control({
   def,
   meta,
   disabled,
-  initialValue,
-  setState,
-  persist,
-  baseline,
-  hasPending,
+  field,
 }: {
   def: CustomFieldInputDef
   meta: (typeof CUSTOM_FIELD_TYPE_META)[CustomFieldType]
-  disabled?: boolean
-  initialValue: unknown
-  setState: (s: SaveState) => void
-  persist: (value: string) => void
-  baseline: { current: string }
-  hasPending: () => boolean
+  disabled: boolean
+  field: RecordFieldHandle<string>
 }) {
   switch (def.fieldType) {
     case 'select':
-      return (
-        <SelectControl
-          def={def}
-          disabled={disabled}
-          initialValue={initialValue}
-          persist={persist}
-        />
-      )
+      return <SelectControl def={def} disabled={disabled} field={field} />
     case 'multi_select':
-      return (
-        <MultiSelectControl
-          def={def}
-          disabled={disabled}
-          initialValue={initialValue}
-          persist={persist}
-        />
-      )
+      return <MultiSelectControl def={def} disabled={disabled} field={field} />
     case 'boolean':
-      return (
-        <BooleanControl
-          def={def}
-          disabled={disabled}
-          initialValue={initialValue}
-          persist={persist}
-        />
-      )
+      return <BooleanControl def={def} disabled={disabled} field={field} />
     default:
-      return (
-        <TextLikeControl
-          def={def}
-          meta={meta}
-          disabled={disabled}
-          initialValue={
-            typeof initialValue === 'string' || typeof initialValue === 'number'
-              ? String(initialValue)
-              : ''
-          }
-          setState={setState}
-          persist={persist}
-          baseline={baseline}
-          hasPending={hasPending}
-        />
-      )
+      return <TextLikeControl def={def} meta={meta} disabled={disabled} field={field} />
   }
 }
 
 function SelectControl({
   def,
   disabled,
-  initialValue,
-  persist,
+  field,
 }: {
   def: CustomFieldInputDef
-  disabled?: boolean
-  initialValue: unknown
-  persist: (value: string) => void
+  disabled: boolean
+  field: RecordFieldHandle<string>
 }) {
-  const allowed = new Set((def.config?.options ?? []).map((option) => option.value))
-  const [value, setValue] = useState(
-    typeof initialValue === 'string' && allowed.has(initialValue) ? initialValue : '',
-  )
   return (
-    <Select
-      value={value}
-      disabled={disabled}
-      onChange={(e) => {
-        setValue(e.target.value)
-        persist(e.target.value)
-      }}
-    >
+    <Select value={field.value} disabled={disabled} onChange={(e) => field.commit(e.target.value)}>
       <option value="">{'— None —'}</option>
       {(def.config?.options ?? []).map((o) => (
         <option key={o.value} value={o.value}>
@@ -216,28 +125,30 @@ function SelectControl({
   )
 }
 
+function parseSelection(wire: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(wire)
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
+
 function MultiSelectControl({
   def,
   disabled,
-  initialValue,
-  persist,
+  field,
 }: {
   def: CustomFieldInputDef
-  disabled?: boolean
-  initialValue: unknown
-  persist: (value: string) => void
+  disabled: boolean
+  field: RecordFieldHandle<string>
 }) {
-  const allowed = new Set((def.config?.options ?? []).map((option) => option.value))
-  const initial = Array.isArray(initialValue)
-    ? (initialValue as unknown[]).filter(
-        (value): value is string => typeof value === 'string' && allowed.has(value),
-      )
-    : []
-  const [selected, setSelected] = useState<string[]>(initial)
+  const selected = parseSelection(field.value)
   function toggle(v: string) {
     const next = selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]
-    setSelected(next)
-    persist(JSON.stringify(next))
+    field.commit(JSON.stringify(next))
   }
   return (
     <div className="flex flex-wrap gap-2">
@@ -270,16 +181,14 @@ function MultiSelectControl({
 function BooleanControl({
   def,
   disabled,
-  initialValue,
-  persist,
+  field,
 }: {
   def: CustomFieldInputDef
-  disabled?: boolean
-  initialValue: unknown
-  persist: (value: string) => void
+  disabled: boolean
+  field: RecordFieldHandle<string>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const [on, setOn] = useState(initialValue === true)
+  const on = field.value === 'true'
   return (
     <button
       type="button"
@@ -287,11 +196,7 @@ function BooleanControl({
       aria-checked={on}
       aria-label={tGeneratedValue(def.label)}
       disabled={disabled}
-      onClick={() => {
-        const next = !on
-        setOn(next)
-        persist(next ? 'true' : 'false')
-      }}
+      onClick={() => field.commit(on ? 'false' : 'true')}
       className={cn(
         'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
         on ? 'bg-teal-600' : 'bg-slate-300 dark:bg-slate-700',
@@ -311,62 +216,25 @@ function TextLikeControl({
   def,
   meta,
   disabled,
-  initialValue,
-  setState,
-  persist,
-  baseline,
-  hasPending,
+  field,
 }: {
   def: CustomFieldInputDef
   meta: (typeof CUSTOM_FIELD_TYPE_META)[CustomFieldType]
-  disabled?: boolean
-  initialValue: string
-  setState: (s: SaveState) => void
-  persist: (value: string) => void
-  baseline: { current: string }
-  hasPending: () => boolean
+  disabled: boolean
+  field: RecordFieldHandle<string>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const [value, setValue] = useState(initialValue)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (timer.current) clearTimeout(timer.current)
-    }
-  }, [])
-
-  function commit(next: string) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-    }
-    // Baseline only advances after a successful save (in the parent's onSaved),
-    // so a failed save stays retryable instead of dead-ending on this check.
-    if (next === baseline.current && !hasPending()) {
-      setState('idle')
-      return
-    }
-    persist(next)
-  }
-
-  function onChange(next: string) {
-    setValue(next)
-    setState('dirty')
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => commit(next), 1000)
-  }
 
   if (def.fieldType === 'textarea') {
     return (
       <Textarea
         rows={3}
-        value={value}
+        value={field.value}
         disabled={disabled}
         placeholder={tGeneratedValue(def.config?.placeholder ?? undefined)}
         maxLength={CUSTOM_FIELD_LIMITS.textarea}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => commit(value)}
+        onChange={(e) => field.change(e.target.value)}
+        onBlur={() => field.commit()}
       />
     )
   }
@@ -389,7 +257,7 @@ function TextLikeControl({
   const input = (
     <Input
       type={inputType}
-      value={value}
+      value={field.value}
       disabled={disabled}
       placeholder={tGeneratedValue(def.config?.placeholder ?? undefined)}
       min={meta.supportsRange ? (def.config?.min ?? undefined) : undefined}
@@ -406,8 +274,8 @@ function TextLikeControl({
                 ? CUSTOM_FIELD_LIMITS.text
                 : undefined
       }
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={() => commit(value)}
+      onChange={(e) => field.change(e.target.value)}
+      onBlur={() => field.commit()}
     />
   )
 
@@ -428,22 +296,14 @@ function TextLikeControl({
 }
 
 function ConditionRating({
-  initialValue,
+  field,
   disabled,
-  persist,
-  hasPending,
 }: {
-  initialValue: unknown
-  disabled?: boolean
-  persist: (value: string) => void
-  hasPending: () => boolean
+  field: RecordFieldHandle<string>
+  disabled: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
-
-  const [value, setValue] = useState(Number(initialValue))
-  useEffect(() => {
-    if (!hasPending()) setValue(Number(initialValue))
-  }, [initialValue, hasPending])
+  const value = Number(field.value)
   const rating = Number.isInteger(value) && value >= 1 && value <= 5 ? value : 0
   return (
     <div
@@ -459,10 +319,7 @@ function ConditionRating({
           aria-label={tGenerated('m_142c6ad32d860b', { value0: stars })}
           aria-pressed={rating === stars}
           className="rounded p-1.5 text-amber-500 focus-visible:outline focus-visible:outline-2 disabled:cursor-default"
-          onClick={() => {
-            setValue(stars)
-            persist(String(stars))
-          }}
+          onClick={() => field.commit(String(stars))}
         >
           <Star size={24} fill={stars <= rating ? 'currentColor' : 'none'} />
         </button>

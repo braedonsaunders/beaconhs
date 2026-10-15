@@ -3,11 +3,8 @@
 // UTC calendar-month addition with end-of-month clamping (Jan 31 + 1 month →
 // Feb 28, never Mar 3). Used by class completion, LMS completion, assessment
 // passes, renewals, and the bulk renew action — one formula, no drift.
-
-/** Today's date as an ISO `YYYY-MM-DD` string (UTC). */
-export function isoToday(): string {
-  return new Date().toISOString().slice(0, 10)
-}
+// "Today" for a new or renewed record is the worker's local date:
+// `dateIsoInTimeZone(new Date(), ctx.timezone)` from @/lib/datetime.
 
 /** Add calendar months to an ISO `YYYY-MM-DD` date (UTC, month-end clamped). */
 export function addMonthsIso(iso: string, months: number): string {

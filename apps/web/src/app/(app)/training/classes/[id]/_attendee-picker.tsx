@@ -13,6 +13,7 @@ import { Loader2, Plus } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { toast } from '@/lib/toast'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 
 export function ClassAttendeePicker({
   classId,
@@ -27,25 +28,28 @@ export function ClassAttendeePicker({
   const [personId, setPersonId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function add() {
     if (!personId) return
     setError(tGeneratedValue(null))
     startTransition(async () => {
-      const formData = new FormData()
-      formData.set('classId', classId)
-      formData.set('personId', personId)
-      try {
-        await action(formData)
-        setPersonId('')
-        toast.success(tGenerated('m_1c05cbdad6fc70'))
-        router.refresh()
-      } catch (actionError) {
-        const message =
-          actionError instanceof Error ? actionError.message : 'Could not add attendee.'
-        setError(tGeneratedValue(message))
-        toast.error(tGeneratedValue(message))
-      }
+      await runOnline('finish', async () => {
+        const formData = new FormData()
+        formData.set('classId', classId)
+        formData.set('personId', personId)
+        try {
+          await action(formData)
+          setPersonId('')
+          toast.success(tGenerated('m_1c05cbdad6fc70'))
+          router.refresh()
+        } catch (actionError) {
+          const message =
+            actionError instanceof Error ? actionError.message : 'Could not add attendee.'
+          setError(tGeneratedValue(message))
+          toast.error(tGeneratedValue(message))
+        }
+      })
     })
   }
 

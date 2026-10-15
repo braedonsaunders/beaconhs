@@ -101,10 +101,10 @@ export default async function InspectionRecordsPage({
   const signedFilter = pickString(sp.signed) // 'yes' | 'no'
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
-  const dateFrom = parseDateFilter(dateFromRaw, 'start')
-  const dateTo = parseDateFilter(dateToRaw, 'end')
   const drawerKey = pickString(sp.drawer)
   const ctx = await requireRequestContext()
+  const dateFrom = parseDateFilter(dateFromRaw, 'start', ctx.timezone)
+  const dateTo = parseDateFilter(dateToRaw, 'end', ctx.timezone)
   assertCan(ctx, 'inspections.read.self')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'inspections.read.self')
 

@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   clear: vi.fn(),
   remove: vi.fn(),
   confirm: vi.fn(),
+  offline: false,
+  runOnline: vi.fn(),
 }))
 vi.mock('./_signing-actions', () => ({
   addSigningCrew: mocks.add,
@@ -22,7 +24,9 @@ vi.mock('./_signing-actions', () => ({
   removeSigningCrew: mocks.remove,
 }))
 vi.mock('@/lib/confirm', () => ({ confirmDialog: mocks.confirm }))
-vi.mock('@/lib/pending-record-saves', () => ({ flushRecordSaves: async () => {} }))
+vi.mock('@/lib/offline-drafts/use-online-action', () => ({
+  useOnlineAction: () => mocks.runOnline,
+}))
 vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), info: vi.fn() } }))
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
@@ -94,6 +98,13 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+  // Like useOnlineAction: offline the step never runs; online it runs.
+  mocks.offline = false
+  mocks.runOnline.mockImplementation(async (_purpose: string, run: () => Promise<void>) => {
+    if (mocks.offline) return false
+    await run()
+    return true
+  })
   roster = {
     rows: [],
     total: 0,
@@ -314,4 +325,29 @@ it('does not expose signature mutations to readers', async () => {
   expect(button('Clear')).toBeUndefined()
   expect(button('Sign')).toBeUndefined()
   expect(button('Request')).toBeUndefined()
+})
+it('runs no crew or signature step without signal and closes the signature drawer', async () => {
+  await signedCrew()
+  roster.rows[1]!.signedAt = null
+  roster.rows[1]!.image = null
+  roster.signed = 1
+  await render()
+  mocks.offline = true
+  await act(async () => button('Sign').click())
+  expect(mocks.collect).not.toHaveBeenCalled()
+  expect(container.querySelector('[role=dialog]')).toBeNull()
+  await act(async () => button('Request').click())
+  await act(async () => button('Clear').click())
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Remove"]')!.click(),
+  )
+  await search(persons[5]!.label)
+  await act(async () => button(persons[5]!.label).click())
+  expect(mocks.request).not.toHaveBeenCalled()
+  expect(mocks.clear).not.toHaveBeenCalled()
+  expect(mocks.remove).not.toHaveBeenCalled()
+  // The only add was the fixture's direct call.
+  expect(mocks.add).toHaveBeenCalledTimes(1)
+  expect(mocks.runOnline).toHaveBeenCalledWith('finish', expect.any(Function))
+  expect(container.textContent).not.toContain('Worker 06Awaiting signature')
 })

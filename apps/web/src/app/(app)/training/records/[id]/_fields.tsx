@@ -32,21 +32,17 @@ const SOURCE_OPTIONS = [
 ]
 
 export function RecordDetailFields({
-  id,
   initial,
   options,
   disabled,
   personHref,
   courseHref,
-  updateAction,
 }: {
-  id: string
   initial: RecordFieldValues
   options: RecordFieldOptions
   disabled?: boolean
   personHref?: string | null
   courseHref?: string | null
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
   return (
@@ -60,7 +56,6 @@ export function RecordDetailFields({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1">
             <LiveRemoteSelect
-              id={id}
               field="personId"
               label={tGenerated('m_12e926c9216094')}
               initialValue={initial.personId}
@@ -68,7 +63,6 @@ export function RecordDetailFields({
               lookup="training-record-people"
               emptyLabel={tGenerated('m_0be39d3a196b5b')}
               disabled={disabled}
-              updateAction={updateAction}
             />
             <GeneratedValue
               value={
@@ -85,7 +79,6 @@ export function RecordDetailFields({
           </div>
           <div className="space-y-1">
             <LiveRemoteSelect
-              id={id}
               field="courseId"
               label={tGenerated('m_14fc1e0739b60e')}
               initialValue={initial.courseId}
@@ -93,7 +86,6 @@ export function RecordDetailFields({
               initialOption={options.course}
               lookup="training-record-courses"
               disabled={disabled}
-              updateAction={updateAction}
             />
             <GeneratedValue
               value={
@@ -111,72 +103,58 @@ export function RecordDetailFields({
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <LiveField
-            id={id}
             field="completedOn"
             label={tGenerated('m_0afe74d8f3d4ea')}
             type="date"
             initialValue={initial.completedOn}
             disabled={disabled}
-            updateAction={updateAction}
           />
           <LiveField
-            id={id}
             field="expiresOn"
             label={tGenerated('m_001b29133dcb72')}
             type="date"
             initialValue={initial.expiresOn}
             disabled={disabled}
-            updateAction={updateAction}
           />
           <LiveSelect
-            id={id}
             field="source"
             label={tGenerated('m_1d05fa7a091a9b')}
             initialValue={initial.source}
             allowEmpty={false}
             options={SOURCE_OPTIONS}
             disabled={disabled}
-            updateAction={updateAction}
           />
           <LiveField
-            id={id}
             field="grade"
             label={tGenerated('m_1f58a1228c4406')}
             type="number"
             initialValue={initial.grade}
             placeholder={tGenerated('m_0cadbe8ae1ae4e')}
             disabled={disabled}
-            updateAction={updateAction}
           />
         </div>
         <LiveField
-          id={id}
           field="instructor"
           label={tGenerated('m_0797e9a65b95e2')}
           initialValue={initial.instructor}
           placeholder={tGenerated('m_0db9a712b0e09a')}
           disabled={disabled}
-          updateAction={updateAction}
         />
         <LiveField
-          id={id}
           field="details"
           label={tGenerated('m_1560d4e2a09d09')}
           initialValue={initial.details}
           multiline
           rows={3}
           disabled={disabled}
-          updateAction={updateAction}
         />
         <LiveField
-          id={id}
           field="notes"
           label={tGenerated('m_0b8dadcb78cd08')}
           initialValue={initial.notes}
           multiline
           rows={3}
           disabled={disabled}
-          updateAction={updateAction}
         />
       </CardContent>
     </Card>

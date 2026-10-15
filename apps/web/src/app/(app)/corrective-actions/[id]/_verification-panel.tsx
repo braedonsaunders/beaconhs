@@ -14,6 +14,7 @@ import { CheckCircle2, ShieldCheck } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Button, Label, Textarea } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
 import { verifyCorrectiveAction } from '../_actions'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 
 /**
  * Verification tab body. Read-only display of an already-verified CA, plus a
@@ -22,18 +23,19 @@ import { verifyCorrectiveAction } from '../_actions'
  */
 export function VerificationPanel({
   caId,
-  verifiedAt,
+  verifiedAtLabel,
   verifierName,
   verificationNotes,
   locked,
 }: {
   caId: string
-  verifiedAt: Date | null
+  /** Sign-off time formatted in the tenant's timezone; null until verified. */
+  verifiedAtLabel: string | null
   verifierName: string | null
   verificationNotes: string | null
   locked: boolean
 }) {
-  if (verifiedAt) {
+  if (verifiedAtLabel) {
     return (
       <div className="space-y-4">
         <Alert>
@@ -48,7 +50,7 @@ export function VerificationPanel({
             </strong>{' '}
             <GeneratedText id="m_17414f59d8f567" />
             <GeneratedValue value={' '} />
-            <GeneratedValue value={verifiedAt.toLocaleString()} />.
+            <GeneratedValue value={verifiedAtLabel} />.
           </AlertDescription>
         </Alert>
         <GeneratedValue
@@ -124,6 +126,7 @@ export function VerifyBody({
   const [notes, setNotes] = useState(initialNotes ?? '')
   const [sig, setSig] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
   const [error, setError] = useState<string | null>(null)
 
   function submit() {
@@ -133,17 +136,19 @@ export function VerifyBody({
       return
     }
     start(async () => {
-      const res = await verifyCorrectiveAction({
-        caId,
-        notes,
-        signatureDataUrl: sig,
+      await runOnline('finish', async () => {
+        const res = await verifyCorrectiveAction({
+          caId,
+          notes,
+          signatureDataUrl: sig,
+        })
+        if (!res.ok) {
+          setError(tGeneratedValue(res.error))
+          return
+        }
+        router.push(closeHref as any)
+        router.refresh()
       })
-      if (!res.ok) {
-        setError(tGeneratedValue(res.error))
-        return
-      }
-      router.push(closeHref as any)
-      router.refresh()
     })
   }
 

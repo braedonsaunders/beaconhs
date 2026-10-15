@@ -143,6 +143,15 @@ afterEach(async () => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
+/** Type into a controlled input the way a browser does (React listens for `input`). */
+async function typeInto(input: HTMLInputElement, value: string) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => {
+    setValue.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
 describe('inspection creation', () => {
   it('loads supervisors with the inspection capability and keeps PPE answers and notes after failure', async () => {
     state.submitPpe.mockResolvedValue({ error: 'Inspection cannot be recorded yet' })
@@ -179,7 +188,7 @@ describe('inspection creation', () => {
       container.querySelector<HTMLInputElement>('input[type="radio"][value="pass"]')!.click(),
     )
     const notes = container.querySelector<HTMLInputElement>('input[name="notes"]')!
-    notes.value = 'Keep these notes'
+    await typeInto(notes, 'Keep these notes')
     await act(async () =>
       container
         .querySelector('form')!
@@ -238,8 +247,14 @@ describe('inspection creation', () => {
           new URL(url, 'http://localhost').searchParams.get('lookup') === 'ppe-inspection-sites',
       ),
     ).toBe(true)
-    container.querySelector<HTMLInputElement>('input[name="serialNumber"]')!.value = 'H-2210'
-    container.querySelector<HTMLInputElement>('input[name="suppliedBy"]')!.value = 'Sunbelt Rentals'
+    await typeInto(
+      container.querySelector<HTMLInputElement>('input[name="serialNumber"]')!,
+      'H-2210',
+    )
+    await typeInto(
+      container.querySelector<HTMLInputElement>('input[name="suppliedBy"]')!,
+      'Sunbelt Rentals',
+    )
     await act(async () =>
       container.querySelector<HTMLInputElement>('input[type="radio"][value="pass"]')!.click(),
     )

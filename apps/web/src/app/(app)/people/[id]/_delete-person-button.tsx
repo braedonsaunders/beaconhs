@@ -1,11 +1,11 @@
 'use client'
 
 import { useTransition } from 'react'
-import { unstable_rethrow, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
-import { flushRecordSaves } from '@/lib/pending-record-saves'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { toast } from '@/lib/toast'
 import { useGeneratedValueTranslations } from '@/i18n/generated'
 import { deletePerson } from '../_actions/people'
@@ -14,6 +14,7 @@ export function DeletePersonButton({ id, synced }: { id: string; synced: boolean
   const router = useRouter()
   const translate = useGeneratedValueTranslations()
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
   const blocked = translate(
     'This person is managed by an external sync. Remove them in the source system.',
   )
@@ -36,22 +37,16 @@ export function DeletePersonButton({ id, synced }: { id: string; synced: boolean
             tone: 'danger',
           })
           if (!confirmed) return
-          try {
-            await flushRecordSaves()
+          // Online only: pushes this page's queued edits first, and refuses
+          // with a plain message when there is no signal.
+          await runOnline('finish', async () => {
             const result = await deletePerson(id)
             if (!result.ok) {
               toast.error(translate(result.error))
               return
             }
             router.push('/people')
-          } catch (error) {
-            unstable_rethrow(error)
-            toast.error(
-              error instanceof Error
-                ? translate(error.message)
-                : translate('Person could not be deleted.'),
-            )
-          }
+          })
         })
       }}
     >

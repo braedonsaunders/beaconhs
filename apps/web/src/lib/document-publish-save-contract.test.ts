@@ -56,14 +56,20 @@ describe('document publish save contract', () => {
     expect(contents).not.toContain('clientStamp !== currentStamp')
   })
 
-  it('does not snapshot a version until the editor save completes', () => {
+  it('does not snapshot a version until the metadata and editor saves complete', () => {
     const save = pane.indexOf('await editor.save()')
-    const metadataSave = pane.indexOf('await flushRecordSaves()')
+    // useOnlineAction pushes every mounted record's queued edits (the
+    // Overview metadata) before it runs the step, and refuses offline.
+    const metadataSave = pane.indexOf("await runOnline('finish', async () => {")
     const publish = pane.indexOf('await publishDocumentVersion(documentId, changelog)')
+    expect(pane).toContain('const runOnline = useOnlineAction()')
     expect(save).toBeGreaterThanOrEqual(0)
     expect(metadataSave).toBeGreaterThanOrEqual(0)
     expect(metadataSave).toBeLessThan(save)
     expect(publish).toBeGreaterThan(save)
+    // The Overview's record provider wraps the whole authoring workspace, so
+    // its queued edits stay registered with the barrier on every tab.
+    expect(layout).toContain('<OfflineRecordProvider module="documents" recordId={id}>')
   })
 
   it('keeps the document navigation rail from flex-shrinking during refresh', () => {

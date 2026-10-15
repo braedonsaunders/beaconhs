@@ -1,11 +1,12 @@
-// Outbound sync queue for local-first form drafts.
+// Outbound sync queue for local-first drafts and record edits.
 //
-// One engine per browser tab (see `getDraftSyncEngine`). It owns every draft
-// key's in-memory work (see model.ts), writes unsynced work to the device
-// store, and delivers it to the server with retry + backoff. A key's queue is
-// always its latest state: a whole-draft snapshot replaces the previous one,
-// and record-page field edits coalesce into one patch per field. The server
-// rejects anything stale that was already in flight.
+// One engine per browser tab (see `getDraftSyncEngine`). It owns every key's
+// in-memory work (see model.ts), writes unsynced work to the device store,
+// and delivers it to the server with retry + backoff. A key's queue is always
+// its latest state: a whole-draft snapshot replaces the previous one, and
+// record-page field edits (Builder records and every native module record)
+// coalesce into one patch per field. The server rejects anything stale that
+// was already in flight.
 //
 // Cross-tab safety: a mounted form holds a Web Lock on its draft key, and the
 // background drain only touches keys whose lock it can take, so two tabs
@@ -16,11 +17,18 @@
 import {
   acknowledge,
   applyFieldResults,
+  clearRejections,
   dropFieldPatches,
+  fieldQueueStatus,
+  firstRejection,
+  noteKnownValue,
+  reconcileFieldPatch,
   hasFieldConflicts,
+  markPatchesSent,
   isSyncDue,
   pendingCount,
   rebaseFieldConflicts,
+  rejectOversizedPatches,
   recordFieldEdit,
   sendableFieldPatches,
   syncRetryDelayMs,
@@ -75,6 +83,7 @@ type Entry = {
 }
 
 const OFFLINE_ERROR = 'No connection. Changes are kept on this device.'
+const TOO_LARGE_ERROR = 'These changes are too large to save.'
 
 const IDLE_STATE: DraftSyncState = {
   storage: 'device',
@@ -124,6 +133,14 @@ export class DraftSyncEngine {
   private storageFailed = false
   private readonly storeReady: Promise<DraftStore>
   private readonly entries = new Map<string, Entry>()
+  /**
+   * The request running for each key, kept apart from the entry: a key's entry
+   * can be replaced (reopened, adopted by the background queue) while its
+   * request is still in flight, and the next attempt must wait for it.
+   */
+  private readonly inflight = new Map<string, Promise<FlushOutcome>>()
+  /** The latest device-store write, so callers can wait for it to commit. */
+  private lastStoreWrite: Promise<void> = Promise.resolve()
   private readonly listeners = new Map<string, Set<() => void>>()
   private readonly states = new Map<string, DraftSyncState>()
   private online: boolean
@@ -183,18 +200,32 @@ export class DraftSyncEngine {
     return entry ? structuredCloneWork(entry.work) : null
   }
 
+  /**
+   * One field's place in a record's queue, encoded as a string so React can
+   * compare snapshots cheaply: `none`, `pending`, `conflict`, or
+   * `rejected:<reason>`.
+   */
+  fieldStatus(key: string, fieldId: string): string {
+    const entry = this.entries.get(key)
+    const status = fieldQueueStatus(entry?.work.kind === 'fields' ? entry.work : null, fieldId)
+    return status.kind === 'rejected' ? `rejected:${status.error}` : status.kind
+  }
+
   private emit(key: string): void {
     const entry = this.entries.get(key)
     if (entry) {
       const pending = pendingCount(entry.work)
+      // A field the server refused keeps the record "not saved" until the
+      // worker changes it, without holding back the record's other fields.
+      const rejection = entry.work.kind === 'fields' ? firstRejection(entry.work) : null
       this.states.set(key, {
         storage: entry.persist ? this.storageKind : 'memory',
         offline: !this.online || (pending > 0 && entry.lastAttemptOffline),
         pending,
         syncing: entry.syncing !== null,
         lastSyncedAt: entry.lastSyncedAt,
-        error: entry.lastError,
-        blocked: entry.blocked,
+        error: entry.lastError ?? rejection,
+        blocked: entry.blocked ?? (rejection ? 'rejected' : null),
         closed: entry.closed,
       })
     } else {
@@ -222,11 +253,19 @@ export class DraftSyncEngine {
       this.storageFailed = true
       for (const key of this.entries.keys()) this.emit(key)
     }
-    if (this.store) {
-      run(this.store).catch(onError)
-    } else {
-      void this.storeReady.then((store) => run(store)).catch(onError)
-    }
+    const write = this.store
+      ? run(this.store).catch(onError)
+      : this.storeReady.then((store) => run(store)).catch(onError)
+    this.lastStoreWrite = write
+  }
+
+  /** Resolves once every device-store write issued so far has committed. */
+  async storeSettled(): Promise<void> {
+    let pending: Promise<void>
+    do {
+      pending = this.lastStoreWrite
+      await pending
+    } while (pending !== this.lastStoreWrite)
   }
 
   private toRecord(entry: Entry): OfflineDraftRecord {
@@ -315,7 +354,7 @@ export class DraftSyncEngine {
       lastAttemptOffline: false,
       blocked: opts.blocked ?? null,
       closed: false,
-      syncing: existing?.syncing ?? null,
+      syncing: null,
       lastSyncedAt: existing?.lastSyncedAt ?? null,
       timer: null,
     }
@@ -370,6 +409,24 @@ export class DraftSyncEngine {
     this.afterEdit(entry)
   }
 
+  /** One-shot form: keep its latest answers on the device (never synced). */
+  recordLocal(key: string, values: Record<string, unknown>): void {
+    const entry = this.entries.get(key)
+    if (!entry || entry.work.kind !== 'local') return
+    entry.work = { kind: 'local', sequence: entry.work.sequence + 1, values }
+    this.persistEntry(entry)
+    this.emit(key)
+  }
+
+  /** One-shot form submitted (or started over): forget its device copy. */
+  clearLocal(key: string): void {
+    const entry = this.entries.get(key)
+    if (!entry || entry.work.kind !== 'local') return
+    entry.work = { kind: 'local', sequence: entry.work.sequence + 1, values: null }
+    this.deleteStored(key)
+    this.emit(key)
+  }
+
   /** Fire-and-forget delivery of the latest work while the page hides. */
   beacon(key: string): void {
     const entry = this.entries.get(key)
@@ -385,15 +442,28 @@ export class DraftSyncEngine {
     entry.attempts = 0
     entry.nextAttemptAt = 0
     let outcome: FlushOutcome = { ok: true }
-    // Edits made while a save is in flight need one more round.
-    for (let round = 0; round < 3; round += 1) {
+    // Edits made while a save is in flight (or more patches than one request
+    // carries) need further rounds.
+    for (let round = 0; round < 5; round += 1) {
       outcome = await this.sync(key)
       if (!outcome.ok) return outcome
       const current = this.entries.get(key)
       if (!current || pendingCount(current.work) === 0) return { ok: true }
       if (current.blocked) return { ok: false, offline: false, error: current.lastError }
+      if (current.work.kind === 'fields') {
+        const rejection = firstRejection(current.work)
+        if (rejection) return { ok: false, offline: false, error: rejection }
+        if (hasFieldConflicts(current.work)) {
+          return { ok: false, offline: false, error: current.lastError }
+        }
+      }
     }
-    return outcome
+    // Still edits waiting after every round (the worker kept typing): the
+    // server does not hold everything yet, so a submit must not proceed.
+    const remaining = this.entries.get(key)
+    return remaining && pendingCount(remaining.work) > 0
+      ? { ok: false, offline: false, error: null }
+      : outcome
   }
 
   retry(key: string): void {
@@ -401,6 +471,9 @@ export class DraftSyncEngine {
     if (!entry || entry.blocked === 'conflict') return
     entry.blocked = null
     entry.lastError = null
+    if (entry.work.kind === 'fields') entry.work = clearRejections(entry.work)
+    this.persistEntry(entry)
+    this.emit(key)
     void this.flush(key)
   }
 
@@ -418,7 +491,7 @@ export class DraftSyncEngine {
         cursor: { ...entry.work.cursor, baseRevision },
         conflictRevision: null,
       }
-    } else {
+    } else if (entry.work.kind === 'fields') {
       entry.work = rebaseFieldConflicts(entry.work)
     }
     entry.blocked = null
@@ -426,6 +499,36 @@ export class DraftSyncEngine {
     this.persistEntry(entry)
     this.emit(key)
     void this.flush(key)
+  }
+
+  /** Record a server value the page now shows for a field with no pending edit. */
+  noteServerValue(key: string, fieldId: string, value: unknown): void {
+    const entry = this.entries.get(key)
+    if (!entry || entry.work.kind !== 'fields') return
+    entry.work = noteKnownValue(entry.work, fieldId, value)
+  }
+
+  /**
+   * A field appeared after the record was claimed: reconcile its device edit
+   * with the value the page shows. Returns the device value to show, if any.
+   */
+  reconcileField(
+    key: string,
+    fieldId: string,
+    server: unknown,
+  ): { kind: 'restored' | 'conflicted'; value: unknown } | null {
+    const entry = this.entries.get(key)
+    if (!entry || entry.work.kind !== 'fields') return null
+    const result = reconcileFieldPatch(entry.work, fieldId, server)
+    if (result.outcome === 'none') return null
+    entry.work = result.work
+    if (result.outcome === 'conflicted') {
+      entry.blocked = 'conflict'
+      entry.lastError = 'This record was changed somewhere else.'
+    }
+    this.persistEntry(entry)
+    this.emit(key)
+    return result.outcome === 'dropped' ? null : { kind: result.outcome, value: result.value }
   }
 
   /** Drop field edits (the conflicted ones, or the listed fields). */
@@ -477,51 +580,75 @@ export class DraftSyncEngine {
     entry: Entry,
   ): { payload: DraftSyncRequest; sent: Record<string, number> | null } | null {
     const work = entry.work
+    const meta = entry.meta
     if (work.kind === 'snapshot') {
-      if (!work.snapshot || pendingCount(work) === 0) return null
+      if (meta.target !== 'form' || !work.snapshot || pendingCount(work) === 0) return null
       return {
         sent: null,
         payload: {
-          responseId: entry.meta.responseId,
-          values: work.snapshot.values,
-          rows: work.snapshot.rows,
-          stepIndex: work.snapshot.stepIndex,
-          clientSessionId: work.cursor.sessionId,
-          clientSequence: work.cursor.sequence,
-          baseRevision: work.cursor.baseRevision,
-          ...(work.cursor.serverCreated
-            ? {}
-            : {
-                create: {
-                  templateId: entry.meta.templateId,
-                  complianceObligationId: entry.meta.complianceObligationId,
-                },
-              }),
+          target: 'form',
+          body: {
+            scope: meta.scope,
+            responseId: meta.responseId,
+            values: work.snapshot.values,
+            rows: work.snapshot.rows,
+            stepIndex: work.snapshot.stepIndex,
+            clientSessionId: work.cursor.sessionId,
+            clientSequence: work.cursor.sequence,
+            baseRevision: work.cursor.baseRevision,
+            ...(work.cursor.serverCreated
+              ? {}
+              : {
+                  create: {
+                    templateId: meta.templateId,
+                    complianceObligationId: meta.complianceObligationId,
+                  },
+                }),
+          },
         },
       }
     }
-    const patches = sendableFieldPatches(work)
+    if (meta.target !== 'record' || work.kind !== 'fields') return null
+    const checked = rejectOversizedPatches(work, TOO_LARGE_ERROR)
+    const patches = sendableFieldPatches(checked)
+    // Remember what this request carries, so a lost answer followed by a
+    // newer edit is recognised as this device's own save (see model.ts).
+    entry.work = markPatchesSent(checked, patches)
+    this.persistEntry(entry)
+    if (checked !== work) this.emit(meta.key)
     if (patches.length === 0) return null
     return {
       sent: Object.fromEntries(patches.map((patch) => [patch.fieldId, patch.sequence])),
       payload: {
-        kind: 'fields',
-        responseId: entry.meta.responseId,
-        patches: patches.map(({ fieldId, value, base }) => ({ fieldId, value, base })),
+        target: 'record',
+        body: {
+          scope: meta.scope,
+          module: meta.module,
+          recordId: meta.recordId,
+          patches: patches.map(({ fieldId, value, base }) => ({ fieldId, value, base })),
+        },
       },
     }
   }
 
   private async sync(key: string): Promise<FlushOutcome> {
+    const existing = this.entries.get(key)
+    if (!existing) return { ok: true }
+    if (existing.syncing) return existing.syncing
+    // A replaced entry's request may still be running: never send the key
+    // twice at once.
+    const prior = this.inflight.get(key)
+    if (prior) await prior
     const entry = this.entries.get(key)
     if (!entry) return { ok: true }
-    if (entry.syncing) await entry.syncing
     if (entry.syncing) return entry.syncing
     const run = this.attempt(entry).finally(() => {
-      entry.syncing = null
+      if (entry.syncing === run) entry.syncing = null
+      if (this.inflight.get(key) === run) this.inflight.delete(key)
       this.emit(key)
     })
     entry.syncing = run
+    this.inflight.set(key, run)
     this.emit(key)
     return run
   }
@@ -570,12 +697,14 @@ export class DraftSyncEngine {
         if (entry.work.kind !== 'fields') return { ok: true }
         entry.work = applyFieldResults(entry.work, request.sent ?? {}, result)
         settled()
-        if (result.conflicts.length > 0) {
+        if (hasFieldConflicts(entry.work)) {
           entry.blocked = 'conflict'
           entry.lastError = 'This record was changed somewhere else.'
         }
         this.persistEntry(entry)
-        if (!entry.blocked && pendingCount(entry.work) > 0) this.scheduleSync(key, 0)
+        if (!entry.blocked && sendableFieldPatches(entry.work, 1).length > 0) {
+          this.scheduleSync(key, 0)
+        }
         return entry.blocked ? { ok: false, offline: false, error: entry.lastError } : { ok: true }
       }
       case 'retry': {
@@ -602,7 +731,7 @@ export class DraftSyncEngine {
         // Submitted elsewhere: the device copy can never apply. Drop it.
         entry.closed = true
         if (entry.work.kind === 'snapshot') entry.work = { ...entry.work, snapshot: null }
-        else entry.work = { ...entry.work, patches: {} }
+        else if (entry.work.kind === 'fields') entry.work = { ...entry.work, patches: {} }
         entry.lastError = result.error
         entry.lastAttemptOffline = false
         this.deleteStored(key)
@@ -633,11 +762,12 @@ export class DraftSyncEngine {
     for (const entry of this.entries.values()) {
       if (entry.meta.scope !== scope || (!entry.owned && entry.persist)) continue
       inMemoryKeys.add(entry.meta.key)
+      if (entry.work.kind === 'local') continue // Never synced; submitted by its form.
       if (pendingCount(entry.work) === 0 || entry.blocked || entry.closed) continue
       if (opts.force || entry.nextAttemptAt <= now) work.push(this.flush(entry.meta.key))
     }
     for (const record of await this.listStored(scope)) {
-      if (inMemoryKeys.has(record.key)) continue
+      if (inMemoryKeys.has(record.key) || record.work.kind === 'local') continue
       if (record.blocked || pendingCount(record.work) === 0) continue
       if (!opts.force && !isSyncDue(record, now)) continue
       work.push(this.drainRecord(record.key))
@@ -664,17 +794,7 @@ export class DraftSyncEngine {
     record: OfflineDraftRecord,
     opts: { persist: boolean; owned: boolean; blocked?: DraftBlock | null; work?: DraftWork },
   ): void {
-    const meta: DraftMeta = {
-      key: record.key,
-      scope: record.scope,
-      tenantId: record.tenantId,
-      userId: record.userId,
-      templateId: record.templateId,
-      responseId: record.responseId,
-      complianceObligationId: record.complianceObligationId,
-      origin: record.origin,
-    }
-    this.open(meta, opts.work ?? record.work, {
+    this.open(metaOf(record), opts.work ?? record.work, {
       persist: opts.persist,
       owned: opts.owned,
       blocked: opts.blocked === undefined ? record.blocked : opts.blocked,
@@ -715,6 +835,31 @@ export class DraftSyncEngine {
     } catch {
       // Nothing more can be done; the scope key still isolates the records.
     }
+  }
+}
+
+/** The identity part of a stored record (everything but its queue state). */
+function metaOf(record: OfflineDraftRecord): DraftMeta {
+  const base = {
+    key: record.key,
+    scope: record.scope,
+    tenantId: record.tenantId,
+    userId: record.userId,
+  }
+  switch (record.target) {
+    case 'form':
+      return {
+        ...base,
+        target: 'form',
+        templateId: record.templateId,
+        responseId: record.responseId,
+        complianceObligationId: record.complianceObligationId,
+        origin: record.origin,
+      }
+    case 'record':
+      return { ...base, target: 'record', module: record.module, recordId: record.recordId }
+    case 'local':
+      return { ...base, target: 'local', form: record.form, localId: record.localId }
   }
 }
 

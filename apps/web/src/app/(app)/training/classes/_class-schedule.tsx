@@ -1,85 +1,33 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+// The class Start / End pair. Both times save together as one `schedule` edit
+// (see ./_record-edits.ts), so a manager can move a class to another day
+// without passing through an end-before-start state. The range is checked
+// here as they type for immediate feedback; the saver enforces the same rule
+// and refuses an unordered range (which also holds back Email class until
+// the schedule is fixed).
+
 import { Input, Label } from '@beaconhs/ui'
-import { SaveDot, useAutoSave } from '@/components/live-field'
-import { FLUSH_RECORD_SAVES } from '@/lib/pending-record-saves'
+import { SaveDot } from '@/components/live-field'
+import { useRecordField } from '@/lib/offline-drafts/offline-record'
 import { GeneratedValue } from '@/i18n/generated'
 
+type ScheduleRange = { startsAt: string; endsAt: string }
+
 export function ClassSchedule({
-  id,
   startsAt,
   endsAt,
   disabled,
-  updateAction,
 }: {
-  id: string
+  /** `YYYY-MM-DDTHH:mm` in the worker's timezone. */
   startsAt: string
   endsAt: string
   disabled?: boolean
-  updateAction: (formData: FormData) => Promise<void>
 }) {
-  const initial = JSON.stringify({ startsAt, endsAt })
-  const [values, setValues] = useState({ startsAt, endsAt })
-  const latest = useRef(values)
-  const baseline = useRef(initial)
-  const dirty = useRef(false)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const invalid = !values.startsAt || !values.endsAt || values.endsAt <= values.startsAt
-  const { state, setState, save, retry, hasPending } = useAutoSave({
-    prepare: (raw) => {
-      const form = new FormData()
-      form.set('id', id)
-      form.set('field', 'schedule')
-      form.set('value', raw)
-      return form
-    },
-    updateAction: async (form) => {
-      const range = JSON.parse(String(form.get('value'))) as { startsAt: string; endsAt: string }
-      if (!range.startsAt || !range.endsAt || range.endsAt <= range.startsAt)
-        throw new Error('Class end time must be after its start time.')
-      await updateAction(form)
-    },
-    onSaved: (raw) => {
-      baseline.current = raw
-      dirty.current = JSON.stringify(latest.current) !== raw
-    },
-  })
-  function commit() {
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = null
-    const raw = JSON.stringify(latest.current)
-    if (raw === baseline.current && !hasPending() && !dirty.current) return
-    save(raw)
-  }
-  useEffect(() => {
-    const flush = () => {
-      if (!disabled) commit()
-    }
-    window.addEventListener(FLUSH_RECORD_SAVES, flush)
-    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
-  })
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current)
-    },
-    [],
-  )
-  useEffect(() => {
-    if (state === 'idle' && initial !== baseline.current) {
-      baseline.current = initial
-      latest.current = { startsAt, endsAt }
-      setValues(latest.current)
-    }
-  }, [initial, startsAt, endsAt, state])
-  function change(field: 'startsAt' | 'endsAt', value: string) {
-    dirty.current = true
-    latest.current = { ...latest.current, [field]: value }
-    setValues(latest.current)
-    setState('dirty')
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(commit, 1200)
-  }
+  const f = useRecordField<ScheduleRange>('schedule', { startsAt, endsAt })
+  const off = disabled || f.paused
+  const range = f.value
+  const invalid = !range.startsAt || !range.endsAt || range.endsAt <= range.startsAt
   return (
     <div className="space-y-1">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -91,19 +39,19 @@ export function ClassSchedule({
             <Input
               id={`class-${field}`}
               type="datetime-local"
-              value={values[field]}
-              disabled={disabled}
-              onChange={(event) => change(field, event.target.value)}
-              onBlur={commit}
+              value={range[field]}
+              disabled={off}
+              onChange={(event) => f.change({ ...range, [field]: event.target.value })}
+              onBlur={() => f.commit()}
             />
           </div>
         ))}
       </div>
-      <div className="flex items-center gap-2 text-xs text-slate-500">
-        <SaveDot state={state} onRetry={retry} />
+      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        <SaveDot state={f.saveState} error={f.error} onRetry={f.retry} />
         <GeneratedValue value="Start and end times save together." />
       </div>
-      {invalid ? (
+      {invalid && !off ? (
         <p role="alert" className="text-xs text-red-700 dark:text-red-300">
           <GeneratedValue value="Enter both times. End must be after Start before the schedule can save." />
         </p>

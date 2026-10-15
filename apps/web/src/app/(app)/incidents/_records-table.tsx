@@ -13,7 +13,8 @@ import { BulkIncidentsBar, type IncidentClassificationOption } from './_bulk-bar
 export type IncidentsTableRow = {
   id: string
   reference: string
-  occurredAt: string // ISO
+  /** Occurrence date, formatted in the tenant's timezone. */
+  occurredOn: string
   type: string
   severity: string
   status: string
@@ -78,7 +79,7 @@ export function IncidentsRecordsTable({
               reference={r.reference}
               status={<StatusBadge status={r.status} />}
               title={tGeneratedValue(r.title)}
-              meta={`${new Date(r.occurredAt).toLocaleDateString()} · ${r.type.replace(/_/g, ' ')}${
+              meta={`${r.occurredOn} · ${r.type.replace(/_/g, ' ')}${
                 r.siteName ? ` · ${r.siteName}` : ''
               }`}
               footer={<SeverityBadge severity={r.severity} />}
@@ -156,7 +157,7 @@ export function IncidentsRecordsTable({
                       </Link>
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                      <GeneratedValue value={new Date(r.occurredAt).toLocaleDateString()} />
+                      <GeneratedValue value={r.occurredOn} />
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                       <GeneratedValue value={r.type.replace(/_/g, ' ')} />

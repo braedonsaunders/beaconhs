@@ -7,6 +7,7 @@ import { cn } from '@beaconhs/ui'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { toast } from 'sonner'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import {
   attachJournalPhotos,
   describeJournalPhoto,
@@ -30,13 +31,27 @@ export function Photos({
   onChange: () => void
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
+  const runOnline = useOnlineAction()
   const [busy, start] = useTransition()
 
+  // Photos and files need signal (the uploader and gallery refuse offline too).
   function describe(id: string) {
     start(async () => {
-      const result = await describeJournalPhoto(id)
-      if (!result.ok) toast.error(tGeneratedValue(result.error))
-      onChange()
+      await runOnline('finish', async () => {
+        const result = await describeJournalPhoto(id)
+        if (!result.ok) toast.error(tGeneratedValue(result.error))
+        onChange()
+      })
+    })
+  }
+
+  function removeFile(id: string) {
+    start(async () => {
+      await runOnline('finish', async () => {
+        const result = await removeJournalPhoto(id)
+        if (!result.ok) toast.error(tGeneratedValue(result.error))
+        onChange()
+      })
     })
   }
 
@@ -107,13 +122,7 @@ export function Photos({
               {editable ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    start(async () => {
-                      const result = await removeJournalPhoto(file.id)
-                      if (!result.ok) toast.error(tGeneratedValue(result.error))
-                      onChange()
-                    })
-                  }}
+                  onClick={() => removeFile(file.id)}
                   className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
                   aria-label={tGeneratedValue(`Remove ${file.filename}`)}
                 >

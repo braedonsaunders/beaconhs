@@ -15,12 +15,14 @@ import { Label, Textarea } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
 import { RawImage } from '@/components/raw-image'
 import { appendCompleteStep } from '../_actions'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 
 export type CompleteStep = {
   id: string
   kind: 'action_taken' | 'verification' | 'signature'
   description: string | null
-  completedAt: Date
+  /** When it was completed, formatted in the tenant's timezone. */
+  completedAtLabel: string
   completedByName: string | null
   signatureDataUrl: string | null
   entityOrder: number
@@ -80,7 +82,7 @@ export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
                           </span>
                         </span>
                         <span className="text-xs text-slate-500 dark:text-slate-400">
-                          <GeneratedValue value={s.completedAt.toLocaleString()} />
+                          <GeneratedValue value={s.completedAtLabel} />
                         </span>
                       </div>
                       <GeneratedValue
@@ -147,6 +149,7 @@ export function AddStepBody({
   const [description, setDescription] = useState('')
   const [sig, setSig] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
   const [error, setError] = useState<string | null>(null)
 
   function submit() {
@@ -160,21 +163,23 @@ export function AddStepBody({
       return
     }
     start(async () => {
-      const res = await appendCompleteStep({
-        caId,
-        kind,
-        description: kind === 'signature' ? null : description,
-        signatureDataUrl: kind === 'signature' ? sig : null,
+      await runOnline('finish', async () => {
+        const res = await appendCompleteStep({
+          caId,
+          kind,
+          description: kind === 'signature' ? null : description,
+          signatureDataUrl: kind === 'signature' ? sig : null,
+        })
+        if (!res.ok) {
+          setError(tGeneratedValue(res.error))
+          return
+        }
+        setDescription('')
+        setSig(null)
+        setKind('action_taken')
+        router.push(closeHref as any)
+        router.refresh()
       })
-      if (!res.ok) {
-        setError(tGeneratedValue(res.error))
-        return
-      }
-      setDescription('')
-      setSig(null)
-      setKind('action_taken')
-      router.push(closeHref as any)
-      router.refresh()
     })
   }
 

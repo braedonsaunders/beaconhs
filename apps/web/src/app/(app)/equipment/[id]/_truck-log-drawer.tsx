@@ -14,6 +14,7 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { Loader2, Truck } from 'lucide-react'
 import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
@@ -61,6 +62,7 @@ export function NewTruckLogEntryDrawer({
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -73,21 +75,23 @@ export function NewTruckLogEntryDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        equipmentItemId: itemId,
-        entryDate: entryDate.trim(),
-        driverPersonId,
-        startOdometer: safeInt(startOdometer),
-        endOdometer: safeInt(endOdometer),
-        siteOrgUnitId: siteOrgUnitId || null,
-        notes: notes.trim() || null,
+      await runOnline('start', async () => {
+        const res = await action({
+          equipmentItemId: itemId,
+          entryDate: entryDate.trim(),
+          driverPersonId,
+          startOdometer: safeInt(startOdometer),
+          endOdometer: safeInt(endOdometer),
+          siteOrgUnitId: siteOrgUnitId || null,
+          notes: notes.trim() || null,
+        })
+        if (res.ok) {
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_1cf94f9be0a07e')))
+        }
       })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_1cf94f9be0a07e')))
-      }
     })
   }
 

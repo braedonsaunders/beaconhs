@@ -51,14 +51,18 @@ async function lockEquipmentInspectionRecordForMutation(
   return record ?? null
 }
 
-export async function lockVisibleEquipmentInspectionForMutation(
+/**
+ * Lock a live tenant record and check the caller can see it. Null when it is
+ * missing, archived, its registered item is gone, or it is outside the
+ * caller's read tier. Finalized records are returned — callers decide.
+ */
+export async function lockVisibleEquipmentInspection(
   tx: EquipmentInspectionTx,
   ctx: RequestContext,
   recordId: string,
-  opts?: { allowFinalized?: boolean },
-): Promise<typeof equipmentInspectionRecords.$inferSelect> {
+): Promise<typeof equipmentInspectionRecords.$inferSelect | null> {
   const record = await lockEquipmentInspectionRecordForMutation(tx, ctx.tenantId, recordId)
-  if (!record) throw new Error('Equipment inspection not found')
+  if (!record) return null
   const [item] = record.equipmentItemId
     ? await tx
         .select({
@@ -75,21 +79,91 @@ export async function lockVisibleEquipmentInspectionForMutation(
         )
         .limit(1)
     : []
-  if (!item && !record.isRental) throw new Error('Equipment item not found')
+  if (!item && !record.isRental) return null
   const visible = await canSeeRecord(ctx, tx, {
     prefix: 'equipment',
     ownerIds: [record.inspectorTenantUserId, record.submittedByTenantUserId],
     siteId: record.siteOrgUnitId ?? item?.currentSiteOrgUnitId,
     personId: record.inspectorPersonId ?? item?.currentHolderPersonId,
   })
-  if (!visible) throw new Error('Equipment inspection not found')
-  if (
-    !opts?.allowFinalized &&
-    (record.locked || record.status === 'submitted' || record.status === 'closed')
-  ) {
-    throw new Error('This equipment inspection is submitted or locked')
+  return visible ? record : null
+}
+
+/** Submitted, closed, or locked: read-only until it is reopened. */
+export function equipmentInspectionIsFinalized(
+  record: Pick<typeof equipmentInspectionRecords.$inferSelect, 'locked' | 'status'>,
+): boolean {
+  return record.locked || record.status === 'submitted' || record.status === 'closed'
+}
+
+export const EQUIPMENT_INSPECTION_FINALIZED_MESSAGE =
+  'This equipment inspection is submitted or locked'
+
+export async function lockVisibleEquipmentInspectionForMutation(
+  tx: EquipmentInspectionTx,
+  ctx: RequestContext,
+  recordId: string,
+  opts?: { allowFinalized?: boolean },
+): Promise<typeof equipmentInspectionRecords.$inferSelect> {
+  const record = await lockVisibleEquipmentInspection(tx, ctx, recordId)
+  if (!record) throw new Error('Equipment inspection not found')
+  if (!opts?.allowFinalized && equipmentInspectionIsFinalized(record)) {
+    throw new Error(EQUIPMENT_INSPECTION_FINALIZED_MESSAGE)
   }
   return record
+}
+
+/** One checklist row of a parent the caller has already locked, locked too. */
+export async function lockEquipmentInspectionCriterionForMutation(
+  tx: EquipmentInspectionTx,
+  tenantId: string,
+  recordId: string,
+  rowId: string,
+): Promise<typeof equipmentInspectionRecordCriteria.$inferSelect | null> {
+  const [criterion] = await tx
+    .select()
+    .from(equipmentInspectionRecordCriteria)
+    .where(
+      and(
+        eq(equipmentInspectionRecordCriteria.tenantId, tenantId),
+        eq(equipmentInspectionRecordCriteria.recordId, recordId),
+        eq(equipmentInspectionRecordCriteria.id, rowId),
+      ),
+    )
+    .limit(1)
+    .for('update')
+  return criterion ?? null
+}
+
+/** Any change to a draft starts the work. Caller must hold the parent row lock. */
+export async function markEquipmentInspectionInProgressIfDraft(
+  tx: EquipmentInspectionTx,
+  ctx: RequestContext,
+  record: typeof equipmentInspectionRecords.$inferSelect,
+): Promise<boolean> {
+  if (record.status !== 'draft') return false
+  const [updated] = await tx
+    .update(equipmentInspectionRecords)
+    .set({ status: 'in_progress' })
+    .where(
+      and(
+        eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
+        eq(equipmentInspectionRecords.id, record.id),
+        eq(equipmentInspectionRecords.status, 'draft'),
+        isNull(equipmentInspectionRecords.deletedAt),
+      ),
+    )
+    .returning({ id: equipmentInspectionRecords.id })
+  if (!updated) throw new Error('Equipment inspection changed before work could begin')
+  await recordAuditInTransaction(tx, ctx, {
+    entityType: 'equipment_inspection_record',
+    entityId: record.id,
+    action: 'update',
+    summary: 'Started inspection work',
+    before: { status: 'draft' },
+    after: { status: 'in_progress' },
+  })
+  return true
 }
 
 export function parseEqAnswer(raw: unknown): EqAnswer | null {

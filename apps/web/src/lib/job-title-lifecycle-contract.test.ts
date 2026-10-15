@@ -35,6 +35,10 @@ const jobTitleCompliance = readFileSync(
   new URL('./job-title-compliance.ts', import.meta.url),
   'utf8',
 )
+const personAssignments = readFileSync(
+  new URL('../app/(app)/people/_lib/person-assignments.ts', import.meta.url),
+  'utf8',
+)
 const newPersonPage = readFileSync(
   new URL('../app/(app)/people/new/page.tsx', import.meta.url),
   'utf8',
@@ -100,10 +104,14 @@ describe('job-title lifecycle and sync ownership contract', () => {
     expect(jobTitleCompliance).toContain('eq(complianceObligations.tenantId, tenantId)')
     expect(jobTitleCompliance).toContain('.orderBy(asc(complianceObligations.id))')
     expect(jobTitleCompliance).toContain(".for('update')")
-    expect(actions.match(/lockJobTitleObligations\(/g)?.length ?? 0).toBeGreaterThanOrEqual(9)
+    // Title CRUD/task actions plus the person page's Titles / Primary job
+    // title fields (applied through the people record saver).
+    const titleWriters = actions + personAssignments
+    expect(titleWriters.match(/lockJobTitleObligations\(/g)?.length ?? 0).toBeGreaterThanOrEqual(9)
     expect(
-      actions.match(/materializeLockedJobTitleObligations\(/g)?.length ?? 0,
+      titleWriters.match(/materializeLockedJobTitleObligations\(/g)?.length ?? 0,
     ).toBeGreaterThanOrEqual(9)
+    expect(personAssignments.match(/lockJobTitleObligations\(/g)?.length).toBe(2)
     expect(newPersonPage).toContain('lockJobTitleObligations')
     expect(newPersonPage).toContain('materializeLockedJobTitleObligations')
     expect(newPersonPage).toContain('recordAuditInTransaction')

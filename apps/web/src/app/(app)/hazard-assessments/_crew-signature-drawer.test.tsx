@@ -7,8 +7,16 @@ const mocks = vi.hoisted(() => ({
   crew: vi.fn(),
   own: vi.fn(),
   ink: null as null | ((ink: string | null) => void),
+  offline: false,
 }))
 vi.mock('./_signing-actions', () => ({ signCrewMember: mocks.crew }))
+vi.mock('@/lib/offline-drafts/use-online-action', () => ({
+  useOnlineAction: () => async (_purpose: string, run: () => Promise<void>) => {
+    if (mocks.offline) return false
+    await run()
+    return true
+  },
+}))
 vi.mock('@/lib/actions', () => ({ setActiveTenant: vi.fn() }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -51,6 +59,7 @@ import { CrewSignatureDrawer } from './_crew-signature-drawer'
 let root: Root, container: HTMLDivElement
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.offline = false
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   container = document.createElement('div')
   document.body.append(container)
@@ -130,5 +139,14 @@ describe('signature-only crew drawer', () => {
     expect(mocks.crew).toHaveBeenCalledTimes(1)
     await act(async () => finish({ ok: true }))
     expect(container.textContent).toContain('Person Two')
+  })
+  it('keeps the person and ink when there is no signal to save them', async () => {
+    mocks.offline = true
+    await render()
+    await prepare()
+    await act(async () => saveButton().click())
+    expect(mocks.crew).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('Person One')
+    expect(saveButton().disabled).toBe(false)
   })
 })

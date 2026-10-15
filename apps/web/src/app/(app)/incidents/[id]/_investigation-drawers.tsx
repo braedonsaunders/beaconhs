@@ -18,6 +18,7 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useResetWhenOpen } from '@/lib/use-reset-when-open'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
@@ -44,6 +45,7 @@ export function EventDrawer({
   open,
   closeHref,
   incidentId,
+  defaultOccurredAt,
   defaults,
   action,
   mode,
@@ -51,6 +53,8 @@ export function EventDrawer({
   open: boolean
   closeHref: string
   incidentId: string
+  /** "Now" as a datetime-local value on the tenant's clock (the server parses it there). */
+  defaultOccurredAt: string
   defaults?: { id: string; occurredAt: string; description: string }
   action: EventAction
   mode: 'create' | 'edit'
@@ -58,12 +62,13 @@ export function EventDrawer({
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
-  const [occurredAt, setOccurredAt] = useState(defaults?.occurredAt ?? defaultNow())
+  const [occurredAt, setOccurredAt] = useState(defaults?.occurredAt ?? defaultOccurredAt)
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
   useResetWhenOpen(open, () => {
-    setOccurredAt(defaults?.occurredAt ?? defaultNow())
+    setOccurredAt(defaults?.occurredAt ?? defaultOccurredAt)
     setDescription(defaults?.description ?? '')
     setError(null)
   })
@@ -79,18 +84,20 @@ export function EventDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        id: defaults?.id,
-        incidentId,
-        occurredAt,
-        description: description.trim(),
+      await runOnline('finish', async () => {
+        const res = await action({
+          id: defaults?.id,
+          incidentId,
+          occurredAt,
+          description: description.trim(),
+        })
+        if (res.ok) {
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_1871e41f127326')))
+        }
       })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_1871e41f127326')))
-      }
     })
   }
 
@@ -203,6 +210,7 @@ export function FactorDrawer({
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
   useResetWhenOpen(open, () => {
     setCategory(defaults?.category ?? 'equipment')
     setDescription(defaults?.description ?? '')
@@ -216,18 +224,20 @@ export function FactorDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        id: defaults?.id,
-        incidentId,
-        category,
-        description: description.trim(),
+      await runOnline('finish', async () => {
+        const res = await action({
+          id: defaults?.id,
+          incidentId,
+          category,
+          description: description.trim(),
+        })
+        if (res.ok) {
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_1581f28d2461d8')))
+        }
       })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_1581f28d2461d8')))
-      }
     })
   }
 
@@ -345,6 +355,7 @@ export function WhyDrawer({
   const [whyText, setWhyText] = useState(defaults?.whyText ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
   useResetWhenOpen(open, () => {
     setOrdinal(defaults?.ordinal ?? nextOrdinal)
     setWhyText(defaults?.whyText ?? '')
@@ -362,18 +373,20 @@ export function WhyDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        id: defaults?.id,
-        incidentId,
-        ordinal,
-        whyText: whyText.trim(),
+      await runOnline('finish', async () => {
+        const res = await action({
+          id: defaults?.id,
+          incidentId,
+          ordinal,
+          whyText: whyText.trim(),
+        })
+        if (res.ok) {
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_0b66bc0fcc2633')))
+        }
       })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_0b66bc0fcc2633')))
-      }
     })
   }
 
@@ -502,6 +515,7 @@ export function PrevStepDrawer({
   const [status, setStatus] = useState<PrevStepStatus>(defaults?.status ?? 'planned')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
   useResetWhenOpen(open, () => {
     setDescription(defaults?.description ?? '')
     setOwnerPersonId(defaults?.ownerPersonId ?? '')
@@ -517,20 +531,22 @@ export function PrevStepDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        id: defaults?.id,
-        incidentId,
-        description: description.trim(),
-        ownerPersonId: ownerPersonId || null,
-        targetDate: targetDate || null,
-        status,
+      await runOnline('finish', async () => {
+        const res = await action({
+          id: defaults?.id,
+          incidentId,
+          description: description.trim(),
+          ownerPersonId: ownerPersonId || null,
+          targetDate: targetDate || null,
+          status,
+        })
+        if (res.ok) {
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_0436c0c2558fa3')))
+        }
       })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_0436c0c2558fa3')))
-      }
     })
   }
 
@@ -640,15 +656,4 @@ export function PrevStepDrawer({
       </div>
     </UrlDrawer>
   )
-}
-
-// ---- helpers ---------------------------------------------------------------
-
-function defaultNow(): string {
-  // Returns a value suitable for <input type="datetime-local">: YYYY-MM-DDTHH:MM
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`
 }

@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, FileUploader, Input, Label, Select, UrlDrawer } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { toast } from '@/lib/toast'
 import { addPersonFile } from '../_actions/files'
 
@@ -67,6 +68,7 @@ function UploadFileDrawer({
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function reset() {
     setKind('resume')
@@ -83,21 +85,23 @@ function UploadFileDrawer({
     }
     const labelTrimmed = label.trim() || uploaded.filename
     startTransition(async () => {
-      const res = await addPersonFile({
-        personId,
-        attachmentId: uploaded.attachmentId,
-        label: labelTrimmed,
-        kind,
+      await runOnline('finish', async () => {
+        const res = await addPersonFile({
+          personId,
+          attachmentId: uploaded.attachmentId,
+          label: labelTrimmed,
+          kind,
+        })
+        if (res.ok) {
+          toast.success(tGenerated('m_01f37a7f2f8620'))
+          reset()
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error))
+          toast.error(tGeneratedValue(res.error))
+        }
       })
-      if (res.ok) {
-        toast.success(tGenerated('m_01f37a7f2f8620'))
-        reset()
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error))
-        toast.error(tGeneratedValue(res.error))
-      }
     })
   }
 

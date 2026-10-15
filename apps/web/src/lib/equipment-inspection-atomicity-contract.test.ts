@@ -5,6 +5,13 @@ function source(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8')
 }
 
+function sliceBetween(contents: string, start: string, end: string): string {
+  const from = contents.indexOf(start)
+  const to = contents.indexOf(end, from + 1)
+  if (from < 0 || to < 0) throw new Error(`Could not locate ${start}`)
+  return contents.slice(from, to)
+}
+
 function functionSlice(contents: string, name: string, next: string): string {
   const start = contents.indexOf(`function ${name}`)
   const end = contents.indexOf(next, start + 1)
@@ -13,6 +20,8 @@ function functionSlice(contents: string, name: string, next: string): string {
 }
 
 const actions = source('../app/(app)/equipment/inspections/_actions.ts')
+const recordEdits = source('../app/(app)/equipment/inspections/_record-edits.ts')
+const criterionCard = source('../app/(app)/equipment/inspections/[id]/_criteria.tsx')
 const library = source('../app/(app)/equipment/inspections/_lib.ts')
 // The record is filled in a flyout on the register; [id] is only a redirect
 // for old deep links, so the queries live in the panel.
@@ -30,7 +39,7 @@ describe('equipment inspection atomicity contract', () => {
     const lock = functionSlice(
       library,
       'lockEquipmentInspectionRecordForMutation',
-      'export async function lockVisibleEquipmentInspectionForMutation',
+      'export async function lockVisibleEquipmentInspection(',
     )
     expect(lock).toContain('eq(equipmentInspectionRecords.tenantId, tenantId)')
     expect(lock).toContain('isNull(equipmentInspectionRecords.deletedAt)')
@@ -38,12 +47,33 @@ describe('equipment inspection atomicity contract', () => {
 
     const visibleLock = functionSlice(
       library,
-      'lockVisibleEquipmentInspectionForMutation',
-      'export function parseEqAnswer',
+      'lockVisibleEquipmentInspection(',
+      'export function equipmentInspectionIsFinalized',
     )
+    expect(visibleLock).toContain('lockEquipmentInspectionRecordForMutation(')
     expect(visibleLock).toContain('canSeeRecord(ctx, tx,')
-    expect(visibleLock).toContain('record.locked')
-    expect(visibleLock).toContain("record.status === 'submitted'")
+    const finalized = functionSlice(
+      library,
+      'equipmentInspectionIsFinalized',
+      'export const EQUIPMENT_INSPECTION_FINALIZED_MESSAGE',
+    )
+    expect(finalized).toContain('record.locked')
+    expect(finalized).toContain("record.status === 'submitted'")
+    const mutationLock = functionSlice(
+      library,
+      'lockVisibleEquipmentInspectionForMutation',
+      'export async function lockEquipmentInspectionCriterionForMutation',
+    )
+    expect(mutationLock).toContain('lockVisibleEquipmentInspection(tx, ctx, recordId)')
+    expect(mutationLock).toContain('equipmentInspectionIsFinalized(record)')
+    const criterionLock = functionSlice(
+      library,
+      'lockEquipmentInspectionCriterionForMutation',
+      'export async function markEquipmentInspectionInProgressIfDraft',
+    )
+    expect(criterionLock).toContain('eq(equipmentInspectionRecordCriteria.tenantId, tenantId)')
+    expect(criterionLock).toContain('eq(equipmentInspectionRecordCriteria.recordId, recordId)')
+    expect(criterionLock).toContain(".for('update')")
     expect(actions).not.toContain('editableContext')
     expect(actions).not.toContain('recordEditable')
   })
@@ -104,32 +134,58 @@ describe('equipment inspection atomicity contract', () => {
     expect(submit).toContain('recordAuditInTransaction(tx, ctx,')
     expect(submit).toContain('materializeEquipmentTypeEvidence(')
 
-    const passAll = functionSlice(
-      actions,
-      'passAllEquipmentInspection',
-      '// --- record-level live fields',
-    )
+    const passAll = functionSlice(actions, 'passAllEquipmentInspection', '// --- submit / reopen')
     expect(passAll).toContain('record.allowPassAll')
     expect(passAll).not.toContain('.from(equipmentInspectionTypes)')
   })
 
-  it('validates criterion semantics and audits every changed autosave in its lock transaction', () => {
-    const answer = functionSlice(actions, 'setAnswer', 'export async function setSeverity')
-    expect(answer).toContain('withLockedCriterionMutation(')
+  it('validates criterion semantics and audits every synced edit in its lock transaction', () => {
+    expect(recordEdits).toContain("authorize: (ctx) => can(ctx, 'equipment.inspect')")
+    const load = sliceBetween(recordEdits, 'async load(tx, ctx, recordId)', 'async resolve(')
+    expect(load).toContain('lockVisibleEquipmentInspection(tx, ctx, recordId)')
+    expect(load).toContain('throw recordNotFound()')
+    expect(load).toContain('equipmentInspectionIsFinalized(record)')
+    expect(load).toContain('throw recordLocked(')
+
+    const lookup = functionSlice(recordEdits, 'criterionForEdit(', 'function criterionFieldOp')
+    expect(lookup).toContain('lockEquipmentInspectionCriterionForMutation(')
+    expect(lookup).toContain('edits.record.id')
+    const write = functionSlice(recordEdits, 'criterionFieldOp(', 'switch (field)')
+    expect(write).toContain('eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId)')
+    expect(write).toContain('eq(equipmentInspectionRecordCriteria.recordId, criterion.recordId)')
+    expect(write).toContain("criterion.answer !== 'fail'")
+
+    const answer = sliceBetween(recordEdits, "case 'answer':", "case 'severity':")
     expect(answer).toContain("criterion.kind !== 'pass_fail'")
     expect(answer).toContain("answer === 'n_a'")
-    expect(answer).toContain('recordAuditInTransaction(tx, ctx,')
+    expect(answer).toContain('comment: null, actionTaken: null, correctedOn: null')
 
-    const value = functionSlice(actions, 'setValue', 'export async function addCriterionPhotos')
+    const value = sliceBetween(
+      recordEdits,
+      "case 'value':",
+      'export const equipmentInspectionRecordSaver',
+    )
     expect(value).toContain("criterion.kind !== 'text'")
-    expect(value).toContain('normalizeInspectionNumberAnswer(')
+    expect(value).toContain('parseInspectionNumberAnswer(')
     expect(value).toContain('normalizeInspectionTextAnswer(')
-    expect(value).not.toContain("formData.get('kind')")
-    expect(value).toContain('recordAuditInTransaction(tx, ctx,')
 
-    const finding = functionSlice(actions, 'setFindingText', 'export async function setComment')
-    expect(finding).toContain("criterion.answer !== 'fail'")
-    expect(finding).toContain('recordAuditInTransaction(tx, ctx,')
+    const finding = sliceBetween(recordEdits, "case 'comment':", "case 'value':")
+    expect(finding).toContain('requireFail(')
+
+    // A pass or N/A clears the finding text on the device too.
+    const pickAnswer = functionSlice(criterionCard, 'pickAnswer', 'function pickSeverity')
+    expect(pickAnswer).toContain("commentField.commit('')")
+    expect(pickAnswer).toContain("actionTakenField.commit('')")
+
+    const site = sliceBetween(recordEdits, "case 'siteOrgUnitId':", "case 'hours':")
+    expect(site).toContain('eq(orgUnits.tenantId, ctx.tenantId)')
+    expect(site).toContain('isNull(orgUnits.deletedAt)')
+
+    const afterWrites = sliceBetween(recordEdits, 'async afterWrites(', 'revalidate:')
+    expect(afterWrites).toContain('recordAuditInTransaction(tx, ctx,')
+    expect(afterWrites).toContain("entityType: 'equipment_inspection_record'")
+    expect(afterWrites).toContain('syncInspectionHoursInTx(tx, ctx, record)')
+    expect(afterWrites).toContain('markEquipmentInspectionInProgressIfDraft(tx, ctx, record)')
   })
 
   it('validates, tenant-scopes, kind-checks, and de-duplicates photo ids', () => {

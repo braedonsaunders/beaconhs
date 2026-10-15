@@ -1,12 +1,40 @@
 // @vitest-environment jsdom
-import { act } from 'react'
+import { act, useEffect, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { flushRecordSaves } from '@/lib/pending-record-saves'
-const mocks = vi.hoisted(() => ({ update: vi.fn(), refresh: vi.fn(), error: vi.fn() }))
-vi.mock('./_actions', () => ({ updateDocumentMeta: mocks.update }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh }) }))
-vi.mock('@/lib/toast', () => ({ toast: { error: mocks.error } }))
+
+// The record provider (device store + sync engine) has its own tests; here
+// each field is a plain binding that adopts new server values like the real
+// one does once nothing is pending.
+const mocks = vi.hoisted(() => ({
+  change: vi.fn(),
+  commit: vi.fn(),
+  errors: {} as Record<string, string>,
+  paused: false,
+}))
+vi.mock('@/lib/offline-drafts/offline-record', () => ({
+  RecordSyncStatus: () => <span data-testid="sync-status" />,
+  RecordSyncBanner: () => <div data-testid="sync-banner" />,
+  useRecordField: (fieldId: string, server: string) => {
+    const [value, setValue] = useState(server)
+    useEffect(() => setValue(server), [server])
+    return {
+      value,
+      change: (next: string) => {
+        setValue(next)
+        mocks.change(fieldId, next)
+      },
+      commit: (next?: string) => {
+        if (next !== undefined) setValue(next)
+        mocks.commit(fieldId, next)
+      },
+      saveState: mocks.errors[fieldId] ? 'error' : 'idle',
+      error: mocks.errors[fieldId] ?? null,
+      retry: vi.fn(),
+      paused: mocks.paused,
+    }
+  },
+}))
 vi.mock('@/i18n/generated', () => ({
   GeneratedText: ({ id }: { id: string }) => id,
   GeneratedValue: ({ value }: { value: unknown }) => value,
@@ -14,9 +42,10 @@ vi.mock('@/i18n/generated', () => ({
   useGeneratedValueTranslations: () => (value: string) => value,
 }))
 import { DocumentOverview } from './_overview'
+
 const initial = {
   title: 'Procedure',
-  key: 'PROC',
+  key: 'proc',
   categoryId: '',
   typeId: '',
   description: '',
@@ -30,107 +59,100 @@ const initial = {
 }
 let root: Root
 let container: HTMLDivElement
+async function render(meta = initial, hasMaster = true) {
+  await act(async () =>
+    root.render(
+      <DocumentOverview initialMeta={meta} categories={[]} types={[]} hasMaster={hasMaster} />,
+    ),
+  )
+}
 beforeEach(async () => {
-  vi.useFakeTimers()
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
   )
   vi.clearAllMocks()
-  mocks.update.mockResolvedValue({ ok: true })
+  mocks.errors = {}
+  mocks.paused = false
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  await act(async () =>
-    root.render(
-      <DocumentOverview
-        documentId="doc"
-        initialMeta={initial}
-        categories={[]}
-        types={[]}
-        hasMaster
-      />,
-    ),
-  )
+  await render()
 })
 afterEach(async () => {
-  mocks.update.mockResolvedValue({ ok: true })
-  await act(async () => {
-    await flushRecordSaves()
-  })
   await act(async () => root.unmount())
   container.remove()
-  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
-async function edit(id: string, value: string) {
-  const input = container.querySelector<HTMLInputElement>(`#${id}`)!
+function input(id: string) {
+  return container.querySelector<HTMLInputElement>(`#${id}`)!
+}
+async function type(id: string, value: string) {
+  const element = input(id)
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    element.focus()
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(element, value)
+    element.dispatchEvent(new Event('input', { bubbles: true }))
   })
 }
 
-describe('document header autosave', () => {
-  it('saves every entered header field before PDF preview or publishing, without saving on open', async () => {
-    expect(mocks.update).not.toHaveBeenCalled()
-    await edit('o-issued', '2024-01-01')
-    await edit('o-revised', '2026-09-01')
-    await edit('o-approved', 'Peter Kazmierczak')
-    await edit('o-version', 'Rev B')
-    await act(async () => {
-      await flushRecordSaves()
-    })
-    expect(mocks.update).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        headerIssuedOn: '2024-01-01',
-        headerRevisedOn: '2026-09-01',
-        headerApprovedBy: 'Peter Kazmierczak',
-        headerVersionLabel: 'Rev B',
-      }),
+describe('document overview fields', () => {
+  it('queues each header field by its op key without saving on open', async () => {
+    expect(mocks.change).not.toHaveBeenCalled()
+    expect(mocks.commit).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="sync-status"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="sync-banner"]')).not.toBeNull()
+    await type('o-issued', '2024-01-01')
+    await type('o-revised', '2026-09-01')
+    await type('o-approved', 'Peter Kazmierczak')
+    await type('o-version', 'Rev B')
+    expect(mocks.change.mock.calls).toEqual([
+      ['headerIssuedOn', '2024-01-01'],
+      ['headerRevisedOn', '2026-09-01'],
+      ['headerApprovedBy', 'Peter Kazmierczak'],
+      ['headerVersionLabel', 'Rev B'],
+    ])
+    await act(async () => input('o-version').blur())
+    expect(mocks.commit).toHaveBeenLastCalledWith('headerVersionLabel', undefined)
+  })
+
+  it('keeps what was typed while focused, then shows the saved canonical value', async () => {
+    await type('o-key', 'Safety ')
+    await render({ ...initial, key: 'safety' })
+    expect(input('o-key').value).toBe('Safety ')
+    await act(async () => input('o-key').blur())
+    expect(input('o-key').value).toBe('safety')
+  })
+
+  it('switches the PDF header with a string wire value and only with a Word master', async () => {
+    await act(async () => input('o-document-header').click())
+    expect(mocks.commit).toHaveBeenCalledWith('showDocumentHeader', 'false')
+    await render(initial, false)
+    expect(input('o-document-header').disabled).toBe(true)
+  })
+
+  it('shows why the server refused a value next to the field', async () => {
+    mocks.errors = { key: 'A live document already uses that key.' }
+    await render({ ...initial })
+    await type('o-key', 'other')
+    expect(container.querySelector('[role="alert"]')!.textContent).toBe(
+      'A live document already uses that key.',
     )
   })
-  it('retains a rejected edit for visible retry', async () => {
-    mocks.update.mockResolvedValueOnce({ ok: false, error: 'Connection lost' })
-    await edit('o-approved', 'Peter')
-    await act(async () => {
-      await expect(flushRecordSaves()).rejects.toThrow('Connection lost')
-    })
-    expect(mocks.error).toHaveBeenCalledWith('Connection lost')
-    expect(container.querySelector('button')!.textContent?.trim()).toBe('m_13b78c61dbb517')
-    await act(async () => container.querySelector<HTMLButtonElement>('button')!.click())
-    expect(mocks.update).toHaveBeenCalledTimes(2)
-    expect(mocks.update.mock.calls[1]?.[0]).toMatchObject({ headerApprovedBy: 'Peter' })
-  })
-  it('persists edits when Overview unmounts before its debounce expires', async () => {
-    await edit('o-version', '1.2')
-    await act(async () => root.render(null))
-    expect(mocks.update).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ headerVersionLabel: '1.2' }),
-    )
-  })
-  it('waits for a newer header edit made during the active save', async () => {
-    let finish!: (value: { ok: boolean }) => void
-    mocks.update.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve
-        }),
-    )
-    await edit('o-approved', 'First approver')
-    const saving = flushRecordSaves()
-    await edit('o-approved', 'Peter')
-    await edit('o-version', 'Rev B')
-    await act(async () => {
-      finish({ ok: true })
-      await saving
-    })
-    expect(mocks.update).toHaveBeenCalledTimes(2)
-    expect(mocks.update.mock.calls[1]?.[0]).toMatchObject({
-      headerApprovedBy: 'Peter',
-      headerVersionLabel: 'Rev B',
-    })
+
+  it('disables every field while editing is paused', async () => {
+    mocks.paused = true
+    await render({ ...initial })
+    for (const id of [
+      'o-title',
+      'o-key',
+      'o-desc',
+      'o-review',
+      'o-approved',
+      'o-document-header',
+    ]) {
+      expect(input(id).disabled).toBe(true)
+    }
   })
 })

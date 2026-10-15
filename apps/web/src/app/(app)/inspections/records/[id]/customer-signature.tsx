@@ -8,7 +8,7 @@ import {
 
 import { GeneratedText } from '@/i18n/generated'
 
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Alert,
@@ -25,10 +25,13 @@ import {
 } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
 import { RawImage } from '@/components/raw-image'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 
 /**
  * Customer signature capture card — wraps the shared <SignaturePad>, gathers
- * a signer name, and POSTs to the server action via a hidden form.
+ * a signer name, and saves through the server action. Signing needs signal:
+ * offline it explains instead, and online it first pushes the record's
+ * queued edits so the signature is taken against the latest answers.
  *
  * This is a Client Component because <SignaturePad> needs canvas events.
  */
@@ -36,25 +39,26 @@ export function CustomerSignatureCard({
   recordId,
   currentSignature,
   currentSignerName,
-  signedAt,
+  signedAtDisplay,
   locked,
   saveAction,
 }: {
   recordId: string
   currentSignature: string | null
   currentSignerName: string | null
-  signedAt: Date | null
+  /** When it was signed, already formatted in the worker's timezone. */
+  signedAtDisplay: string | null
   locked: boolean
   saveAction: (fd: FormData) => Promise<void>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
+  const runOnline = useOnlineAction()
   const [pending, start] = useTransition()
   const [signature, setSignature] = useState<string | null>(currentSignature)
   const [signerName, setSignerName] = useState<string>(currentSignerName ?? '')
   const [error, setError] = useState<string | null>(null)
-  const formRef = useRef<HTMLFormElement>(null)
 
   function persist() {
     setError(tGeneratedValue(null))
@@ -67,12 +71,14 @@ export function CustomerSignatureCard({
       fd.set('recordId', recordId)
       fd.set('signature', signature)
       fd.set('signerName', signerName)
-      try {
-        await saveAction(fd)
-        router.refresh()
-      } catch (e) {
-        setError(tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_0620b9fad73661')))
-      }
+      await runOnline('finish', async () => {
+        try {
+          await saveAction(fd)
+          router.refresh()
+        } catch (e) {
+          setError(tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_0620b9fad73661')))
+        }
+      })
     })
   }
 
@@ -83,13 +89,15 @@ export function CustomerSignatureCard({
       fd.set('recordId', recordId)
       fd.set('signature', 'clear')
       fd.set('signerName', signerName)
-      try {
-        await saveAction(fd)
-        setSignature(null)
-        router.refresh()
-      } catch (e) {
-        setError(tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_052eecbedaa1a7')))
-      }
+      await runOnline('finish', async () => {
+        try {
+          await saveAction(fd)
+          setSignature(null)
+          router.refresh()
+        } catch (e) {
+          setError(tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_052eecbedaa1a7')))
+        }
+      })
     })
   }
 
@@ -160,10 +168,10 @@ export function CustomerSignatureCard({
                           />
                           <GeneratedValue
                             value={
-                              signedAt ? (
+                              signedAtDisplay ? (
                                 <GeneratedText
                                   id="m_141ebd8dd339f1"
-                                  values={{ value0: new Date(signedAt).toLocaleString() }}
+                                  values={{ value0: signedAtDisplay }}
                                 />
                               ) : (
                                 ''
@@ -186,7 +194,7 @@ export function CustomerSignatureCard({
                 />
               </>
             ) : (
-              <form ref={formRef} className="space-y-3">
+              <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>
                     <GeneratedText id="m_062397e9ebb9aa" />
@@ -230,7 +238,7 @@ export function CustomerSignatureCard({
                     }
                   />
                 </div>
-              </form>
+              </div>
             )
           }
         />

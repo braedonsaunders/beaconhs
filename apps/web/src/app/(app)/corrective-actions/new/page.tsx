@@ -16,11 +16,17 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { correctiveActions, incidents } from '@beaconhs/db/schema'
+import {
+  correctiveActionSeverity,
+  correctiveActionSource,
+  correctiveActions,
+  incidents,
+} from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import { assertCan } from '@beaconhs/tenant'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
@@ -33,17 +39,6 @@ export async function generateMetadata() {
   return { title: tGenerated('m_16b0371ad9cc2c') }
 }
 
-const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
-const SOURCES = [
-  'inspection',
-  'incident',
-  'near_miss',
-  'observation',
-  'audit',
-  'jsha',
-  'other',
-] as const
-
 async function createCA(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -51,13 +46,16 @@ async function createCA(formData: FormData) {
   const title = String(formData.get('title') ?? '').trim()
   if (!title) throw new Error('Title is required')
   const description = String(formData.get('description') ?? '').trim() || null
-  const severity = String(formData.get('severity') ?? 'medium') as (typeof SEVERITIES)[number]
-  const source = String(formData.get('source') ?? 'observation') as (typeof SOURCES)[number]
+  const severity =
+    correctiveActionSeverity.enumValues.find((s) => s === formData.get('severity')) ?? 'medium'
+  const source =
+    correctiveActionSource.enumValues.find((s) => s === formData.get('source')) ?? 'observation'
   const sourceEntityId = String(formData.get('sourceEntityId') ?? '').trim() || null
   const sourceEntityType = String(formData.get('sourceEntityType') ?? '').trim() || null
   const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
   const dueOn = String(formData.get('dueOn') ?? '').trim() || null
-  const assignedOn = new Date().toISOString().slice(0, 10)
+  // Today on the tenant's calendar, not the server's (UTC) one.
+  const assignedOn = dateIsoInTimeZone(new Date(), ctx.timezone)
 
   const row = await ctx.db(async (tx) => {
     const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
@@ -187,7 +185,7 @@ export default async function NewCAPage({
                 </Field>
                 <Field label={tGenerated('m_168b365cc671bf')} required>
                   <Select name="severity" defaultValue="medium">
-                    {SEVERITIES.map((s) => (
+                    {correctiveActionSeverity.enumValues.map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
@@ -196,7 +194,7 @@ export default async function NewCAPage({
                 </Field>
                 <Field label={tGenerated('m_1d05fa7a091a9b')}>
                   <Select name="source" defaultValue={presetSourceType ?? 'observation'}>
-                    {SOURCES.map((s) => (
+                    {correctiveActionSource.enumValues.map((s) => (
                       <option key={s} value={s}>
                         {s.replace('_', ' ')}
                       </option>

@@ -3,58 +3,76 @@
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 
 // Full-width metadata/controls strip: date, log type, site, supervisor, and an
-// editable tag chip set. Larger fields, generous spacing.
+// editable tag chip set. Larger fields, generous spacing. Each control is a
+// local-first record field owned by the editor pane (see ./_editor-pane.tsx).
 
 import { useState } from 'react'
 import { Briefcase, CalendarDays, MapPin, Tag } from 'lucide-react'
 import { cn, SearchSelect } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
+import { RecordFieldError } from '@/components/record-field-error'
+import type { RecordFieldHandle } from '@/lib/offline-drafts/offline-record'
 import { TagEditor } from './_tag-editor'
 import { JournalSupervisorField } from './_supervisor-field'
-import type { JournalDefinition, JournalEntryDetail, TagSuggestion } from './_types'
+import { canonicalJournalTags } from './_tag-policy'
+import type { JournalDefinition, TagSuggestion } from './_types'
 
 const FIELD =
   'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-900'
 
+/** The entry's metadata fields, bound by the editor pane (wire values: '' = none). */
+export type JournalMetadataFields = {
+  entryDate: RecordFieldHandle<string>
+  definition: RecordFieldHandle<JournalDefinition>
+  siteOrgUnitId: RecordFieldHandle<string>
+  supervisorPersonId: RecordFieldHandle<string>
+  tags: RecordFieldHandle<string[]>
+}
+
 export function MetadataBar({
-  entry,
+  fields,
   tagSuggestions,
   editable,
-  onPatch,
-  onTagsChange,
+  requiredForSubmission,
 }: {
-  entry: JournalEntryDetail
+  fields: JournalMetadataFields
   tagSuggestions: TagSuggestion[]
   editable: boolean
-  onPatch: (patch: {
-    entryDate?: string
-    definition?: JournalDefinition
-    siteOrgUnitId?: string | null
-    supervisorPersonId?: string | null
-  }) => void
-  onTagsChange: (tags: string[]) => void
+  requiredForSubmission: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
+  const { entryDate, definition, siteOrgUnitId, supervisorPersonId, tags } = fields
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Field label={tGenerated('m_0285c38761c540')} icon={<CalendarDays size={13} />}>
+        <Field
+          label={tGenerated('m_0285c38761c540')}
+          icon={<CalendarDays size={13} />}
+          error={entryDate.error}
+        >
           <input
             type="date"
-            value={entry.entryDate}
+            value={entryDate.value}
             disabled={!editable}
-            onChange={(e) => onPatch({ entryDate: e.target.value })}
+            // A journal always has a date: a cleared or half-typed date is not saved.
+            onChange={(e) => {
+              if (e.target.value) entryDate.commit(e.target.value)
+            }}
             className={FIELD}
           />
         </Field>
 
-        <Field label={tGenerated('m_0d55dd6f409ab0')} icon={<Briefcase size={13} />}>
+        <Field
+          label={tGenerated('m_0d55dd6f409ab0')}
+          icon={<Briefcase size={13} />}
+          error={definition.error}
+        >
           <SearchSelect
-            value={entry.definition}
+            value={definition.value}
             disabled={!editable}
             ariaLabel="Log type"
             sheetTitle="Log type"
-            onChange={(v) => onPatch({ definition: v as JournalDefinition })}
+            onChange={(v) => definition.commit(v as JournalDefinition)}
             options={[
               { value: 'worker', label: 'Worker' },
               { value: 'supervisor', label: 'Supervisor' },
@@ -62,10 +80,14 @@ export function MetadataBar({
           />
         </Field>
 
-        <Field label={tGenerated('m_055f11420b2da4')} icon={<MapPin size={13} />}>
+        <Field
+          label={tGenerated('m_055f11420b2da4')}
+          icon={<MapPin size={13} />}
+          error={siteOrgUnitId.error}
+        >
           <RemoteSearchSelect
             lookup="journal-locations"
-            value={entry.siteOrgUnitId ?? ''}
+            value={siteOrgUnitId.value}
             disabled={!editable}
             clearable
             emptyLabel={tGenerated('m_1ad901c0a1f003')}
@@ -73,26 +95,30 @@ export function MetadataBar({
             searchPlaceholder={tGenerated('m_016e087c3c8544')}
             sheetTitle="Location"
             ariaLabel="Location"
-            onChange={(v) => onPatch({ siteOrgUnitId: v || null })}
+            onChange={(v) => siteOrgUnitId.commit(v || '')}
           />
         </Field>
 
-        <JournalSupervisorField
-          value={entry.supervisorPersonId}
-          disabled={!editable}
-          requiredForSubmission={entry.status === 'draft'}
-          onChange={(value) => onPatch({ supervisorPersonId: value })}
-        />
+        <div className="space-y-1">
+          <JournalSupervisorField
+            value={supervisorPersonId.value || null}
+            disabled={!editable}
+            requiredForSubmission={requiredForSubmission}
+            onChange={(value) => supervisorPersonId.commit(value ?? '')}
+          />
+          <RecordFieldError error={supervisorPersonId.error} />
+        </div>
       </div>
 
       {/* Tags — collapsed to a compact chip. Tagging is usually automatic in the
           background, so the input stays out of the way until tapped. */}
       <JournalTags
-        tags={entry.tags}
+        tags={tags.value}
         suggestions={tagSuggestions}
         editable={editable}
-        onChange={onTagsChange}
+        onChange={(next) => tags.commit(canonicalJournalTags(next))}
       />
+      <RecordFieldError error={tags.error} />
     </div>
   )
 }
@@ -100,23 +126,26 @@ export function MetadataBar({
 function Field({
   label,
   icon,
+  error,
   children,
 }: {
   label: string
   icon?: React.ReactNode
+  error: string | null
   children: React.ReactNode
 }) {
   return (
-    <label className="block">
+    <label className="block space-y-1">
       <span
         className={cn(
-          'mb-1 flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500',
+          'flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500',
         )}
       >
         <GeneratedValue value={icon} />
         <GeneratedValue value={label} />
       </span>
       <GeneratedValue value={children} />
+      <RecordFieldError error={error} />
     </label>
   )
 }

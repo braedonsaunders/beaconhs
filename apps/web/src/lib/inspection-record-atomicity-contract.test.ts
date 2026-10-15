@@ -12,7 +12,16 @@ function functionSlice(contents: string, name: string, next: string): string {
   return contents.slice(start, end)
 }
 
+function sliceBetween(contents: string, start: string, end: string): string {
+  const from = contents.indexOf(start)
+  const to = contents.indexOf(end, from + 1)
+  if (from < 0 || to < 0) throw new Error(`Could not locate ${start}`)
+  return contents.slice(from, to)
+}
+
 const page = source('../app/(app)/inspections/records/[id]/page.tsx')
+const recordEdits = source('../app/(app)/inspections/_record-edits.ts')
+const criterionCard = source('../app/(app)/inspections/records/[id]/_criteria.tsx')
 const recordActions = source('../app/(app)/inspections/records/_actions.ts')
 const recordList = source('../app/(app)/inspections/records/page.tsx')
 const recordExport = source('../app/(app)/inspections/export.csv/route.ts')
@@ -32,26 +41,47 @@ describe('inspection record atomicity contract', () => {
     const lock = functionSlice(
       inspectionLibrary,
       'lockInspectionRecordForMutation',
-      'export async function lockVisibleInspectionRecordForMutation',
+      'export async function lockVisibleInspectionRecord(',
     )
     expect(lock).toContain('eq(inspectionRecords.tenantId, tenantId)')
     expect(lock).toContain('eq(inspectionRecords.id, recordId)')
     expect(lock).toContain('isNull(inspectionRecords.deletedAt)')
     expect(lock).toContain(".for('update')")
 
-    const visibilityLock = functionSlice(
+    const visibleLock = functionSlice(
+      inspectionLibrary,
+      'lockVisibleInspectionRecord(',
+      'export function inspectionRecordIsImmutable',
+    )
+    expect(visibleLock).toContain('lockInspectionRecordForMutation(')
+    expect(visibleLock).toContain('canSeeRecord(ctx, tx,')
+    const immutable = functionSlice(
+      inspectionLibrary,
+      'inspectionRecordIsImmutable',
+      'export const INSPECTION_RECORD_LOCKED_MESSAGE',
+    )
+    expect(immutable).toContain('record.locked')
+    expect(immutable).toContain("record.status === 'closed'")
+    const mutationLock = functionSlice(
       inspectionLibrary,
       'lockVisibleInspectionRecordForMutation',
-      'export function parseAnswer',
+      'export async function lockInspectionCriterionForMutation',
     )
-    expect(visibilityLock).toContain('lockInspectionRecordForMutation(')
-    expect(visibilityLock).toContain('canSeeRecord(ctx, tx,')
-    expect(visibilityLock).toContain('record.locked')
-    expect(visibilityLock).toContain("record.status === 'closed'")
+    expect(mutationLock).toContain('lockVisibleInspectionRecord(tx, ctx, recordId)')
+    expect(mutationLock).toContain('inspectionRecordIsImmutable(record)')
+
+    // Criterion rows are locked under the parent, scoped to tenant and record.
+    const criterionLock = functionSlice(
+      inspectionLibrary,
+      'lockInspectionCriterionForMutation',
+      'export async function markInspectionInProgressIfDraft',
+    )
+    expect(criterionLock).toContain('eq(inspectionRecordCriteria.tenantId, tenantId)')
+    expect(criterionLock).toContain('eq(inspectionRecordCriteria.recordId, recordId)')
+    expect(criterionLock).toContain(".for('update')")
 
     const directActions = [
-      ['toggleLock', 'async function updateRecordField'],
-      ['updateRecordField', 'async function setCriterionAnswer'],
+      ['toggleLock', 'async function lockInspection'],
       ['passAll', 'async function markSectionNa'],
       ['markSectionNa', 'async function saveCustomerSignature'],
       ['saveCustomerSignature', '// Plain helper'],
@@ -67,25 +97,82 @@ describe('inspection record atomicity contract', () => {
     }
 
     const criterionActions = [
-      ['setCriterionAnswer', 'async function setCriterionChoiceAnswer'],
-      ['setCriterionChoiceAnswer', 'async function setCriterionValueAnswer'],
-      ['setCriterionValueAnswer', 'async function setCriterionSeverity'],
-      ['setCriterionSeverity', 'async function setCriterionNonCompliance'],
-      ['setCriterionNonCompliance', 'async function setCriterionActionTaken'],
-      ['setCriterionActionTaken', 'async function setCriterionCompliantNote'],
-      ['setCriterionCompliantNote', 'async function setCriterionAssignment'],
-      ['setCriterionAssignment', 'async function setCriterionCorrectedOn'],
-      ['setCriterionCorrectedOn', 'async function addCriterionPhotos'],
-      ['addCriterionPhotos', 'async function passAll'],
+      ['addCriterionPhotos', 'async function updateCriterionPhoto'],
+      ['updateCriterionPhoto', 'async function removeCriterionPhoto'],
+      ['removeCriterionPhoto', 'async function reorderCriterionPhotos'],
+      ['reorderCriterionPhotos', 'async function passAll'],
     ] as const
     for (const [name, next] of criterionActions) {
       const action = functionSlice(page, name, next)
       expect(action, name).toContain('withLockedCriterionMutation(')
-      expect(action, name).toContain('eq(inspectionRecordCriteria.tenantId, ctx.tenantId)')
-      expect(action, name).toContain('eq(inspectionRecordCriteria.recordId, recordId)')
-      expect(action, name).toContain('eq(inspectionRecordCriteria.id, rowId)')
       expect(action, name).toContain('recordAuditInTransaction(')
     }
+    const criterionWrapper = functionSlice(
+      page,
+      'withLockedCriterionMutation',
+      'async function toggleLock',
+    )
+    expect(criterionWrapper).toContain('lockVisibleInspectionRecordForMutation(tx, ctx, recordId)')
+    expect(criterionWrapper).toContain('lockInspectionCriterionForMutation(')
+  })
+
+  it('syncs queued field edits under the same parent lock, permission, and audit', () => {
+    expect(recordEdits).toContain("authorize: (ctx) => can(ctx, 'inspections.update')")
+    const load = sliceBetween(recordEdits, 'async load(tx, ctx, recordId)', 'async resolve(')
+    expect(load).toContain('lockVisibleInspectionRecord(tx, ctx, recordId)')
+    expect(load).toContain('throw recordNotFound()')
+    expect(load).toContain('inspectionRecordIsImmutable(record)')
+    expect(load).toContain('throw recordLocked(')
+
+    // Criterion fields resolve only rows of the locked record.
+    const criterionLookup = functionSlice(
+      recordEdits,
+      'criterionForEdit(',
+      'function criterionFieldOp',
+    )
+    expect(criterionLookup).toContain('lockInspectionCriterionForMutation(')
+    expect(criterionLookup).toContain('edits.record.id')
+    const criterionWrite = functionSlice(recordEdits, 'criterionFieldOp(', 'switch (field)')
+    expect(criterionWrite).toContain('eq(inspectionRecordCriteria.tenantId, ctx.tenantId)')
+    expect(criterionWrite).toContain('eq(inspectionRecordCriteria.recordId, criterion.recordId)')
+    expect(criterionWrite).toContain('eq(inspectionRecordCriteria.id, rowId)')
+    expect(criterionWrite).toContain("criterion.answer !== 'fail'")
+    for (const field of [
+      "case 'answer':",
+      "case 'choiceAnswer':",
+      "case 'value':",
+      "case 'severity':",
+      "case 'nonCompliance':",
+      "case 'actionTaken':",
+      "case 'compliantNote':",
+      "case 'assignment':",
+      "case 'correctedOn':",
+    ]) {
+      expect(recordEdits, field).toContain(field)
+    }
+    // A non-fail answer clears the finding on the server, and the card queues
+    // the same clears so no finding edit is sent to a criterion that passed.
+    expect(recordEdits).toContain("...(answer === 'fail' ? {} : FINDING_CLEARED)")
+    const pickAnswer = functionSlice(criterionCard, 'pickAnswer', 'function pickSeverity')
+    for (const clear of [
+      "severityField.commit('')",
+      "nonComplianceField.commit('')",
+      "actionTakenField.commit('')",
+      'assignmentField.commit(criterionAssignmentWire(null, null))',
+      "correctedField.commit('')",
+    ]) {
+      expect(pickAnswer).toContain(clear)
+    }
+    // Linked corrective actions keep their own permission and lifecycle.
+    const corrected = recordEdits.slice(recordEdits.indexOf("case 'correctedOn':"))
+    expect(corrected).toContain("can(ctx, 'ca.update')")
+    expect(corrected).toContain(".for('update')")
+    expect(corrected).toContain("prefix: 'ca'")
+
+    const afterWrites = sliceBetween(recordEdits, 'async afterWrites(', 'revalidate:')
+    expect(afterWrites).toContain('markInspectionInProgressIfDraft(tx, ctx, record)')
+    expect(afterWrites).toContain('recordAuditInTransaction(tx, ctx,')
+    expect(afterWrites).toContain("entityType: 'inspection_record'")
   })
 
   it('creates the parent, criteria, flow event, and audit in one transaction', () => {
@@ -107,7 +194,7 @@ describe('inspection record atomicity contract', () => {
   })
 
   it('uses one shared close gate and transaction-owned lifecycle effects in UI and API', () => {
-    const uiStatus = functionSlice(page, 'toggleLock', 'async function updateRecordField')
+    const uiStatus = functionSlice(page, 'toggleLock', 'async function lockInspection')
     const apiUpdate = functionSlice(
       apiWrites,
       'updateInspection',
@@ -150,9 +237,13 @@ describe('inspection record atomicity contract', () => {
     const mutationWrapper = functionSlice(
       page,
       'withLockedCriterionMutation',
-      'async function markInspectionInProgressIfDraft',
+      'async function toggleLock',
     )
     expect(mutationWrapper).toContain('reconcileSubmittedInspectionInTx(tx, ctx, record)')
+    const syncedEdits = sliceBetween(recordEdits, 'async afterWrites(', 'revalidate:')
+    expect(syncedEdits).toContain(
+      'if (edits.criteriaChanged) await reconcileSubmittedInspectionInTx(tx, ctx, record)',
+    )
 
     const reconcile = functionSlice(
       inspectionLibrary,
@@ -169,11 +260,7 @@ describe('inspection record atomicity contract', () => {
   })
 
   it('publishes and audits the automatic draft-to-in-progress transition', () => {
-    const startWork = functionSlice(
-      page,
-      'markInspectionInProgressIfDraft',
-      'async function toggleLock',
-    )
+    const startWork = functionSlice(inspectionLibrary, 'markInspectionInProgressIfDraft', '\n}')
     expect(startWork).toContain("record.status !== 'draft'")
     expect(startWork).toContain("eq(inspectionRecords.status, 'draft')")
     expect(startWork).toContain("toStatus: 'in_progress'")
@@ -182,7 +269,7 @@ describe('inspection record atomicity contract', () => {
 
   it('reopens closed records instead of permitting a closed-unlocked state', () => {
     expect(page).toContain("const recordImmutable = record.locked || record.status === 'closed'")
-    const toggle = functionSlice(page, 'toggleLock', 'async function updateRecordField')
+    const toggle = functionSlice(page, 'toggleLock', 'async function lockInspection')
     expect(toggle).toContain("current.status === 'closed' && !lock")
     expect(toggle).toContain("inspectionStatusMilestonePatch(current, 'submitted'")
     expect(toggle).toContain("toStatus: 'submitted'")
@@ -200,7 +287,7 @@ describe('inspection record atomicity contract', () => {
   })
 
   it('resubmits an unlocked submitted record when it is locked again', () => {
-    const toggle = functionSlice(page, 'toggleLock', 'async function updateRecordField')
+    const toggle = functionSlice(page, 'toggleLock', 'async function lockInspection')
     expect(toggle).toContain(
       "const resubmittingAndLocking = lock && current.status === 'submitted' && !current.locked",
     )
@@ -273,6 +360,9 @@ describe('inspection record atomicity contract', () => {
     expect(page).not.toContain('logRecordAudit')
     expect(page).not.toMatch(/\.where\(\s*eq\(inspectionRecords\.id/)
     expect(page).not.toMatch(/\.where\(\s*eq\(inspectionRecordCriteria\.id/)
+    expect(recordEdits).not.toMatch(/\.where\(\s*eq\(inspectionRecords\.id/)
+    expect(recordEdits).not.toMatch(/\.where\(\s*eq\(inspectionRecordCriteria\.id/)
+    expect(recordEdits).not.toContain('recordAudit(ctx,')
     expect(inspectionLibrary).not.toContain('logRecordAudit')
     expect(inspectionLibrary).not.toContain('recordAudit(ctx,')
   })

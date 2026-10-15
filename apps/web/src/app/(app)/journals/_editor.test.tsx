@@ -11,6 +11,12 @@ vi.mock('@/i18n/generated', () => ({
   useGeneratedValueTranslations: () => (value: string) => value,
 }))
 vi.mock('./_voice-button', () => ({ VoiceButton: () => null }))
+vi.mock('@/lib/offline-drafts/use-online-action', () => ({
+  useOnlineAction: () => async (_purpose: string, run: () => Promise<void>) => {
+    await run()
+    return true
+  },
+}))
 import { JournalEditor } from './_editor'
 
 let root: Root
@@ -21,7 +27,7 @@ async function render(html: string, editable = true, key = 'entry-a') {
     root.render(
       <JournalEditor
         key={key}
-        initialHtml={html}
+        value={html}
         editable={editable}
         aiEnabled={false}
         onChange={change}
@@ -51,7 +57,7 @@ describe('journal editor content ownership', () => {
     expect(change).not.toHaveBeenCalled()
   })
 
-  it('keeps the live body through stale photo/metadata refreshes and loads a newly selected entry', async () => {
+  it('keeps the live body when its own edit comes back and loads a newly selected entry', async () => {
     await render('<ol><li>First 8 points</li></ol>')
     const editor = (container.querySelector('.tiptap') as HTMLElement & { editor: Editor }).editor
     await act(async () => {
@@ -61,12 +67,21 @@ describe('journal editor content ownership', () => {
       )
     })
     expect(change).toHaveBeenCalledOnce()
-    expect(change.mock.calls[0]?.[0]).toContain('Point 10')
+    const typed = change.mock.calls[0]?.[0] as string
+    expect(typed).toContain('Point 10')
     change.mockClear()
-    await render('<ol><li>First 8 points</li></ol>')
+    // The bound field hands the editor's own HTML back: nothing is reloaded.
+    await render(typed)
     expect(container.querySelector('.tiptap')!.textContent).toContain('Point 10')
     await render('<p>Another journal</p>', true, 'entry-b')
     expect(container.querySelector('.tiptap')!.textContent).toBe('Another journal')
+    expect(change).not.toHaveBeenCalled()
+  })
+
+  it('shows a restored device copy without counting it as a new edit', async () => {
+    await render('<p>Saved on the server</p>')
+    await render('<p>Typed offline on this device</p>')
+    expect(container.querySelector('.tiptap')!.textContent).toBe('Typed offline on this device')
     expect(change).not.toHaveBeenCalled()
   })
 })

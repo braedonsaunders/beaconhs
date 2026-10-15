@@ -31,21 +31,17 @@ type ClassFieldOptions = {
 }
 
 export function ClassDetailFields({
-  id,
   initial,
   options,
   disabled,
   courseHref,
   notice,
-  updateAction,
 }: {
-  id: string
   initial: ClassFieldValues
   options: ClassFieldOptions
   disabled?: boolean
   courseHref?: string | null
   notice?: React.ReactNode
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
   const tValue = useGeneratedValueTranslations()
@@ -60,7 +56,6 @@ export function ClassDetailFields({
         <GeneratedValue value={notice} />
         <div className="space-y-1">
           <LiveRemoteSelect
-            id={id}
             field="courseId"
             label={tGenerated('m_14fc1e0739b60e')}
             initialValue={initial.courseId}
@@ -68,7 +63,6 @@ export function ClassDetailFields({
             lookup="training-class-courses"
             allowEmpty={false}
             disabled={disabled}
-            updateAction={updateAction}
           />
           <GeneratedValue
             value={
@@ -84,24 +78,15 @@ export function ClassDetailFields({
           />
         </div>
         <LiveField
-          id={id}
           field="title"
           label={tGenerated('m_0decefd558c355')}
           initialValue={initial.title}
           maxLength={200}
           disabled={disabled}
-          updateAction={updateAction}
         />
-        <ClassSchedule
-          id={id}
-          startsAt={initial.startsAt}
-          endsAt={initial.endsAt}
-          disabled={disabled}
-          updateAction={updateAction}
-        />
+        <ClassSchedule startsAt={initial.startsAt} endsAt={initial.endsAt} disabled={disabled} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <LiveRemoteSelect
-            id={id}
             field="siteOrgUnitId"
             label={tGenerated('m_1fc91567299335')}
             initialValue={initial.siteOrgUnitId}
@@ -109,10 +94,8 @@ export function ClassDetailFields({
             lookup="training-class-sites"
             emptyLabel={tGenerated('m_13cf177934a5e3')}
             disabled={disabled}
-            updateAction={updateAction}
           />
           <LiveRemoteSelect
-            id={id}
             field="instructorTenantUserId"
             label={tGenerated('m_0797e9a65b95e2')}
             initialValue={initial.instructorTenantUserId}
@@ -120,23 +103,19 @@ export function ClassDetailFields({
             lookup="training-class-instructors"
             emptyLabel={tGenerated('m_176dd8fa7fc529')}
             disabled={disabled}
-            updateAction={updateAction}
           />
         </div>
         <LiveField
-          id={id}
           field="location"
           label={tValue('Class location')}
           initialValue={initial.location}
           maxLength={500}
           disabled={disabled}
-          updateAction={updateAction}
         />
         <p className="text-xs text-slate-500">
           <GeneratedText id="m_1ceec74b520e0b" />
         </p>
         <LiveField
-          id={id}
           field="capacity"
           label={tGenerated('m_0b57f1d8f70101')}
           initialValue={initial.capacity}
@@ -144,10 +123,8 @@ export function ClassDetailFields({
           min={1}
           max={1000}
           disabled={disabled}
-          updateAction={updateAction}
         />
         <LiveField
-          id={id}
           field="notes"
           label={tGenerated('m_0b8dadcb78cd08')}
           initialValue={initial.notes}
@@ -155,10 +132,8 @@ export function ClassDetailFields({
           rows={3}
           maxLength={20000}
           disabled={disabled}
-          updateAction={updateAction}
         />
         <LiveSelect
-          id={id}
           field="reminderHours"
           label={tValue('Automatic reminder email')}
           initialValue={initial.reminderHours}
@@ -169,7 +144,6 @@ export function ClassDetailFields({
           ]}
           emptyLabel={tValue('Off')}
           disabled={disabled}
-          updateAction={updateAction}
         />
         <p className="text-xs text-slate-500">
           <GeneratedValue value="Reminders only send after a manager uses Email class. Creating or editing a class does not send its initial email." />

@@ -18,11 +18,14 @@ function between(value: string, start: string, end: string): string {
 const submitLifecycle = source('./form-response-lifecycle.ts')
 const fillActions = source('../../app/(app)/apps/templates/[id]/fill/actions.ts')
 const draftPersistence = source('../../app/(app)/apps/_lib/draft-persistence.ts')
+const recordEdits = source('../../app/(app)/apps/_lib/record-edits.ts')
 const lifecycleActions = source('../../app/(app)/apps/responses/[id]/_lifecycle-actions.ts')
 const workflowActions = source('../../app/(app)/apps/responses/[id]/_actions.ts')
 const monitorActions = source('../../app/(app)/apps/responses/[id]/_monitor-actions.ts')
 const formFlow = source('../../app/(app)/apps/_lib/form-flow-adapter.ts')
 const hazardOwner = source('../../app/(app)/hazard-assessments/_actions.ts')
+const hazardAppResponses = source('../../app/(app)/hazard-assessments/_assessment-rules.ts')
+const hazardSaver = source('../../app/(app)/hazard-assessments/_record-edits.ts')
 const api = source('../api/builder-apps.ts')
 const pdfWorker = source('../../../../worker/src/workers/pdf.ts')
 const scheduledWorker = source('../../../../worker/src/workers/scheduled.ts')
@@ -58,10 +61,11 @@ describe('generic form-response parent-lock contract', () => {
     expect(runtimeResponseWriters(new URL('../../', import.meta.url))).toEqual([
       'app/(app)/apps/_lib/draft-persistence.ts',
       'app/(app)/apps/_lib/form-flow-adapter.ts',
+      'app/(app)/apps/_lib/record-edits.ts',
       'app/(app)/apps/responses/[id]/_actions.ts',
       'app/(app)/apps/responses/[id]/_lifecycle-actions.ts',
       'app/(app)/apps/responses/[id]/_monitor-actions.ts',
-      'app/(app)/hazard-assessments/_actions.ts',
+      'app/(app)/hazard-assessments/_record-edits.ts',
       'lib/api/builder-apps.ts',
       'lib/forms/form-response-lifecycle.ts',
       'lib/hazid-signing.ts',
@@ -74,7 +78,7 @@ describe('generic form-response parent-lock contract', () => {
     expect(runtimeResponseWriters(new URL('../../', import.meta.url), 'insert')).toEqual([
       'app/(app)/apps/_lib/draft-persistence.ts',
       'app/(app)/apps/_lib/form-flow-adapter.ts',
-      'app/(app)/hazard-assessments/_actions.ts',
+      'app/(app)/hazard-assessments/_assessment-rules.ts',
       'lib/forms/form-response-lifecycle.ts',
     ])
     expect(
@@ -92,18 +96,19 @@ describe('generic form-response parent-lock contract', () => {
     expect(fillActions).not.toContain('.insert(formResponses)')
     expect(draftPersistence.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
     expect(draftPersistence).toContain("status: 'draft'")
-    expect(hazardOwner.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
-    expect(hazardOwner).toContain("status: 'draft'")
+    expect(hazardAppResponses.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
+    expect(hazardAppResponses).toContain("status: 'draft'")
 
     expect(submitLifecycle.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
     expect(submitLifecycle).toContain('status: finalStatus')
     expect(submitLifecycle).toContain('await materializeFormResponseEvidenceChange(')
   })
 
-  it('guards every runtime form-response update writer outside the owning HazID action', () => {
+  it('guards every runtime form-response update writer outside the owning HazID saver', () => {
     const guardedWriters = [
       [submitLifecycle, 1, 1],
-      [draftPersistence, 2, 2],
+      [draftPersistence, 1, 1],
+      [recordEdits, 1, 1],
       [lifecycleActions, 4, 4],
       [workflowActions, 4, 3],
       [monitorActions, 2, 2],
@@ -118,6 +123,12 @@ describe('generic form-response parent-lock contract', () => {
     }
 
     expect(fillActions).not.toContain('.update(formResponses)')
+    // The HazID owner syncs its linked apps' location while it holds the
+    // assessment row FOR UPDATE (parent first, like setHazidAppsLocked).
+    expect(hazardSaver.match(/\.update\(formResponses\)/gu)).toHaveLength(1)
+    expect(hazardSaver).toContain('await lockVisibleAssessmentRow(ctx, tx, assessmentId)')
+    expect(hazardSaver).toContain('eq(formResponses.tenantId, ctx.tenantId)')
+    expect(hazardSaver).toContain('isNull(formResponses.deletedAt)')
     expect(api.match(/\.update\(formResponses\)/gu)).toHaveLength(2)
     expect(api.match(/await lockApiResponseForMutation\(/gu)).toHaveLength(2)
     expect(api).toContain('return await lockFormResponseForMutation(tx, ctx.tenantId, responseId)')
@@ -192,6 +203,7 @@ describe('generic form-response parent-lock contract', () => {
   it('never takes a response row lock before the shared parent-first guard', () => {
     expect(fillActions).not.toContain(".for('update', { of: formResponses })")
     expect(draftPersistence).not.toContain(".for('update', { of: formResponses })")
+    expect(recordEdits).not.toContain(".for('update', { of: formResponses })")
     expect(pdfWorker).not.toMatch(/\.from\(formResponses\)[\s\S]{0,300}\.for\('update'\)/u)
     expect(scheduledWorker).not.toContain(".for('update', { skipLocked: true })")
   })
@@ -234,6 +246,7 @@ describe('generic form-response parent-lock contract', () => {
   it('does not rematerialize compliance for draft payload or monitor-only writes', () => {
     expect(fillActions).not.toContain('materializeFormResponseEvidenceChange')
     expect(draftPersistence).not.toContain('materializeFormResponseEvidenceChange')
+    expect(recordEdits).not.toContain('materializeFormResponseEvidenceChange')
     expect(monitorActions).not.toContain('materializeFormResponseEvidenceChange')
     expect(pdfWorker).not.toContain('materializeFormResponseEvidenceChange')
     expect(scheduledWorker).not.toContain('materializeFormResponseEvidenceChange')

@@ -6,7 +6,10 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 
 // The Journals workspace shell: a responsive 2-pane app (tree · editor). On
 // desktop the tree sits beside the editor; on mobile the tree is a slide-over
-// drawer and the editor is full-screen.
+// drawer and the editor is full-screen. Entries edit local-first (see
+// ./_editor-pane.tsx); entries already opened in this session stay available
+// to switch back to without signal. Opening another entry from the server or
+// starting a new one needs signal.
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState, useTransition } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -25,7 +28,34 @@ import {
 } from './_actions'
 import type { GroupBy, JournalEntryDetail, JournalFilters, WorkspaceData } from './_types'
 import { mergeTreePages } from './_tree-pages'
-import { flushRecordSaves } from '@/lib/pending-record-saves'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
+import type { JournalFieldValues } from './_editor-pane'
+
+/** An entry's field values (what the record saver owns). */
+function fieldValues(entry: JournalEntryDetail): JournalFieldValues {
+  return {
+    bodyHtml: entry.bodyHtml,
+    entryDate: entry.entryDate,
+    definition: entry.definition,
+    siteOrgUnitId: entry.siteOrgUnitId,
+    supervisorPersonId: entry.supervisorPersonId,
+    tags: entry.tags,
+  }
+}
+
+/**
+ * Merge a refetched entry (after a photo, submit, or unlock) into the one the
+ * page holds. While the entry is still an editable draft, its field values
+ * stay as they were: the fields own them (their edits may still be queued),
+ * and a refetch that raced an edit must never overwrite it on screen.
+ */
+function mergeRefreshed(
+  current: JournalEntryDetail,
+  refreshed: JournalEntryDetail,
+): JournalEntryDetail {
+  const editable = refreshed.canEdit && !refreshed.locked && refreshed.status === 'draft'
+  return editable ? { ...refreshed, ...fieldValues(current) } : refreshed
+}
 
 export function JournalWorkspace({
   initialData,
@@ -43,8 +73,16 @@ export function JournalWorkspace({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
+  const runOnline = useOnlineAction()
   const [data, setData] = useState(initialData)
   const [entry, setEntry] = useState(initialEntry)
+  // Entries opened in this session, kept current with what the server has
+  // acknowledged, so switching back to one works without signal.
+  const openedRef = useRef<Map<string, JournalEntryDetail> | null>(null)
+  function openedEntries(): Map<string, JournalEntryDetail> {
+    openedRef.current ??= new Map(initialEntry ? [[initialEntry.id, initialEntry]] : [])
+    return openedRef.current
+  }
   const [groupBy, setGroupBy] = useState<GroupBy>(initialGroupBy)
   const [filters, setFilters] = useState<JournalFilters>({})
   const [treeOpen, setTreeOpen] = useState(false)
@@ -107,37 +145,39 @@ export function JournalWorkspace({
     return () => document.removeEventListener('keydown', onKey)
   }, [treeOpen])
 
-  async function saveBeforeLeaving(): Promise<boolean> {
-    try {
-      await flushRecordSaves()
-      return true
-    } catch (error) {
-      toast.error(
-        tGeneratedValue(error instanceof Error ? error.message : 'Could not save your journal.'),
-      )
-      return false
-    }
+  function show(detail: JournalEntryDetail) {
+    openedEntries().set(detail.id, detail)
+    setEntry(detail)
+    setUrl(detail.id)
+    setOpenError(null)
   }
 
   async function selectEntry(id: string) {
     setTreeOpen(false)
     const requestId = ++entryRequestId.current
     if (id === entry?.id) return
-    if (!(await saveBeforeLeaving())) return
-    try {
-      const detail = await fetchEntry(id)
-      if (requestId !== entryRequestId.current) return
-      if (!detail) throw new Error(tGenerated('m_0065fba0031114'))
-      setEntry(detail)
-      setUrl(id)
-      setOpenError(null)
-    } catch (error) {
-      unstable_rethrow(error)
-      if (requestId !== entryRequestId.current) return
-      const message = error instanceof Error ? error.message : 'Could not open your journal.'
-      setOpenError(message)
-      toast.error(tGeneratedValue(message))
+    // Without signal, an entry already opened here comes back from memory;
+    // its unsynced edits are restored from this device.
+    const known = openedEntries().get(id)
+    if (known && !navigator.onLine) {
+      show(known)
+      return
     }
+    // Online: push this entry's queued edits, then load the other one fresh.
+    await runOnline('start', async () => {
+      try {
+        const detail = await fetchEntry(id)
+        if (requestId !== entryRequestId.current) return
+        if (!detail) throw new Error(tGenerated('m_0065fba0031114'))
+        show(detail)
+      } catch (error) {
+        unstable_rethrow(error)
+        if (requestId !== entryRequestId.current) return
+        const message = error instanceof Error ? error.message : 'Could not open your journal.'
+        setOpenError(message)
+        toast.error(tGeneratedValue(message))
+      }
+    })
   }
 
   async function changeGroupBy(g: GroupBy) {
@@ -205,30 +245,36 @@ export function JournalWorkspace({
     setOpenError(null)
     startNav(async () => {
       try {
-        if (!(await saveBeforeLeaving())) {
-          if (requestId === entryRequestId.current) setOpenError('Could not save your journal.')
-          return
-        }
-        if (requestId !== entryRequestId.current) return
-        const result = await createEntryForDate(dateISO)
-        if (requestId !== entryRequestId.current) return
-        if (!result.ok) throw new Error(result.error)
-        setEntry(result.entry)
-        setUrl(result.entry.id)
-        setTreeOpen(false)
-        void reloadSidebar().catch((error: unknown) => {
-          toast.error(
-            tGeneratedValue(
-              error instanceof Error ? error.message : 'Could not open your journal.',
-            ),
-          )
+        // Creating (or resuming) a date's entry needs signal; this entry's
+        // queued edits are pushed first.
+        const ran = await runOnline('start', async () => {
+          if (requestId !== entryRequestId.current) return
+          try {
+            const result = await createEntryForDate(dateISO)
+            if (requestId !== entryRequestId.current) return
+            if (!result.ok) throw new Error(result.error)
+            show(result.entry)
+            setTreeOpen(false)
+            void reloadSidebar().catch((error: unknown) => {
+              toast.error(
+                tGeneratedValue(
+                  error instanceof Error ? error.message : 'Could not open your journal.',
+                ),
+              )
+            })
+          } catch (error) {
+            unstable_rethrow(error)
+            if (requestId !== entryRequestId.current) return
+            const message = error instanceof Error ? error.message : 'Could not open your journal.'
+            setOpenError(message)
+            if (entry) toast.error(tGeneratedValue(message))
+          }
         })
-      } catch (error) {
-        unstable_rethrow(error)
-        if (requestId !== entryRequestId.current) return
-        const message = error instanceof Error ? error.message : 'Could not open your journal.'
-        setOpenError(message)
-        if (entry) toast.error(tGeneratedValue(message))
+        // Refused (no signal, or edits that could not be delivered — the
+        // toast says which): leave a retry instead of an endless skeleton.
+        if (!ran && requestId === entryRequestId.current) {
+          setOpenError('Could not open your journal.')
+        }
       } finally {
         openingRequest.current = false
       }
@@ -237,25 +283,21 @@ export function JournalWorkspace({
 
   async function onMutated() {
     if (entry) {
-      if (!(await saveBeforeLeaving())) return
-      const refreshed = await fetchEntry(entry.id)
-      if (refreshed) {
-        setEntry((current) => {
-          if (!current || current.id !== entry.id) return current
-          // Edits made during the refresh remain authoritative. The editor
-          // itself stays mounted and never rehydrates from this response.
-          return current === entry
-            ? refreshed
-            : {
-                ...refreshed,
-                bodyHtml: current.bodyHtml,
-                tags: current.tags,
-                definition: current.definition,
-                siteOrgUnitId: current.siteOrgUnitId,
-                supervisorPersonId: current.supervisorPersonId,
-                entryDate: current.entryDate,
-              }
-        })
+      const id = entry.id
+      try {
+        const refreshed = await fetchEntry(id)
+        if (refreshed) {
+          const known = openedEntries().get(id)
+          openedEntries().set(id, known ? mergeRefreshed(known, refreshed) : refreshed)
+          setEntry((current) =>
+            current && current.id === id ? mergeRefreshed(current, refreshed) : current,
+          )
+        }
+      } catch (error) {
+        unstable_rethrow(error)
+        toast.error(
+          tGeneratedValue(error instanceof Error ? error.message : 'Could not open your journal.'),
+        )
       }
     }
     await reloadSidebar()
@@ -263,14 +305,20 @@ export function JournalWorkspace({
 
   function onDeleted() {
     ++entryRequestId.current
+    if (entry) openedEntries().delete(entry.id)
     setEntry(null)
     setUrl(null)
     if (data.canCreate && !authorEntryId) newEntry()
     else void reloadSidebar()
   }
 
-  function onLocalPatch(patch: Partial<JournalEntryDetail>) {
+  function onStatusChange(patch: Pick<JournalEntryDetail, 'status' | 'locked'>) {
     setEntry((e) => (e ? { ...e, ...patch } : e))
+  }
+
+  function onSynced(id: string, patch: Partial<JournalFieldValues>) {
+    const known = openedEntries().get(id)
+    if (known) openedEntries().set(id, { ...known, ...patch })
   }
 
   const sidebar = (
@@ -344,7 +392,8 @@ export function JournalWorkspace({
                   aiEnabled={data.aiEnabled}
                   onMutated={onMutated}
                   onDeleted={onDeleted}
-                  onLocalPatch={onLocalPatch}
+                  onStatusChange={onStatusChange}
+                  onSynced={(patch) => onSynced(entry.id, patch)}
                   onBrowse={() => setTreeOpen(true)}
                 />
               ) : (

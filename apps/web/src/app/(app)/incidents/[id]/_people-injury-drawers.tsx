@@ -16,6 +16,7 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useResetWhenOpen } from '@/lib/use-reset-when-open'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
@@ -78,6 +79,7 @@ export function PersonDrawer({
   const [role, setRole] = useState(defaults?.role ?? 'involved')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
   useResetWhenOpen(open, () => {
     setPersonId(defaults?.personId ?? '')
     setPersonNameText(defaults?.personNameText ?? '')
@@ -92,19 +94,21 @@ export function PersonDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        id: defaults?.id,
-        incidentId,
-        personId: personId || null,
-        personNameText: personId ? null : personNameText.trim() || null,
-        role: role || null,
+      await runOnline('finish', async () => {
+        const res = await action({
+          id: defaults?.id,
+          incidentId,
+          personId: personId || null,
+          personNameText: personId ? null : personNameText.trim() || null,
+          role: role || null,
+        })
+        if (res.ok) {
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_0509d1385fe86f')))
+        }
       })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_0509d1385fe86f')))
-      }
     })
   }
 
@@ -265,6 +269,7 @@ export function InjuryDrawer({
   )
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
   useResetWhenOpen(open, () => {
     setPersonId(defaults?.personId ?? '')
     setPersonName(defaults?.personName ?? '')
@@ -291,24 +296,26 @@ export function InjuryDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        id: defaults?.id,
-        incidentId,
-        personId: personId || null,
-        personName: personId ? null : personName.trim() || null,
-        injuryTypeIds: selectedTypes.map((type) => type.value),
-        injuryResult: injuryResult.trim() || null,
-        bodyParts: fromCommaList(bodyParts),
-        treatment: treatment.trim() || null,
-        treatedAtFacility: treatedAtFacility.trim() || null,
-        workedHoursPriorTo: hoursNum,
+      await runOnline('finish', async () => {
+        const res = await action({
+          id: defaults?.id,
+          incidentId,
+          personId: personId || null,
+          personName: personId ? null : personName.trim() || null,
+          injuryTypeIds: selectedTypes.map((type) => type.value),
+          injuryResult: injuryResult.trim() || null,
+          bodyParts: fromCommaList(bodyParts),
+          treatment: treatment.trim() || null,
+          treatedAtFacility: treatedAtFacility.trim() || null,
+          workedHoursPriorTo: hoursNum,
+        })
+        if (res.ok) {
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_12ec8a770ecb46')))
+        }
       })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_12ec8a770ecb46')))
-      }
     })
   }
 

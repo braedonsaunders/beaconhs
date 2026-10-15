@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  draftAnswerWire,
   gradeAnswer,
   normalizeSubmittedAnswer,
+  parseDraftAnswer,
   parseManualReviewNotes,
   parseManualReviewPoints,
+  storedAnswerValues,
 } from './grading'
 
 const OPTIONS = [
@@ -29,6 +32,57 @@ describe('normalizeSubmittedAnswer', () => {
     expect(() => normalizeSubmittedAnswer('single_choice', ['missing'], OPTIONS, true)).toThrow(
       'available choices',
     )
+  })
+})
+
+describe('in-progress answers', () => {
+  it('stores each question kind exactly as a submission would', () => {
+    expect(parseDraftAnswer('single_choice', 'two', OPTIONS)).toBe('two')
+    expect(parseDraftAnswer('multi_choice', ['three', 'one'], OPTIONS)).toBe('one,three')
+    expect(parseDraftAnswer('true_false', 'false', OPTIONS)).toBe('false')
+    expect(parseDraftAnswer('numeric', ' 12.5 ', OPTIONS)).toBe('12.5')
+    expect(parseDraftAnswer('text', '  Lock out the breaker.  ', OPTIONS)).toBe(
+      'Lock out the breaker.',
+    )
+  })
+
+  it('lets a question stay unanswered until submit', () => {
+    expect(parseDraftAnswer('single_choice', '', OPTIONS)).toBeNull()
+    expect(parseDraftAnswer('multi_choice', [], OPTIONS)).toBeNull()
+    expect(parseDraftAnswer('text', '   ', OPTIONS)).toBeNull()
+    expect(parseDraftAnswer('numeric', null, OPTIONS)).toBeNull()
+  })
+
+  it('refuses answers that do not fit the question', () => {
+    expect(() => parseDraftAnswer('single_choice', 'missing', OPTIONS)).toThrow('available choices')
+    expect(() => parseDraftAnswer('multi_choice', 'one', OPTIONS)).toThrow('available choices')
+    expect(() => parseDraftAnswer('multi_choice', ['one', 7], OPTIONS)).toThrow('available choices')
+    expect(() => parseDraftAnswer('true_false', 'maybe', OPTIONS)).toThrow('true or false')
+    expect(() => parseDraftAnswer('numeric', 'twelve', OPTIONS)).toThrow('valid number')
+    expect(() => parseDraftAnswer('text', ['a'], OPTIONS)).toThrow('invalid')
+  })
+
+  it('shows a stored answer in the form the page edits and resubmits it unchanged', () => {
+    expect(draftAnswerWire('multi_choice', 'one,three')).toEqual(['one', 'three'])
+    expect(draftAnswerWire('multi_choice', null)).toEqual([])
+    expect(draftAnswerWire('single_choice', 'two')).toBe('two')
+    expect(draftAnswerWire('text', null)).toBe('')
+    // Text answers keep their commas.
+    expect(storedAnswerValues('text', 'Gloves, glasses')).toEqual(['Gloves, glasses'])
+    for (const [kind, stored] of [
+      ['multi_choice', 'one,three'],
+      ['single_choice', 'two'],
+      ['text', 'Gloves, glasses'],
+      ['numeric', '4'],
+    ] as const) {
+      expect(normalizeSubmittedAnswer(kind, storedAnswerValues(kind, stored), OPTIONS, true)).toBe(
+        stored,
+      )
+      expect(parseDraftAnswer(kind, draftAnswerWire(kind, stored), OPTIONS)).toBe(stored)
+    }
+    expect(() =>
+      normalizeSubmittedAnswer('text', storedAnswerValues('text', null), OPTIONS, true),
+    ).toThrow('required')
   })
 })
 

@@ -177,14 +177,31 @@ export function FileUploader({
         })
         return
       }
+      // Uploads need a live connection; they are not queued on the device.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        updateItem({
+          status: 'error',
+          error: t(
+            'You need signal to add or change photos and files. Your other changes are saved on this device.',
+          ),
+        })
+        return
+      }
       updateItem({ status: 'uploading', progress: 0 })
 
-      const req = await requestUploadAction({
-        kind,
-        filename: file.name,
-        contentType: file.type || 'application/octet-stream',
-        sizeBytes: file.size,
-      })
+      let req: Awaited<ReturnType<typeof requestUploadAction>>
+      try {
+        req = await requestUploadAction({
+          kind,
+          filename: file.name,
+          contentType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+        })
+      } catch {
+        // A dropped connection rejects the request instead of answering.
+        updateItem({ status: 'error', error: t('Upload failed.') })
+        return
+      }
       if (!req.ok) {
         updateItem({ status: 'error', error: req.error })
         return
@@ -203,7 +220,13 @@ export function FileUploader({
 
       updateItem({ status: 'finalising', progress: 100 })
 
-      const finalise = await finalizeUploadAction(finalizeInput)
+      let finalise: Awaited<ReturnType<typeof finalizeUploadAction>>
+      try {
+        finalise = await finalizeUploadAction(finalizeInput)
+      } catch {
+        updateItem({ status: 'error', error: t('Upload failed.') })
+        return
+      }
       if (!finalise.ok) {
         updateItem({ status: 'error', error: finalise.error })
         return

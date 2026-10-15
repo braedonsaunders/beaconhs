@@ -4,6 +4,7 @@ import {
   assertTrainingClassSchedule,
   parseTrainingClassField,
   parseTrainingClassCompletionPage,
+  parseTrainingClassSchedule,
   requireTrainingClassId,
 } from './training-class-policy'
 
@@ -36,7 +37,7 @@ describe('training class mutation policy', () => {
     expect(
       parseTrainingClassField(
         'schedule',
-        JSON.stringify({ startsAt: '2026-01-15T07:30', endsAt: '2026-01-15T12:00' }),
+        { startsAt: '2026-01-15T07:30', endsAt: '2026-01-15T12:00' },
         'America/Toronto',
       ),
     ).toEqual({
@@ -65,10 +66,38 @@ describe('training class mutation policy', () => {
     expect(() =>
       parseTrainingClassField(
         'schedule',
-        JSON.stringify({ startsAt: '2026-02-30T09:00', endsAt: '2026-02-30T12:00' }),
+        { startsAt: '2026-02-30T09:00', endsAt: '2026-02-30T12:00' },
         'America/Toronto',
       ),
     ).toThrow(/invalid/)
+  })
+
+  it('edits the schedule as one wall-clock range', () => {
+    expect(
+      parseTrainingClassSchedule(
+        { startsAt: '2026-07-13T09:00', endsAt: '2026-07-13T15:30' },
+        'America/Vancouver',
+      ),
+    ).toEqual({
+      startsAt: new Date('2026-07-13T16:00:00.000Z'),
+      endsAt: new Date('2026-07-13T22:30:00.000Z'),
+    })
+    // Both times are required, and the old JSON-string form is gone.
+    for (const invalid of [
+      { startsAt: '2026-07-13T09:00', endsAt: '' },
+      { startsAt: '', endsAt: '2026-07-13T15:30' },
+      { startsAt: '2026-07-13T09:00' },
+      JSON.stringify({ startsAt: '2026-07-13T09:00', endsAt: '2026-07-13T15:30' }),
+      ['2026-07-13T09:00', '2026-07-13T15:30'],
+      null,
+    ])
+      expect(() => parseTrainingClassSchedule(invalid, 'America/Vancouver')).toThrow(/invalid/)
+    expect(() =>
+      parseTrainingClassSchedule(
+        { startsAt: '2026-07-13T15:30', endsAt: '2026-07-13T09:00' },
+        'America/Vancouver',
+      ),
+    ).toThrow(/after its start/)
   })
 
   it('accepts and bounds a free-text class location', () => {

@@ -6,41 +6,40 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 
-// Auto-saving multi-select field — the array cousin of LiveSelect. Renders the
+// Local-first multi-select field — the array cousin of LiveSelect. Renders the
 // current selection as removable chips and a SearchSelect to add more; every
-// add/remove posts the full id list to a server action and shows the shared
-// SaveDot status. Used for a person's group memberships and title assignments,
-// where each concept collapses to a single inline field on the overview.
+// add/remove queues the full id list for the record (see
+// @/lib/offline-drafts/offline-record) and shows the shared SaveDot status.
+// Used for a person's group memberships and title assignments, where each
+// concept collapses to a single inline field on the overview.
 
-import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { SearchSelect } from '@beaconhs/ui'
-import { SaveDot, useAutoSave } from './live-field'
+import { useRecordField } from '@/lib/offline-drafts/offline-record'
+import { SaveDot } from './live-field'
+import { RecordFieldError } from './record-field-error'
 
 type MultiOption = { value: string; label: string; color?: string | null }
 
 export function LiveMultiSelect({
-  id,
+  field,
   label,
   initialValue,
   options,
   disabled,
-  updateAction,
   placeholder = 'Add…',
   searchPlaceholder = 'Search…',
   sheetTitle,
   emptyLabel = 'None',
 }: {
-  /** Record id (person id) — posted as `id`. */
-  id: string
+  /** The record saver's op key; the value is the full selected list. */
+  field: string
   label: string
   /** Currently-selected option values. */
   initialValue: string[]
   /** All selectable options (value + label, optional chip colour). */
   options: MultiOption[]
   disabled?: boolean
-  /** Server action reading `id` + repeated `value` entries (the full new list). */
-  updateAction: (formData: FormData) => Promise<void>
   placeholder?: string
   searchPlaceholder?: string
   sheetTitle?: string
@@ -48,37 +47,15 @@ export function LiveMultiSelect({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
-  const [ids, setIds] = useState<string[]>(initialValue)
-  const initialValueKey = JSON.stringify(initialValue)
-  const baseline = useRef(initialValueKey)
-  const { state, save, retry } = useAutoSave({
-    prepare: (value) => {
-      const fd = new FormData()
-      fd.set('id', id)
-      const selected = value ? (JSON.parse(value) as string[]) : []
-      for (const v of selected) fd.append('value', v)
-      return fd
-    },
-    updateAction,
-    onSaved: (v) => {
-      baseline.current = v
-    },
-  })
-
-  // Adopt the server value on revalidation while idle (another section saved).
-  useEffect(() => {
-    if (state === 'idle' && initialValueKey !== baseline.current) {
-      baseline.current = initialValueKey
-      setIds(JSON.parse(initialValueKey) as string[])
-    }
-  }, [initialValueKey, state])
+  const f = useRecordField<string[]>(field, initialValue)
+  const ids = f.value
+  const off = disabled || f.paused
 
   const optMap = new Map(options.map((o) => [o.value, o]))
   const available = options.filter((o) => !ids.includes(o.value))
 
   function commit(next: string[]) {
-    setIds(next)
-    save(JSON.stringify(next))
+    f.commit(next)
   }
 
   return (
@@ -87,7 +64,7 @@ export function LiveMultiSelect({
         <label className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
           <GeneratedValue value={label} />
         </label>
-        <SaveDot state={state} onRetry={retry} />
+        <SaveDot state={f.saveState} error={f.error} onRetry={f.retry} />
       </div>
       <GeneratedValue
         value={
@@ -117,7 +94,7 @@ export function LiveMultiSelect({
                       </span>
                       <GeneratedValue
                         value={
-                          !disabled ? (
+                          !off ? (
                             <button
                               type="button"
                               onClick={() => commit(ids.filter((x) => x !== v))}
@@ -143,7 +120,7 @@ export function LiveMultiSelect({
       />
       <GeneratedValue
         value={
-          !disabled ? (
+          !off ? (
             <SearchSelect
               value=""
               onChange={(next) => {
@@ -158,6 +135,7 @@ export function LiveMultiSelect({
           ) : null
         }
       />
+      <RecordFieldError error={f.error} />
     </div>
   )
 }

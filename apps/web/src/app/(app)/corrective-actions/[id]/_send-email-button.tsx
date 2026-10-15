@@ -11,6 +11,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input, Label, Textarea } from '@beaconhs/ui'
 import { sendCorrectiveActionEmail } from '../_actions'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 
 /**
  * Body of the send-email drawer (opened via `?drawer=send-email` from
@@ -33,6 +34,7 @@ export function SendEmailBody({
   const [recipients, setRecipients] = useState('')
   const [message, setMessage] = useState('')
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,18 +50,20 @@ export function SendEmailBody({
       return
     }
     start(async () => {
-      const res = await sendCorrectiveActionEmail({
-        caId,
-        recipients: list,
-        message: message.trim() || null,
+      await runOnline('finish', async () => {
+        const res = await sendCorrectiveActionEmail({
+          caId,
+          recipients: list,
+          message: message.trim() || null,
+        })
+        if (!res.ok) {
+          setError(tGeneratedValue(res.error))
+          return
+        }
+        setResult(`Email queued for ${list.length} recipient${list.length === 1 ? '' : 's'}.`)
+        router.push(closeHref as any)
+        router.refresh()
       })
-      if (!res.ok) {
-        setError(tGeneratedValue(res.error))
-        return
-      }
-      setResult(`Email queued for ${list.length} recipient${list.length === 1 ? '' : 's'}.`)
-      router.push(closeHref as any)
-      router.refresh()
     })
   }
 

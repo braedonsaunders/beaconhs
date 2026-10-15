@@ -17,8 +17,10 @@ const acknowledgments = source('../app/(app)/documents/[id]/_ack-actions.ts')
 const documentPage = source('../app/(app)/documents/[id]/page.tsx')
 const documentMaster = source('../app/(app)/documents/[id]/_master-actions.ts')
 const inspectionPage = source('../app/(app)/inspections/records/[id]/page.tsx')
+const inspectionEdits = source('../app/(app)/inspections/_record-edits.ts')
 const apiWrites = source('./api/write.ts')
 const journalActions = source('../app/(app)/journals/_actions.ts')
+const journalEdits = source('../app/(app)/journals/_record-edits.ts')
 const hazardActions = source('../app/(app)/hazard-assessments/_actions.ts')
 const hazardSignatureMigration = source(
   '../../../../packages/db/drizzle/0008_hazid_review_conditions_signatures.sql',
@@ -55,13 +57,12 @@ describe('immediate compliance evidence lifecycle', () => {
     const updateStatus = between(
       inspectionPage,
       'async function toggleLock',
-      'async function updateRecordField',
+      'async function lockInspection',
     )
-    const updateField = between(
-      inspectionPage,
-      'async function updateRecordField',
-      'async function setCriterionAnswer',
-    )
+    // Inline field edits are synced by the record saver; occurredAt flags the
+    // batch and its afterWrites re-materializes in the same transaction.
+    const occurredAtWrite = between(inspectionEdits, 'return columnOps(record, codecs,', '})(op)')
+    const updateField = between(inspectionEdits, 'async afterWrites(', 'revalidate:')
     const apiUpdate = between(
       apiWrites,
       'async function updateInspection',
@@ -70,7 +71,8 @@ describe('immediate compliance evidence lifecycle', () => {
     const apiDelete = between(apiWrites, 'async function deleteInspection', 'const INSPECTION_BODY')
 
     expect(updateStatus).toContain('await materializeEvidenceTargetObligations(tx')
-    expect(updateField).toContain("if (field === 'occurredAt')")
+    expect(occurredAtWrite).toContain("if (op === 'occurredAt') edits.occurredAtChanged = true")
+    expect(updateField).toContain('if (edits.occurredAtChanged)')
     expect(updateField).toContain('await materializeEvidenceTargetObligations(tx')
     expect(apiUpdate).toContain("hasOwn(b, 'inspectorTenantUserId')")
     expect(apiUpdate).toContain('await materializeEvidenceTargetObligations(tx')
@@ -82,11 +84,9 @@ describe('immediate compliance evidence lifecycle', () => {
   })
 
   it('materializes journal date, submit, and delete evidence with the audit transaction', () => {
-    const update = between(
-      journalActions,
-      'export async function updateEntry',
-      'export async function submitEntry',
-    )
+    // Date edits are synced by the record saver; its afterWrites audits and
+    // re-materializes in the batch's transaction when the date moved.
+    const update = between(journalEdits, 'async afterWrites(', 'revalidate:')
     const submit = between(
       journalActions,
       'export async function submitEntry',
@@ -94,12 +94,12 @@ describe('immediate compliance evidence lifecycle', () => {
     )
     const remove = between(journalActions, 'export async function deleteEntry', '// ---- AI')
 
-    expect(update).toContain('if (values.entryDate !== undefined)')
+    expect(update).toContain("if (changes.some((change) => change.op === 'entryDate'))")
     for (const mutation of [update, submit, remove]) {
       expect(mutation).toContain('await materializeEvidenceTargetObligations(tx')
       expect(mutation).toContain("sourceModule: 'journal'")
     }
-    for (const mutation of [submit, remove]) {
+    for (const mutation of [update, submit, remove]) {
       expect(mutation).toContain('await recordAuditInTransaction(tx, ctx')
       expect(mutation).not.toContain('await recordAudit(ctx')
     }

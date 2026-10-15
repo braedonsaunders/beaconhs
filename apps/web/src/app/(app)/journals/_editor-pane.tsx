@@ -7,145 +7,185 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 
-// Composes one entry's full editing surface: header (date · status · save state ·
-// AI · submit), a full-width metadata/controls strip, AI summary, the rich
-// editor, and photos. Owns autosave (debounced) and the per-entry mutations.
-// Journals have no individual title — the date is the identifier.
+// Composes one entry's full editing surface: header (date · status · sync
+// state · AI · submit), a full-width metadata/controls strip, AI summary, the
+// rich editor, and photos. Every field is local-first: it binds to the entry's
+// <OfflineRecordProvider> (written to this device as you type, synced to the
+// `journals` record saver — see ./_record-edits.ts), so a journal keeps saving
+// without signal. Submit, unlock, delete, email, photos, and AI need signal
+// (useOnlineAction) and push the queued edits first. Journals have no
+// individual title — the date is the identifier.
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { unstable_rethrow } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import {
-  AlertCircle,
-  Check,
-  CloudUpload,
-  FileText,
-  Mail,
-  MoreHorizontal,
-  NotebookPen,
-  Sparkles,
-  Trash2,
-} from 'lucide-react'
+import { FileText, Mail, MoreHorizontal, NotebookPen, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
 import type { AppLocale } from '@beaconhs/i18n'
 import { DownloadLink } from '@/components/download-link'
+import { RecordFieldError } from '@/components/record-field-error'
 import { confirmDialog } from '@/lib/confirm'
-import { flushRecordSaves } from '@/lib/pending-record-saves'
-import { deleteEntry, emailEntry, submitEntry, updateEntry, unlockEntry } from './_actions'
+import {
+  OfflineRecordProvider,
+  RecordSyncBanner,
+  RecordSyncStatus,
+  useRecordField,
+  type RecordFieldHandle,
+} from '@/lib/offline-drafts/offline-record'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
+import { deleteEntry, emailEntry, submitEntry, unlockEntry } from './_actions'
 import { JournalSubmitButton } from './_submit-button'
 import { JournalEditor } from './_editor'
-import { MetadataBar } from './_metadata-bar'
+import { MetadataBar, type JournalMetadataFields } from './_metadata-bar'
 import { Photos } from './_photos'
 import { formatDate, isToday, statusMeta, textToHtml } from './_format'
-import type { JournalEntryDetail, TagSuggestion } from './_types'
-import { useJournalAutosave } from './_use-autosave'
+import { canonicalJournalTags } from './_tag-policy'
+import type { JournalDefinition, JournalEntryDetail, TagSuggestion } from './_types'
 
-type SaveState = 'saving' | 'saved' | 'error'
+/** The entry's field values, as the record saver formats them. */
+export type JournalFieldValues = Pick<
+  JournalEntryDetail,
+  'bodyHtml' | 'entryDate' | 'definition' | 'siteOrgUnitId' | 'supervisorPersonId' | 'tags'
+>
 
-export function EditorPane({
-  entry,
-  tagSuggestions,
-  aiEnabled,
-  onMutated,
-  onDeleted,
-  onLocalPatch,
-  onBrowse,
-}: {
+type EditorPaneProps = {
   entry: JournalEntryDetail
   tagSuggestions: TagSuggestion[]
   aiEnabled: boolean
   onMutated: () => void
   onDeleted: () => void
-  onLocalPatch: (patch: Partial<JournalEntryDetail>) => void
+  /** The entry was submitted or unlocked here. */
+  onStatusChange: (patch: Pick<JournalEntryDetail, 'status' | 'locked'>) => void
+  /** The server now holds these field values (keeps the offline copy current). */
+  onSynced: (patch: Partial<JournalFieldValues>) => void
   /** Open the entries drawer (mobile only — desktop shows the tree inline). */
   onBrowse: () => void
-}) {
+}
+
+export function EditorPane(props: EditorPaneProps) {
+  const { entry } = props
+  return (
+    <OfflineRecordProvider
+      key={entry.id}
+      module="journals"
+      recordId={entry.id}
+      editable={entry.canEdit && !entry.locked && entry.status === 'draft'}
+      // The workspace keeps the entry in client state; nothing server-rendered
+      // depends on these fields, so a page refresh per sync is wasted work.
+      refreshOnSync={false}
+    >
+      <EntryEditor {...props} />
+    </OfflineRecordProvider>
+  )
+}
+
+/** Report a field's value once the server has acknowledged it. */
+function useOnSynced<T>(field: RecordFieldHandle<T>, report: (value: T) => void) {
+  const reportRef = useRef(report)
+  useEffect(() => {
+    reportRef.current = report
+  })
+  useEffect(() => {
+    if (field.saveState === 'saved') reportRef.current(field.value)
+  }, [field.saveState, field.value])
+}
+
+function EntryEditor({
+  entry,
+  tagSuggestions,
+  aiEnabled,
+  onMutated,
+  onDeleted,
+  onStatusChange,
+  onSynced,
+  onBrowse,
+}: EditorPaneProps) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const locale = useLocale() as AppLocale
+  const runOnline = useOnlineAction()
   const [submitting, startSubmit] = useTransition()
-  const editable = entry.canEdit && !entry.locked && entry.status === 'draft' && !submitting
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const {
-    schedule: queue,
-    flush: persist,
-    snapshot,
-  } = useJournalAutosave(entry.id, editable, updateEntry)
-  const saveState: SaveState = snapshot.state === 'dirty' ? 'saving' : snapshot.state
-
-  useEffect(() => {
-    if (snapshot.error) toast.error(tGeneratedValue(snapshot.error))
-  }, [snapshot.error, tGeneratedValue])
-
-  async function flush(): Promise<boolean> {
-    try {
-      await persist()
-      return true
-    } catch {
-      return false
-    }
+  const body = useRecordField('bodyHtml', entry.bodyHtml)
+  const fields: JournalMetadataFields = {
+    entryDate: useRecordField('entryDate', entry.entryDate),
+    definition: useRecordField<JournalDefinition>('definition', entry.definition),
+    siteOrgUnitId: useRecordField('siteOrgUnitId', entry.siteOrgUnitId ?? ''),
+    supervisorPersonId: useRecordField('supervisorPersonId', entry.supervisorPersonId ?? ''),
+    tags: useRecordField('tags', canonicalJournalTags(entry.tags)),
   }
+  // `paused` = read-only (submitted, locked, no edit permission) or a sync
+  // conflict waiting for the worker's choice.
+  const editable = !body.paused && !submitting
 
-  function onMeta(
-    patch: Parameters<typeof MetadataBar>[0]['onPatch'] extends (p: infer P) => void ? P : never,
-  ) {
-    onLocalPatch(patch as Partial<JournalEntryDetail>)
-    queue(patch, 250)
-  }
-
-  function onTags(tags: string[]) {
-    onLocalPatch({ tags })
-    queue({ tags }, 0)
-  }
-
-  function onBody(html: string) {
-    onLocalPatch({ bodyHtml: html })
-    queue({ bodyHtml: html })
-  }
+  useOnSynced(body, (bodyHtml) => onSynced({ bodyHtml }))
+  useOnSynced(fields.entryDate, (entryDate) => onSynced({ entryDate }))
+  useOnSynced(fields.definition, (definition) => onSynced({ definition }))
+  useOnSynced(fields.siteOrgUnitId, (site) => onSynced({ siteOrgUnitId: site || null }))
+  useOnSynced(fields.supervisorPersonId, (person) =>
+    onSynced({ supervisorPersonId: person || null }),
+  )
+  useOnSynced(fields.tags, (tags) => onSynced({ tags }))
 
   function submit() {
     startSubmit(async () => {
-      // Persist the last debounced edits BEFORE submitting — the on-submit
-      // flows / recap email / AI read the body from the DB.
-      if (!(await flush())) return
-      try {
-        await flushRecordSaves()
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Changes are still saving.')
+      // Pushes the queued edits first — the on-submit flows / recap email / AI
+      // read the body from the database.
+      await runOnline('finish', async () => {
+        try {
+          const r = await submitEntry(entry.id)
+          if (!r.ok) {
+            toast.error(tGeneratedValue(r.error))
+            return
+          }
+          onStatusChange({ status: 'submitted', locked: true })
+          toast.success(tGenerated('m_071487076d53a9'))
+          onMutated()
+        } catch (error) {
+          unstable_rethrow(error)
+          toast.error(
+            tGeneratedValue(
+              error instanceof Error ? error.message : 'Could not submit your journal.',
+            ),
+          )
+        }
+      })
+    })
+  }
+
+  function unlock() {
+    startSubmit(async () => {
+      if (
+        !(await confirmDialog({
+          message: 'Unlock this submitted journal to make a correction?',
+        }))
+      )
         return
-      }
-      try {
-        const r = await submitEntry(entry.id)
-        if (!r.ok) {
-          toast.error(tGeneratedValue(r.error))
+      await runOnline('finish', async () => {
+        const result = await unlockEntry(entry.id)
+        if (!result.ok) {
+          toast.error(tGeneratedValue(result.error))
           return
         }
-        onLocalPatch({ status: 'submitted', locked: true })
-        toast.success(tGenerated('m_071487076d53a9'))
+        onStatusChange({ status: 'draft', locked: false })
         onMutated()
-      } catch (error) {
-        unstable_rethrow(error)
-        toast.error(
-          tGeneratedValue(
-            error instanceof Error ? error.message : 'Could not submit your journal.',
-          ),
-        )
-      }
+      })
     })
   }
 
   function emailRecap() {
     setMenuOpen(false)
     startSubmit(async () => {
-      if (!(await flush())) return
-      const r = await emailEntry(entry.id)
-      if (!r.ok) toast.error(tGeneratedValue(r.error))
-      else
-        toast.success(
-          tGenerated('m_0e8679dd3d4685', { value0: r.sent, value1: r.sent === 1 ? '' : 's' }),
-        )
+      await runOnline('finish', async () => {
+        const r = await emailEntry(entry.id)
+        if (!r.ok) toast.error(tGeneratedValue(r.error))
+        else
+          toast.success(
+            tGenerated('m_0e8679dd3d4685', { value0: r.sent, value1: r.sent === 1 ? '' : 's' }),
+          )
+      })
     })
   }
 
@@ -159,26 +199,22 @@ export function EditorPane({
     )
       return
     startSubmit(async () => {
-      if (!(await flush())) return
-      const r = await deleteEntry(entry.id)
-      if (!r.ok) {
-        toast.error(tGeneratedValue(r.error))
-        return
-      }
-      toast.success(tGenerated('m_1ead6199ff95ad'))
-      onDeleted()
+      await runOnline('finish', async () => {
+        const r = await deleteEntry(entry.id)
+        if (!r.ok) {
+          toast.error(tGeneratedValue(r.error))
+          return
+        }
+        toast.success(tGenerated('m_1ead6199ff95ad'))
+        onDeleted()
+      })
     })
   }
 
   const status = statusMeta(entry.status, locale)
 
   return (
-    <div
-      className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-900"
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void flush()
-      }}
-    >
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-900">
       {/* Header */}
       <div className="flex shrink-0 items-center gap-2.5 border-b border-slate-200 px-3 py-2.5 sm:gap-3 sm:px-6 dark:border-slate-800">
         {/* Mobile: open the entries drawer (replaces the old separate top bar). */}
@@ -209,16 +245,16 @@ export function EditorPane({
             <span className="font-medium whitespace-nowrap text-slate-600 dark:text-slate-300">
               <GeneratedValue
                 value={
-                  isToday(entry.entryDate)
+                  isToday(fields.entryDate.value)
                     ? new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'day')
-                    : formatDate(entry.entryDate, locale)
+                    : formatDate(fields.entryDate.value, locale)
                 }
               />
             </span>
             <span className="hidden font-mono sm:inline">
               · <GeneratedValue value={entry.reference} />
             </span>
-            <SaveBadge state={saveState} onRetry={() => void flush()} />
+            <RecordSyncStatus />
           </div>
         </div>
 
@@ -228,23 +264,7 @@ export function EditorPane({
               type="button"
               disabled={submitting}
               className="rounded border px-3 py-1 text-sm"
-              onClick={() =>
-                startSubmit(async () => {
-                  if (
-                    !(await confirmDialog({
-                      message: 'Unlock this submitted journal to make a correction?',
-                    }))
-                  )
-                    return
-                  const result = await unlockEntry(entry.id)
-                  if (!result.ok) {
-                    toast.error(result.error)
-                    return
-                  }
-                  onLocalPatch({ status: 'draft', locked: false })
-                  onMutated()
-                })
-              }
+              onClick={unlock}
             >
               <GeneratedValue value={'Unlock'} />
             </button>
@@ -253,7 +273,7 @@ export function EditorPane({
           {entry.status === 'draft' && entry.canSubmit ? (
             <JournalSubmitButton
               submitting={submitting}
-              disabled={!entry.supervisorPersonId}
+              disabled={!fields.supervisorPersonId.value}
               onClick={submit}
             />
           ) : null}
@@ -304,14 +324,18 @@ export function EditorPane({
 
       {/* Body */}
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+        {/* Restored / conflicting / stranded device edits */}
+        <div className="px-4 pt-3 empty:hidden sm:px-6">
+          <RecordSyncBanner />
+        </div>
+
         {/* Full-width controls */}
         <div className="border-b border-slate-100 bg-slate-50/50 px-4 py-4 sm:px-6 dark:border-slate-800 dark:bg-slate-800/40">
           <MetadataBar
-            entry={entry}
+            fields={fields}
             tagSuggestions={tagSuggestions}
             editable={editable}
-            onPatch={onMeta}
-            onTagsChange={onTags}
+            requiredForSubmission={entry.status === 'draft'}
           />
         </div>
 
@@ -332,14 +356,18 @@ export function EditorPane({
         />
 
         {/* Editor — internally centered for readable line length */}
+        <div className="mx-auto max-w-3xl px-5 empty:hidden sm:px-8">
+          <RecordFieldError error={body.error} />
+        </div>
         <JournalEditor
           key={entry.id}
           // Migrated entries stored their HTML in bodyText (bodyHtml empty), so
           // fall back to it; otherwise the editor renders blank.
-          initialHtml={entry.bodyHtml || textToHtml(entry.bodyText)}
+          value={body.value || textToHtml(entry.bodyText)}
           editable={editable}
           aiEnabled={aiEnabled}
-          onChange={(html) => onBody(html)}
+          onChange={body.change}
+          onBlur={() => body.commit()}
         />
 
         {/* Photos */}
@@ -391,29 +419,5 @@ function AuthorAvatar({ name }: { name: string | null }) {
     >
       <GeneratedValue value={init} />
     </span>
-  )
-}
-
-function SaveBadge({ state, onRetry }: { state: SaveState; onRetry: () => void }) {
-  if (state === 'saving')
-    return (
-      <span className="inline-flex items-center gap-1 text-amber-600">
-        <CloudUpload size={11} /> <GeneratedText id="m_106811f2aac664" />
-      </span>
-    )
-  if (state === 'saved')
-    return (
-      <span className="inline-flex items-center gap-1 text-teal-600">
-        <Check size={11} /> <GeneratedText id="m_0a0569b726b225" />
-      </span>
-    )
-  return (
-    <button
-      type="button"
-      onClick={onRetry}
-      className="inline-flex items-center gap-1 font-medium text-red-600 hover:underline"
-    >
-      <AlertCircle size={11} /> <GeneratedText id="m_13b78c61dbb517" />
-    </button>
   )
 }

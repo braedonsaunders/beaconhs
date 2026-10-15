@@ -21,6 +21,8 @@ function expectCorrectiveMaterialization(value: string): void {
 const actions = source('../app/(app)/corrective-actions/_actions.ts')
 const resolution = source('./corrective-action-resolution.ts')
 const detail = source('../app/(app)/corrective-actions/[id]/page.tsx')
+const recordEdits = source('../app/(app)/corrective-actions/_record-edits.ts')
+const recordSync = source('./record-sync/edits.ts')
 const createPage = source('../app/(app)/corrective-actions/new/page.tsx')
 const api = source('./api/write.ts')
 const nativeFlow = source('./flows/spawn.ts')
@@ -46,11 +48,12 @@ describe('corrective-action compliance evidence lifecycle', () => {
 
   it('materializes status, due-date, owner, close, reopen, and bulk-owner changes atomically', () => {
     const status = between(detail, 'async function updateStatus', 'async function reopenAction')
-    const field = between(
-      detail,
-      'async function updateTextField',
-      'export async function generateMetadata',
-    )
+    // Inline field edits (online or queued offline) land through the record
+    // saver: the record row is locked and afterWrites runs in the same batch
+    // transaction as the field writes.
+    const fieldLoad = between(recordEdits, 'async load(', 'resolve:')
+    const field = between(recordEdits, 'async afterWrites(', 'revalidate:')
+    const saverRunner = between(recordSync, 'export function defineRecordSaver', '')
     const close = between(
       actions,
       'export async function closeCorrectiveAction',
@@ -75,9 +78,13 @@ describe('corrective-action compliance evidence lifecycle', () => {
     for (const value of [closeInTx, reopenInTx]) expect(value).toContain(".for('update')")
     for (const value of [status, closeInTx, reopenInTx, bulk])
       expectCorrectiveMaterialization(value)
-    expect(field).toContain("field === 'dueOn' || field === 'ownerTenantUserId'")
+    expect(fieldLoad).toContain(".for('update')")
+    expect(field).toContain("change.op === 'dueOn' || change.op === 'ownerTenantUserId'")
     expectCorrectiveMaterialization(field)
-    for (const value of [status, field, closeInTx, reopenInTx, bulk]) {
+    expect(field).toContain('await auditFieldChanges(tx, ctx')
+    expect(saverRunner).toContain('outcome = await ctx.db(async (tx)')
+    expect(saverRunner).toContain('await spec.afterWrites(tx, ctx, loaded, changes)')
+    for (const value of [status, saverRunner, closeInTx, reopenInTx, bulk]) {
       expect(value).toContain('await recordAuditInTransaction(tx, ctx')
     }
   })

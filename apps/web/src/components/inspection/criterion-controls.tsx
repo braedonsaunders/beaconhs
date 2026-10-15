@@ -1,183 +1,62 @@
 'use client'
 
-import { useGeneratedTranslations } from '@/i18n/generated'
+// Shared building blocks for the site and equipment inspection criterion
+// cards. Every editable criterion field binds to the record page's
+// <OfflineRecordProvider> (`useRecordField`), so answers and findings are
+// written to the device first and synced in the background; photos need
+// signal and go straight to the server.
 
 import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Label, Textarea, cn } from '@beaconhs/ui'
+import { Label, Textarea, cn } from '@beaconhs/ui'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
-import { FLUSH_RECORD_SAVES, trackRecordSave, forgetRecordSave } from '@/lib/pending-record-saves'
 import { PhotoGallery, type GalleryPhoto, type PhotoEdits } from '@/components/photo-gallery'
-import { toast } from '@/lib/toast'
+import { SaveDot } from '@/components/live-field'
+import type { FieldSaveState, RecordFieldHandle } from '@/lib/offline-drafts/offline-record'
 import type { InspectionSeverity } from '@/components/builder/inspection-severity'
-import { enqueueSerialTask } from './criterion-save-queue'
 
-type CriterionSaveState = 'idle' | 'saving' | 'saved' | 'error'
+const SAVE_STATE_PRIORITY: FieldSaveState[] = ['error', 'saving', 'dirty', 'saved', 'idle']
 
-/**
- * Serializes autosaves from one criterion so rapid field changes cannot arrive
- * out of order and overwrite newer values. Visual state follows only the most
- * recent queued save.
- */
-export function useCriterionAutosave() {
-  const [state, setState] = React.useState<CriterionSaveState>('idle')
-  const [, startTransition] = React.useTransition()
-  const router = useRouter()
-  const saveKeys = React.useRef(new Map<(formData: FormData) => Promise<void>, symbol>())
-  const failedSaves = React.useRef(new Map<symbol, () => void>())
-  React.useEffect(() => {
-    const keys = saveKeys.current
-    const retryFailed = () => {
-      for (const retry of failedSaves.current.values()) retry()
-    }
-    window.addEventListener(FLUSH_RECORD_SAVES, retryFailed)
-    return () => {
-      window.removeEventListener(FLUSH_RECORD_SAVES, retryFailed)
-      for (const key of keys.values()) forgetRecordSave(key)
-    }
-  }, [])
-  const queue = React.useRef<Promise<void>>(Promise.resolve())
-  const latestSave = React.useRef(0)
-  const savedTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  React.useEffect(
-    () => () => {
-      if (savedTimer.current) clearTimeout(savedTimer.current)
-    },
-    [],
-  )
-
-  const save = React.useCallback(
-    (action: (formData: FormData) => Promise<void>, fields: Record<string, string>) => {
-      let key = saveKeys.current.get(action)
-      if (!key) {
-        key = Symbol('criterion-field')
-        saveKeys.current.set(action, key)
-      }
-      const taskKey = key
-      const saveId = ++latestSave.current
-      if (savedTimer.current) {
-        clearTimeout(savedTimer.current)
-        savedTimer.current = null
-      }
-      setState('saving')
-
-      const run = async () => {
-        const formData = new FormData()
-        for (const [key, value] of Object.entries(fields)) formData.set(key, value)
-        await action(formData)
-      }
-      const attempt = () => {
-        failedSaves.current.delete(taskKey)
-        const pending = trackRecordSave(taskKey, enqueueSerialTask(queue.current, run))
-        queue.current = pending
-        startTransition(async () => {
-          try {
-            await pending
-            if (saveId !== latestSave.current) return
-            setState('saved')
-            savedTimer.current = setTimeout(() => {
-              if (saveId === latestSave.current) setState('idle')
-            }, 1500)
-          } catch {
-            failedSaves.current.set(taskKey, attempt)
-            if (saveId === latestSave.current) setState('error')
-          }
-        })
-      }
-      attempt()
-    },
-    [],
-  )
-
-  return { state, save, refresh: () => router.refresh() }
+/** The one save state a criterion card shows for all of its fields. */
+function combinedSaveState(
+  fields: ReadonlyArray<Pick<RecordFieldHandle<unknown>, 'saveState'>>,
+): FieldSaveState {
+  for (const state of SAVE_STATE_PRIORITY) {
+    if (fields.some((field) => field.saveState === state)) return state
+  }
+  return 'idle'
 }
 
-export function CriterionSaveIndicator({ state }: { state: CriterionSaveState }) {
-  if (state === 'idle') return null
-  if (state === 'error')
-    return (
-      <button
-        type="button"
-        className="text-xs text-red-600 underline"
-        onClick={() => window.dispatchEvent(new Event(FLUSH_RECORD_SAVES))}
-      >
-        <GeneratedText id="m_13b78c61dbb517" />
-      </button>
-    )
-  return (
-    <span
-      className={cn(
-        'text-[11px] font-medium',
-        state === 'saving' && 'text-slate-400',
-        state === 'saved' && 'text-emerald-600',
-      )}
-    >
-      <GeneratedValue
-        value={
-          state === 'saving' ? (
-            <GeneratedText id="m_106811f2aac664" />
-          ) : state === 'saved' ? (
-            <GeneratedText id="m_0a3bcf685192f1" />
-          ) : (
-            <GeneratedText id="m_13b78c61dbb517" />
-          )
-        }
-      />
-    </span>
-  )
+/** One save indicator per criterion card, covering every field on it. */
+export function CriterionSaveIndicator({
+  fields,
+}: {
+  fields: ReadonlyArray<Pick<RecordFieldHandle<unknown>, 'saveState' | 'error' | 'retry'>>
+}) {
+  const state = combinedSaveState(fields)
+  const failed = state === 'error' ? fields.find((field) => field.saveState === 'error') : null
+  return <SaveDot state={state} error={failed?.error ?? null} onRetry={failed?.retry} />
 }
 
-export function AutosaveTextarea({
+/** A finding or note textarea bound to one criterion field. */
+export function CriterionTextarea({
   label,
-  initial,
+  field,
   placeholder,
   rows = 2,
+  maxLength,
   disabled,
-  onCommit,
 }: {
   label: string
-  initial: string | null
+  field: RecordFieldHandle<string>
   placeholder?: string
   rows?: number
+  maxLength?: number
   disabled?: boolean
-  onCommit: (value: string) => void
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const [value, setValue] = React.useState(initial ?? '')
-  const baseline = React.useRef(initial ?? '')
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-  const latestCommit = React.useRef(onCommit)
-
-  React.useEffect(() => {
-    latestCommit.current = onCommit
-  }, [onCommit])
-
-  React.useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current)
-    },
-    [],
-  )
-
-  React.useEffect(() => {
-    const flush = () => commit(value)
-    window.addEventListener(FLUSH_RECORD_SAVES, flush)
-    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
-  })
-
-  function commit(next: string) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-    }
-    if (next === baseline.current) return
-    baseline.current = next
-    latestCommit.current(next)
-  }
-
   return (
     <div className="space-y-1">
       <Label className="text-xs">
@@ -185,16 +64,12 @@ export function AutosaveTextarea({
       </Label>
       <Textarea
         rows={rows}
-        value={value}
+        value={field.value}
+        maxLength={maxLength}
         placeholder={tGeneratedValue(placeholder)}
-        disabled={disabled}
-        onChange={(event) => {
-          const next = event.target.value
-          setValue(next)
-          if (timer.current) clearTimeout(timer.current)
-          timer.current = setTimeout(() => commit(next), 1000)
-        }}
-        onBlur={() => commit(value)}
+        disabled={disabled || field.paused}
+        onChange={(event) => field.change(event.target.value)}
+        onBlur={() => field.commit()}
       />
     </div>
   )
@@ -234,10 +109,12 @@ export function CriterionSeverityPicker({
   severity,
   onPick,
   helper,
+  disabled,
 }: {
   severity: InspectionSeverity | null
   onPick: (severity: InspectionSeverity) => void
   helper?: React.ReactNode
+  disabled?: boolean
 }) {
   return (
     <div className="space-y-1">
@@ -254,8 +131,9 @@ export function CriterionSeverityPicker({
                 type="button"
                 onClick={() => onPick(option.value)}
                 aria-pressed={active}
+                disabled={disabled}
                 className={cn(
-                  'min-h-10 flex-1 rounded-lg border text-xs font-semibold transition-colors sm:min-h-0 sm:py-1.5',
+                  'min-h-10 flex-1 rounded-lg border text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0 sm:py-1.5',
                   active
                     ? option.active
                     : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500',
@@ -306,7 +184,6 @@ export function CriterionPhotosPanel({
   updatePhoto,
   removePhoto,
   reorderPhotos,
-  onDone,
 }: {
   photoPreviews: GalleryPhoto[]
   editable: boolean
@@ -329,8 +206,11 @@ export function CriterionPhotosPanel({
     rowId: string,
     attachmentIds: string[],
   ) => Promise<{ ok: boolean; error?: string }>
-  onDone: () => void
 }) {
+  // Photos need signal (the shared uploader and gallery refuse offline); show
+  // the server's copy once a change lands.
+  const router = useRouter()
+  const onDone = () => router.refresh()
   return (
     <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
       <GeneratedValue

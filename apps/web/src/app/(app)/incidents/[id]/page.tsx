@@ -82,7 +82,7 @@ import { attachmentUrl } from '@/lib/attachment-url'
 import { parsePhotoEdits } from '@/lib/photo-edits'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 import { requireRequestContext } from '@/lib/auth'
-import { formatDate, formatDateTime } from '@/lib/datetime'
+import { datetimeLocalValue, formatDate, formatDateTime, parseDatetimeLocal } from '@/lib/datetime'
 import { nextReference } from '@/lib/reference'
 import { assertCan, can, getRegulatoryTerminology } from '@beaconhs/tenant'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
@@ -100,6 +100,12 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { DetailPageLayout } from '@/components/page-layout'
+import { OnlineActionForm } from '@/components/online-action-form'
+import {
+  OfflineRecordProvider,
+  RecordSyncBanner,
+  RecordSyncStatus,
+} from '@/lib/offline-drafts/offline-record'
 import { PremiumSection as Section } from '@/components/premium-section'
 import { SectionNav, type SectionNavItem } from '@/components/section-nav'
 import {
@@ -114,28 +120,13 @@ import {
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
 import { incidentStatusChangedEvent } from '@beaconhs/integrations'
 import { SeverityBadge, StatusBadge } from '../_badges'
+import {
+  INCIDENT_SEVERITIES as SEVERITIES,
+  INCIDENT_STATUSES as STATUSES,
+  INCIDENT_TYPES as TYPES,
+} from '../_options'
 
 export const dynamic = 'force-dynamic'
-
-const STATUSES = [
-  'reported',
-  'under_investigation',
-  'pending_review',
-  'closed',
-  'reopened',
-] as const
-
-const TYPES = [
-  'injury',
-  'illness',
-  'near_miss',
-  'property_damage',
-  'environmental',
-  'security',
-  'other',
-] as const
-
-const SEVERITIES = ['first_aid_only', 'medical_aid', 'lost_time', 'fatality', 'no_injury'] as const
 
 // Re-scope guard for the per-incident mutations: the caller already holds the
 // relevant write permission, but a self/site-tier user must not be able to
@@ -275,174 +266,6 @@ async function toggleLock(formData: FormData) {
     after: { locked: lock },
   })
   revalidatePath(`/incidents/${id}`)
-}
-
-// ---- Inline field editor (the single-page form's workhorse) ----------------
-
-async function updateTextField(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
-  const id = String(formData.get('id') ?? '')
-  const field = String(formData.get('field') ?? '')
-  const raw = formData.get('value')
-  const value = typeof raw === 'string' ? raw : ''
-  if (!id || !field) throw new Error('Missing id/field')
-
-  const ENUMS: Record<string, readonly string[]> = { type: TYPES, severity: SEVERITIES }
-  const NULLABLE_IDS = new Set([
-    'siteOrgUnitId',
-    'departmentId',
-    'supervisorPersonId',
-    'classificationId',
-  ])
-  const TS_REQUIRED = new Set(['occurredAt'])
-  const TS_NULLABLE = new Set([
-    'emsArrivedAt',
-    'hospitalArrivedAt',
-    'dischargedAt',
-    'molNotifiedAt',
-  ])
-  const DATE_ONLY = new Set([
-    'lostTimeFirstDay',
-    'lostTimeLastDay',
-    'modifiedDutyFirstDay',
-    'modifiedDutyLastDay',
-  ])
-  const INTS = new Set([
-    'actualSeverity',
-    'potentialSeverity',
-    'severityRating',
-    'lostTimeDays',
-    'modifiedDutyDays',
-  ])
-  const NUMERICS = new Set(['damageEstimate'])
-  const BOOLS = new Set([
-    'criticalInjury',
-    'ministryOfLabourNotified',
-    'emsCalled',
-    'firstAidGiven',
-    'medicalAttentionReceived',
-    'lostTime',
-    'modifiedDuty',
-    'externallyReportable',
-    'policeNotified',
-  ])
-  const TEXT_NOTNULL = new Set(['title'])
-  const TEXT = new Set([
-    'title',
-    'location',
-    'weather',
-    'foremanText',
-    'description',
-    'eventsLeadingUp',
-    'immediateActionTaken',
-    'ppeWorn',
-    'witnesses',
-    'externalPeopleInvolved',
-    'rootCause',
-    'firstAidProvider',
-    'firstAidNotes',
-    'hospitalName',
-    'treatedInCity',
-    'transportation',
-    'attendingPhysician',
-    'molReportNumber',
-    'policeReportNumber',
-    'insuranceClaimNumber',
-  ])
-
-  const allowed =
-    field in ENUMS ||
-    NULLABLE_IDS.has(field) ||
-    TS_REQUIRED.has(field) ||
-    TS_NULLABLE.has(field) ||
-    DATE_ONLY.has(field) ||
-    INTS.has(field) ||
-    NUMERICS.has(field) ||
-    BOOLS.has(field) ||
-    TEXT.has(field)
-  if (!allowed) throw new Error('Field not allowed')
-
-  // Locked incidents are read-only — mirror the legacy edit guard. Also re-scope
-  // so a self/site-tier user can't edit an incident they cannot see.
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select({
-        locked: incidents.locked,
-        reportedByTenantUserId: incidents.reportedByTenantUserId,
-        siteOrgUnitId: incidents.siteOrgUnitId,
-      })
-      .from(incidents)
-      .where(eq(incidents.id, id))
-      .limit(1)
-    if (!row) return null
-    const visible = await canSeeRecord(ctx, tx, {
-      prefix: 'incidents',
-      ownerIds: [row.reportedByTenantUserId],
-      siteId: row.siteOrgUnitId,
-    })
-    return visible ? row : null
-  })
-  if (!before) throw new Error('Incident not found')
-  if (before.locked) throw new Error('Incident is locked')
-
-  let val: unknown
-  if (field in ENUMS) {
-    if (!ENUMS[field]!.includes(value)) throw new Error('Invalid value')
-    val = value
-  } else if (NULLABLE_IDS.has(field)) {
-    val = value || null
-  } else if (TS_REQUIRED.has(field)) {
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) throw new Error('Invalid date')
-    val = d
-  } else if (TS_NULLABLE.has(field)) {
-    if (!value) val = null
-    else {
-      const d = new Date(value)
-      if (Number.isNaN(d.getTime())) throw new Error('Invalid date')
-      val = d
-    }
-  } else if (DATE_ONLY.has(field)) {
-    val = value || null
-  } else if (INTS.has(field)) {
-    if (value.trim() === '') val = null
-    else {
-      const n = Number.parseInt(value, 10)
-      if (Number.isNaN(n)) throw new Error('Invalid number')
-      val = n
-    }
-  } else if (NUMERICS.has(field)) {
-    if (value.trim() === '') val = null
-    else {
-      if (Number.isNaN(Number(value))) throw new Error('Invalid number')
-      val = value // numeric column — drizzle expects a string
-    }
-  } else if (BOOLS.has(field)) {
-    val = value === 'true' || value === 'on' || value === '1'
-  } else {
-    // text
-    const trimmed = value.trim()
-    if (TEXT_NOTNULL.has(field) && trimmed === '') throw new Error('This field is required')
-    val = trimmed === '' ? null : value
-  }
-
-  await ctx.db((tx) =>
-    tx
-      .update(incidents)
-      .set({ [field]: val } as any)
-      .where(eq(incidents.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'incident',
-    entityId: id,
-    action: 'update',
-    summary: `Updated ${field}`,
-    after: { [field]: val },
-  })
-  revalidatePath(`/incidents/${id}`)
-  revalidatePath('/incidents')
 }
 
 // ---- Photos, email, copy, delete -------------------------------------------
@@ -1164,8 +987,8 @@ async function saveEventAction(input: {
   const desc = input.description.trim()
   if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
   if (!input.occurredAt) return { ok: false, error: 'Timestamp is required.' }
-  const occurred = new Date(input.occurredAt)
-  if (Number.isNaN(occurred.getTime())) return { ok: false, error: 'Invalid timestamp.' }
+  const occurred = parseDatetimeLocal(input.occurredAt, ctx.timezone)
+  if (!occurred) return { ok: false, error: 'Invalid timestamp.' }
   await assertCanSeeIncident(ctx, input.incidentId)
 
   if (input.id) {
@@ -1814,1151 +1637,416 @@ export default async function IncidentDetailPage({
       : undefined
 
   return (
-    <DetailPageLayout
-      header={
-        <DetailHeader
-          back={{ href: '/incidents', label: 'Back to incidents' }}
-          title={tGeneratedValue(incident.title)}
-          subtitle={tGenerated('m_0e692e63774c58', {
-            value0: incident.reference,
-            value1: formatRel(incident.reportedAt, ctx.timezone, ctx.locale),
-          })}
-          badge={
-            <div className="flex items-center gap-2">
-              <SeverityBadge severity={incident.severity} />
-              <StatusBadge status={incident.status} />
-              <GeneratedValue
-                value={
-                  locked ? (
-                    <Badge variant="outline" className="border-amber-300 text-amber-800">
-                      <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
-                    </Badge>
-                  ) : null
-                }
+    <OfflineRecordProvider
+      module="incidents"
+      recordId={id}
+      editable={!locked && can(ctx, 'incidents.update')}
+    >
+      <DetailPageLayout
+        header={
+          <DetailHeader
+            back={{ href: '/incidents', label: 'Back to incidents' }}
+            title={tGeneratedValue(incident.title)}
+            subtitle={tGenerated('m_0e692e63774c58', {
+              value0: incident.reference,
+              value1: formatRel(incident.reportedAt, ctx.timezone, ctx.locale),
+            })}
+            badge={
+              <div className="flex flex-wrap items-center gap-2">
+                <SeverityBadge severity={incident.severity} />
+                <StatusBadge status={incident.status} />
+                <RecordSyncStatus />
+                <GeneratedValue
+                  value={
+                    locked ? (
+                      <Badge variant="outline" className="border-amber-300 text-amber-800">
+                        <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
+                      </Badge>
+                    ) : null
+                  }
+                />
+              </div>
+            }
+            actions={
+              <IncidentHeaderActions
+                id={id}
+                status={incident.status}
+                statuses={STATUSES}
+                locked={locked}
+                canManage={canManage}
+                pdfHref={`${basePath}/pdf`}
+                emailHref={drawerHref('send-email')}
+                copyHref={drawerHref('copy')}
+                deleteHref={drawerHref('confirm-delete')}
+                updateStatusAction={updateStatus}
+                toggleLockAction={toggleLock}
               />
-            </div>
-          }
-          actions={
-            <IncidentHeaderActions
-              id={id}
-              status={incident.status}
-              statuses={STATUSES}
-              locked={locked}
-              canManage={canManage}
-              pdfHref={`${basePath}/pdf`}
-              emailHref={drawerHref('send-email')}
-              copyHref={drawerHref('copy')}
-              deleteHref={drawerHref('confirm-delete')}
-              updateStatusAction={updateStatus}
-              toggleLockAction={toggleLock}
+            }
+          />
+        }
+        alerts={
+          <>
+            <RecordSyncBanner />
+            <GeneratedValue
+              value={
+                locked ? (
+                  <Alert variant="warning">
+                    <AlertTitle>
+                      <GeneratedText id="m_0580b66aed3ff1" />
+                    </AlertTitle>
+                    <AlertDescription className="flex items-center justify-between">
+                      <span>
+                        <GeneratedText id="m_01381607e25f0d" />
+                        <GeneratedValue value={' '} />
+                        <GeneratedValue
+                          value={
+                            incident.closedAt
+                              ? formatDate(new Date(incident.closedAt), ctx.timezone, ctx.locale)
+                              : '—'
+                          }
+                        />
+                        <GeneratedText id="m_02ee203c91c623" />
+                      </span>
+                      <form action={toggleLock} className="inline">
+                        <input type="hidden" name="id" value={id} />
+                        <input type="hidden" name="lock" value="false" />
+                        <Button variant="outline" size="sm" type="submit">
+                          <Unlock size={12} /> <GeneratedText id="m_0ca830c9381fd6" />
+                        </Button>
+                      </form>
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
             />
-          }
-        />
-      }
-      alerts={
-        <>
-          <GeneratedValue
-            value={
-              locked ? (
-                <Alert variant="warning">
-                  <AlertTitle>
-                    <GeneratedText id="m_0580b66aed3ff1" />
-                  </AlertTitle>
-                  <AlertDescription className="flex items-center justify-between">
-                    <span>
-                      <GeneratedText id="m_01381607e25f0d" />
-                      <GeneratedValue value={' '} />
+            <GeneratedValue
+              value={
+                incident.criticalInjury || incident.ministryOfLabourNotified ? (
+                  <Alert variant="destructive">
+                    <AlertTriangle size={16} />
+                    <AlertTitle>
+                      <GeneratedText id="m_0963d480ff963a" />
+                    </AlertTitle>
+                    <AlertDescription>
                       <GeneratedValue
                         value={
-                          incident.closedAt
-                            ? formatDate(new Date(incident.closedAt), ctx.timezone, ctx.locale)
-                            : '—'
+                          incident.criticalInjury ? <GeneratedText id="m_0df328fb5ce73a" /> : ''
                         }
                       />
-                      <GeneratedText id="m_02ee203c91c623" />
-                    </span>
-                    <form action={toggleLock} className="inline">
-                      <input type="hidden" name="id" value={id} />
-                      <input type="hidden" name="lock" value="false" />
-                      <Button variant="outline" size="sm" type="submit">
-                        <Unlock size={12} /> <GeneratedText id="m_0ca830c9381fd6" />
-                      </Button>
-                    </form>
-                  </AlertDescription>
-                </Alert>
-              ) : null
-            }
-          />
+                      <GeneratedValue
+                        value={
+                          incident.ministryOfLabourNotified ? (
+                            <GeneratedValue
+                              value={regulatoryT('authorityWasNotified', {
+                                authority: regulatory.authorityName,
+                              })}
+                            />
+                          ) : (
+                            ''
+                          )
+                        }
+                      />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+          </>
+        }
+        subtabs={<SectionNav sections={sectionItems} />}
+      >
+        <div className="space-y-5">
           <GeneratedValue
-            value={
-              incident.criticalInjury || incident.ministryOfLabourNotified ? (
-                <Alert variant="destructive">
-                  <AlertTriangle size={16} />
-                  <AlertTitle>
-                    <GeneratedText id="m_0963d480ff963a" />
-                  </AlertTitle>
-                  <AlertDescription>
-                    <GeneratedValue
-                      value={incident.criticalInjury ? <GeneratedText id="m_0df328fb5ce73a" /> : ''}
-                    />
-                    <GeneratedValue
-                      value={
-                        incident.ministryOfLabourNotified ? (
-                          <GeneratedValue
-                            value={regulatoryT('authorityWasNotified', {
-                              authority: regulatory.authorityName,
-                            })}
-                          />
-                        ) : (
-                          ''
-                        )
-                      }
-                    />
-                  </AlertDescription>
-                </Alert>
-              ) : null
-            }
+            value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
           />
-        </>
-      }
-      subtabs={<SectionNav sections={sectionItems} />}
-    >
-      <div className="space-y-5">
-        <GeneratedValue
-          value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
-        />
-        {/* ===================== OVERVIEW ===================== */}
-        <section id="section-overview" className="scroll-mt-2 space-y-5">
-          {/* Hero — investigation progress ring */}
-          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center gap-4">
-              <div className="relative h-16 w-16 shrink-0">
-                <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
-                  <circle
-                    cx="32"
-                    cy="32"
-                    r="26"
-                    fill="none"
-                    strokeWidth="6"
-                    className="stroke-slate-200 dark:stroke-slate-700"
-                  />
-                  <circle
-                    cx="32"
-                    cy="32"
-                    r="26"
-                    fill="none"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                    strokeDasharray={ringCirc}
-                    strokeDashoffset={ringCirc * (1 - pct / 100)}
-                    className={pct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  <GeneratedValue value={pct} />%
-                </span>
-              </div>
-              <div className="min-w-0">
-                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  <GeneratedValue value={doneCount} /> <GeneratedText id="m_00e704d1194796" />{' '}
-                  <GeneratedValue value={milestones.length} />{' '}
-                  <GeneratedText id="m_0562433d6260c9" />
+          {/* ===================== OVERVIEW ===================== */}
+          <section id="section-overview" className="scroll-mt-2 space-y-5">
+            {/* Hero — investigation progress ring */}
+            <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center gap-4">
+                <div className="relative h-16 w-16 shrink-0">
+                  <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="26"
+                      fill="none"
+                      strokeWidth="6"
+                      className="stroke-slate-200 dark:stroke-slate-700"
+                    />
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="26"
+                      fill="none"
+                      strokeWidth="6"
+                      strokeLinecap="round"
+                      strokeDasharray={ringCirc}
+                      strokeDashoffset={ringCirc * (1 - pct / 100)}
+                      className={pct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={pct} />%
+                  </span>
                 </div>
-                <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                  <GeneratedValue value={incident.type.replace(/_/g, ' ')} />
-                  <GeneratedValue value={site ? ` · ${site.name}` : ''} />
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-1 lg:grid-cols-2">
-              <GeneratedValue
-                value={milestones.map((m) => (
-                  <div key={m.label} className="flex items-center gap-2 text-sm">
-                    <span
-                      className={
-                        m.done
-                          ? 'inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white'
-                          : 'inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600'
-                      }
-                    >
-                      <GeneratedValue value={m.done ? '✓' : ''} />
-                    </span>
-                    <span
-                      className={
-                        m.done
-                          ? 'text-slate-700 dark:text-slate-200'
-                          : 'text-slate-400 dark:text-slate-500'
-                      }
-                    >
-                      <GeneratedValue value={m.label} />
-                    </span>
+                <div className="min-w-0">
+                  <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={doneCount} /> <GeneratedText id="m_00e704d1194796" />{' '}
+                    <GeneratedValue value={milestones.length} />{' '}
+                    <GeneratedText id="m_0562433d6260c9" />
                   </div>
-                ))}
-              />
-            </div>
-          </div>
-
-          <Section
-            title={tGenerated('m_062cdc4673a07a')}
-            subtitle={tGenerated('m_1cf9885ac52ebd')}
-            icon={<Building2 size={20} />}
-            tone="slate"
-          >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <LiveSelect
-                id={id}
-                field="type"
-                label={tGenerated('m_074ba2f160c506')}
-                initialValue={incident.type}
-                allowEmpty={false}
-                options={TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ') }))}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveSelect
-                id={id}
-                field="severity"
-                label={tGenerated('m_168b365cc671bf')}
-                initialValue={incident.severity}
-                allowEmpty={false}
-                options={SEVERITIES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <div className="sm:col-span-2">
-                <LiveField
-                  id={id}
-                  field="title"
-                  label={tGenerated('m_0decefd558c355')}
-                  initialValue={incident.title}
-                  disabled={locked}
-                  updateAction={updateTextField}
+                  <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={incident.type.replace(/_/g, ' ')} />
+                    <GeneratedValue value={site ? ` · ${site.name}` : ''} />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-1 lg:grid-cols-2">
+                <GeneratedValue
+                  value={milestones.map((m) => (
+                    <div key={m.label} className="flex items-center gap-2 text-sm">
+                      <span
+                        className={
+                          m.done
+                            ? 'inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white'
+                            : 'inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600'
+                        }
+                      >
+                        <GeneratedValue value={m.done ? '✓' : ''} />
+                      </span>
+                      <span
+                        className={
+                          m.done
+                            ? 'text-slate-700 dark:text-slate-200'
+                            : 'text-slate-400 dark:text-slate-500'
+                        }
+                      >
+                        <GeneratedValue value={m.label} />
+                      </span>
+                    </div>
+                  ))}
                 />
               </div>
-              <LiveDateTime
-                id={id}
-                field="occurredAt"
-                label={tGenerated('m_03f174df92cf82')}
-                initialValue={toLocalDatetime(incident.occurredAt)}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveRemoteSelect
-                id={id}
-                field="siteOrgUnitId"
-                label={tGenerated('m_020146dd3d3d5a')}
-                initialValue={incident.siteOrgUnitId}
-                lookup="incident-sites"
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveRemoteSelect
-                id={id}
-                field="departmentId"
-                label={tGenerated('m_1af68228b8305a')}
-                initialValue={incident.departmentId}
-                lookup="incident-departments"
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveRemoteSelect
-                id={id}
-                field="classificationId"
-                label={tGenerated('m_08405fc4ea6181')}
-                initialValue={incident.classificationId}
-                lookup="incident-classifications"
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveField
-                id={id}
-                field="location"
-                label={tGenerated('m_0300804afcc3bb')}
-                initialValue={incident.location}
-                placeholder={tGenerated('m_09265e43b4c31c')}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveField
-                id={id}
-                field="weather"
-                label={tGenerated('m_0ac9b805dc5093')}
-                initialValue={incident.weather}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveRemoteSelect
-                id={id}
-                field="supervisorPersonId"
-                label={tGenerated('m_0ccb8e5b917b17')}
-                initialValue={incident.supervisorPersonId}
-                lookup="incident-people"
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveField
-                id={id}
-                field="foremanText"
-                label={tGenerated('m_184fa8d9234543')}
-                initialValue={incident.foremanText}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
             </div>
-          </Section>
 
-          <Section
-            title={tGenerated('m_19cd2240015167')}
-            subtitle={tGenerated('m_01648e08263dfe')}
-            icon={<FileText size={20} />}
-            tone="slate"
-          >
-            <div className="space-y-4">
-              <LiveRichText
-                id={id}
-                field="eventsLeadingUp"
-                label={tGenerated('m_19b47bcc915bf0')}
-                initialValue={incident.eventsLeadingUp}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveRichText
-                id={id}
-                field="description"
-                label={tGenerated('m_0f069fc711163d')}
-                initialValue={incident.description}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveRichText
-                id={id}
-                field="immediateActionTaken"
-                label={tGenerated('m_1ea890e56aa6ae')}
-                initialValue={incident.immediateActionTaken}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
+            <Section
+              title={tGenerated('m_062cdc4673a07a')}
+              subtitle={tGenerated('m_1cf9885ac52ebd')}
+              icon={<Building2 size={20} />}
+              tone="slate"
+            >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <LiveRichText
-                  id={id}
-                  field="witnesses"
-                  label={tGenerated('m_0c5ffecfcfc329')}
-                  initialValue={incident.witnesses}
+                <LiveSelect
+                  field="type"
+                  label={tGenerated('m_074ba2f160c506')}
+                  initialValue={incident.type}
+                  allowEmpty={false}
+                  options={TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ') }))}
                   disabled={locked}
-                  updateAction={updateTextField}
                 />
-                <LiveRichText
-                  id={id}
-                  field="externalPeopleInvolved"
-                  label={tGenerated('m_03283bb876874a')}
-                  initialValue={incident.externalPeopleInvolved}
+                <LiveSelect
+                  field="severity"
+                  label={tGenerated('m_168b365cc671bf')}
+                  initialValue={incident.severity}
+                  allowEmpty={false}
+                  options={SEVERITIES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
                   disabled={locked}
-                  updateAction={updateTextField}
                 />
-              </div>
-              <LiveField
-                id={id}
-                field="ppeWorn"
-                label={tGenerated('m_1bb5a963312ef4')}
-                initialValue={incident.ppeWorn}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-            </div>
-          </Section>
-        </section>
-
-        {/* ===================== PEOPLE ===================== */}
-        <section id="section-people" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_17da6c84e50d2b', { value0: involved.length })}
-            subtitle={tGenerated('m_1fe4bb08dc904f')}
-            icon={<Users size={20} />}
-            tone="teal"
-            actions={
-              !locked ? (
-                <Link href={drawerHref('add-person') as any} scroll={false}>
-                  <Button type="button" size="sm">
-                    <Plus size={14} /> <GeneratedText id="m_12634c941f2fb6" />
-                  </Button>
-                </Link>
-              ) : null
-            }
-          >
-            <GeneratedValue
-              value={
-                involved.length === 0 ? (
-                  <EmptyState
-                    title={tGenerated('m_0a0b84eea0d527')}
-                    description={tGenerated('m_172961b4da5b86')}
+                <div className="sm:col-span-2">
+                  <LiveField
+                    field="title"
+                    label={tGenerated('m_0decefd558c355')}
+                    initialValue={incident.title}
+                    disabled={locked}
                   />
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                    <GeneratedValue
-                      value={involved.map((row) => (
-                        <li
-                          key={row.link.id}
-                          className="group flex items-center justify-between gap-3 py-2.5"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium text-slate-900 dark:text-slate-100">
-                              <GeneratedValue
-                                value={
-                                  row.person ? (
-                                    <Link
-                                      href={`/people/${row.person.id}`}
-                                      className="hover:underline"
-                                    >
-                                      <GeneratedValue value={row.person.firstName} />{' '}
-                                      <GeneratedValue value={row.person.lastName} />
-                                    </Link>
-                                  ) : (
-                                    (row.link.personNameText ?? '—')
-                                  )
-                                }
-                              />
-                            </div>
-                            <GeneratedValue
-                              value={
-                                row.link.role ? (
-                                  <Badge variant="outline" className="mt-1 capitalize">
-                                    <GeneratedValue value={row.link.role} />
-                                  </Badge>
-                                ) : null
-                              }
-                            />
-                          </div>
-                          <GeneratedValue
-                            value={
-                              !locked ? (
-                                <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                  <Link
-                                    href={drawerHref('edit-person', { editId: row.link.id }) as any}
-                                    scroll={false}
-                                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                                    title={tGenerated('m_15a58e7a50ce9f')}
-                                  >
-                                    <Pencil size={14} />
-                                  </Link>
-                                  <form action={deleteIncidentPerson} className="inline">
-                                    <input type="hidden" name="id" value={row.link.id} />
-                                    <input type="hidden" name="incidentId" value={id} />
-                                    <button
-                                      type="submit"
-                                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                      title={tGenerated('m_0861fceae96945')}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </form>
-                                </div>
-                              ) : null
-                            }
-                          />
-                        </li>
-                      ))}
-                    />
-                  </ul>
-                )
-              }
-            />
-          </Section>
-        </section>
-
-        {/* ===================== MEDICAL ===================== */}
-        <section id="section-medical" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_11127230209c9b')}
-            subtitle={tGenerated('m_1f15a4b3321f8b')}
-            icon={<HeartPulse size={20} />}
-            tone="rose"
-          >
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                <LiveToggle
-                  id={id}
-                  field="criticalInjury"
-                  label={tGenerated('m_145ad4ecccb8ca')}
-                  initialValue={incident.criticalInjury}
+                </div>
+                <LiveDateTime
+                  field="occurredAt"
+                  label={tGenerated('m_03f174df92cf82')}
+                  initialValue={datetimeLocalValue(incident.occurredAt, ctx.timezone)}
                   disabled={locked}
-                  updateAction={updateTextField}
                 />
-                <LiveToggle
-                  id={id}
-                  field="ministryOfLabourNotified"
-                  label={regulatoryT('authorityNotified', {
-                    authority: regulatory.authorityName,
-                  })}
-                  initialValue={incident.ministryOfLabourNotified}
+                <LiveRemoteSelect
+                  field="siteOrgUnitId"
+                  label={tGenerated('m_020146dd3d3d5a')}
+                  initialValue={incident.siteOrgUnitId}
+                  lookup="incident-sites"
                   disabled={locked}
-                  updateAction={updateTextField}
                 />
-                <LiveToggle
-                  id={id}
-                  field="emsCalled"
-                  label={tGenerated('m_09081dea5ec5bb')}
-                  initialValue={incident.emsCalled}
+                <LiveRemoteSelect
+                  field="departmentId"
+                  label={tGenerated('m_1af68228b8305a')}
+                  initialValue={incident.departmentId}
+                  lookup="incident-departments"
                   disabled={locked}
-                  updateAction={updateTextField}
                 />
-                <LiveToggle
-                  id={id}
-                  field="firstAidGiven"
-                  label={tGenerated('m_0d7228f1689c59')}
-                  initialValue={incident.firstAidGiven}
+                <LiveRemoteSelect
+                  field="classificationId"
+                  label={tGenerated('m_08405fc4ea6181')}
+                  initialValue={incident.classificationId}
+                  lookup="incident-classifications"
                   disabled={locked}
-                  updateAction={updateTextField}
                 />
-                <LiveToggle
-                  id={id}
-                  field="medicalAttentionReceived"
-                  label={tGenerated('m_1916246f33213b')}
-                  initialValue={incident.medicalAttentionReceived}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <LiveToggle
-                  id={id}
-                  field="lostTime"
-                  label={tGenerated('m_07762fdb1dad26')}
-                  initialValue={incident.lostTime}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <LiveToggle
-                  id={id}
-                  field="modifiedDuty"
-                  label={tGenerated('m_18f9bcad979f3b')}
-                  initialValue={incident.modifiedDuty}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <LiveToggle
-                  id={id}
-                  field="externallyReportable"
-                  label={tGenerated('m_0ace4bcf5de488')}
-                  initialValue={incident.externallyReportable}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <LiveToggle
-                  id={id}
-                  field="policeNotified"
-                  label={tGenerated('m_1fec1e8f5877cf')}
-                  initialValue={incident.policeNotified}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-              </div>
-
-              <GeneratedValue
-                value={
-                  incident.emsCalled ? (
-                    <SubBlock title={tGenerated('m_09abf0df23f312')} tone="rose">
-                      <LiveDateTime
-                        id={id}
-                        field="emsArrivedAt"
-                        label={tGenerated('m_03ccee6c33c3d1')}
-                        initialValue={
-                          incident.emsArrivedAt ? toLocalDatetime(incident.emsArrivedAt) : ''
-                        }
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                    </SubBlock>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  incident.firstAidGiven ? (
-                    <SubBlock title={tGenerated('m_1b39b28001ff31')} tone="amber">
-                      <LiveField
-                        id={id}
-                        field="firstAidProvider"
-                        label={tGenerated('m_03ec9dccb4df6b')}
-                        initialValue={incident.firstAidProvider}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="firstAidNotes"
-                        label={tGenerated('m_1c76ce6357cc6a')}
-                        initialValue={incident.firstAidNotes}
-                        multiline
-                        rows={2}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                    </SubBlock>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  incident.medicalAttentionReceived ? (
-                    <SubBlock title={tGenerated('m_170bb2c39aeda0')} tone="sky">
-                      <LiveField
-                        id={id}
-                        field="hospitalName"
-                        label={tGenerated('m_14ed8013ab807e')}
-                        initialValue={incident.hospitalName}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="treatedInCity"
-                        label={tGenerated('m_0f8706f757eeb9')}
-                        initialValue={incident.treatedInCity}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="transportation"
-                        label={tGenerated('m_02abf0d6ea0266')}
-                        initialValue={incident.transportation}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="attendingPhysician"
-                        label={tGenerated('m_14695b7ef536e2')}
-                        initialValue={incident.attendingPhysician}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveDateTime
-                        id={id}
-                        field="hospitalArrivedAt"
-                        label={tGenerated('m_00223fd1544992')}
-                        initialValue={
-                          incident.hospitalArrivedAt
-                            ? toLocalDatetime(incident.hospitalArrivedAt)
-                            : ''
-                        }
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveDateTime
-                        id={id}
-                        field="dischargedAt"
-                        label={tGenerated('m_17539cf3f6e833')}
-                        initialValue={
-                          incident.dischargedAt ? toLocalDatetime(incident.dischargedAt) : ''
-                        }
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                    </SubBlock>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  incident.ministryOfLabourNotified ? (
-                    <SubBlock title={regulatory.authorityName} tone="orange">
-                      <LiveDateTime
-                        id={id}
-                        field="molNotifiedAt"
-                        label={regulatoryT('authorityNotifiedAt', {
-                          abbreviation: regulatory.authorityAbbreviation,
-                        })}
-                        initialValue={
-                          incident.molNotifiedAt ? toLocalDatetime(incident.molNotifiedAt) : ''
-                        }
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="molReportNumber"
-                        label={regulatoryT('authorityReportNumber', {
-                          abbreviation: regulatory.authorityAbbreviation,
-                        })}
-                        initialValue={incident.molReportNumber}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                    </SubBlock>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  incident.policeNotified ? (
-                    <SubBlock title={tGenerated('m_051ed4848b2b2f')} tone="indigo">
-                      <LiveField
-                        id={id}
-                        field="policeReportNumber"
-                        label={tGenerated('m_13f7c5b2973809')}
-                        initialValue={incident.policeReportNumber}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="insuranceClaimNumber"
-                        label={tGenerated('m_1db0cce6a15bdd')}
-                        initialValue={incident.insuranceClaimNumber}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                    </SubBlock>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  incident.lostTime ? (
-                    <SubBlock title={tGenerated('m_0569d48a16120f')} tone="slate">
-                      <LiveField
-                        id={id}
-                        field="lostTimeFirstDay"
-                        label={tGenerated('m_1c40d052f5b2b3')}
-                        type="date"
-                        initialValue={incident.lostTimeFirstDay}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="lostTimeLastDay"
-                        label={tGenerated('m_141b64436c5327')}
-                        type="date"
-                        initialValue={incident.lostTimeLastDay}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="lostTimeDays"
-                        label={tGenerated('m_1fdff7e0b28365')}
-                        type="number"
-                        initialValue={
-                          incident.lostTimeDays != null ? String(incident.lostTimeDays) : null
-                        }
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                    </SubBlock>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  incident.modifiedDuty ? (
-                    <SubBlock title={tGenerated('m_091d9af6dbc966')} tone="slate">
-                      <LiveField
-                        id={id}
-                        field="modifiedDutyFirstDay"
-                        label={tGenerated('m_15f5f067da4642')}
-                        type="date"
-                        initialValue={incident.modifiedDutyFirstDay}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="modifiedDutyLastDay"
-                        label={tGenerated('m_089d5dcb2ef99f')}
-                        type="date"
-                        initialValue={incident.modifiedDutyLastDay}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="modifiedDutyDays"
-                        label={tGenerated('m_10cff3f8f31900')}
-                        type="number"
-                        initialValue={
-                          incident.modifiedDutyDays != null
-                            ? String(incident.modifiedDutyDays)
-                            : null
-                        }
-                        disabled={locked}
-                        updateAction={updateTextField}
-                      />
-                    </SubBlock>
-                  ) : null
-                }
-              />
-
-              <SubBlock title={tGenerated('m_0c26342a1f1de5')} tone="emerald">
                 <LiveField
-                  id={id}
-                  field="damageEstimate"
-                  label={tGenerated('m_131a237455e430')}
-                  type="number"
-                  initialValue={
-                    incident.damageEstimate != null ? String(incident.damageEstimate) : null
-                  }
+                  field="location"
+                  label={tGenerated('m_0300804afcc3bb')}
+                  initialValue={incident.location}
+                  placeholder={tGenerated('m_09265e43b4c31c')}
                   disabled={locked}
-                  updateAction={updateTextField}
                 />
-              </SubBlock>
-            </div>
-          </Section>
-        </section>
+                <LiveField
+                  field="weather"
+                  label={tGenerated('m_0ac9b805dc5093')}
+                  initialValue={incident.weather}
+                  disabled={locked}
+                />
+                <LiveRemoteSelect
+                  field="supervisorPersonId"
+                  label={tGenerated('m_0ccb8e5b917b17')}
+                  initialValue={incident.supervisorPersonId}
+                  lookup="incident-people"
+                  disabled={locked}
+                />
+                <LiveField
+                  field="foremanText"
+                  label={tGenerated('m_184fa8d9234543')}
+                  initialValue={incident.foremanText}
+                  disabled={locked}
+                />
+              </div>
+            </Section>
 
-        {/* ===================== INJURIES ===================== */}
-        <section id="section-injuries" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_1fac0fc3107966', { value0: injuries.length })}
-            subtitle={tGenerated('m_02b4ce99c12709')}
-            icon={<Activity size={20} />}
-            tone="rose"
-            actions={
-              !locked ? (
-                <Link href={drawerHref('add-injury') as any} scroll={false}>
-                  <Button type="button" size="sm">
-                    <Plus size={14} /> <GeneratedText id="m_141cf443767ce4" />
-                  </Button>
-                </Link>
-              ) : null
-            }
-          >
-            <GeneratedValue
-              value={
-                injuries.length === 0 ? (
-                  <EmptyState
-                    title={tGenerated('m_00e28e68a27147')}
-                    description={tGenerated('m_157c8fc9c6b318')}
+            <Section
+              title={tGenerated('m_19cd2240015167')}
+              subtitle={tGenerated('m_01648e08263dfe')}
+              icon={<FileText size={20} />}
+              tone="slate"
+            >
+              <div className="space-y-4">
+                <LiveRichText
+                  field="eventsLeadingUp"
+                  label={tGenerated('m_19b47bcc915bf0')}
+                  initialValue={incident.eventsLeadingUp}
+                  disabled={locked}
+                />
+                <LiveRichText
+                  field="description"
+                  label={tGenerated('m_0f069fc711163d')}
+                  initialValue={incident.description}
+                  disabled={locked}
+                />
+                <LiveRichText
+                  field="immediateActionTaken"
+                  label={tGenerated('m_1ea890e56aa6ae')}
+                  initialValue={incident.immediateActionTaken}
+                  disabled={locked}
+                />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <LiveRichText
+                    field="witnesses"
+                    label={tGenerated('m_0c5ffecfcfc329')}
+                    initialValue={incident.witnesses}
+                    disabled={locked}
                   />
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                    <GeneratedValue
-                      value={injuries.map((row) => (
-                        <li
-                          key={row.injury.id}
-                          className="group grid grid-cols-1 gap-2 py-3 sm:grid-cols-[1fr_1fr_auto]"
-                        >
-                          <div>
-                            <div className="font-medium text-slate-900 dark:text-slate-100">
-                              <GeneratedValue
-                                value={
-                                  row.person ? (
-                                    <Link
-                                      href={`/people/${row.person.id}`}
-                                      className="hover:underline"
-                                    >
-                                      <GeneratedValue value={row.person.firstName} />{' '}
-                                      <GeneratedValue value={row.person.lastName} />
-                                    </Link>
-                                  ) : (
-                                    (row.injury.personName ?? '—')
-                                  )
-                                }
-                              />
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              <GeneratedText id="m_0302a5e13ea3a7" />{' '}
-                              <GeneratedValue value={row.injury.bodyParts.join(', ') || '—'} />
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              <GeneratedText id="m_02f291bf53e5ac" />
-                              <GeneratedValue value={' '} />
-                              <GeneratedValue
-                                value={row.assignedTypes.map((type) => type.name).join(', ') || '—'}
-                              />
-                            </div>
-                          </div>
-                          <div className="text-xs text-slate-600 dark:text-slate-300">
-                            <GeneratedValue
-                              value={
-                                row.injury.injuryResult ? (
-                                  <p>
-                                    <span className="font-medium">
-                                      <GeneratedText id="m_1a74936369b40e" />
-                                    </span>
-                                    <GeneratedValue value={' '} />
-                                    <GeneratedValue value={row.injury.injuryResult} />
-                                  </p>
-                                ) : null
-                              }
-                            />
-                            <GeneratedValue
-                              value={
-                                row.injury.treatment ? (
-                                  <p>
-                                    <span className="font-medium">
-                                      <GeneratedText id="m_1ea19b8ca52c54" />
-                                    </span>{' '}
-                                    <GeneratedValue value={row.injury.treatment} />
-                                  </p>
-                                ) : null
-                              }
-                            />
-                            <GeneratedValue
-                              value={
-                                row.injury.treatedAtFacility ? (
-                                  <p className="text-slate-500 dark:text-slate-400">
-                                    <GeneratedText id="m_1d1f173920594c" />{' '}
-                                    <GeneratedValue value={row.injury.treatedAtFacility} />
-                                  </p>
-                                ) : null
-                              }
-                            />
-                            <GeneratedValue
-                              value={
-                                typeof row.injury.workedHoursPriorTo === 'number' ? (
-                                  <p className="text-slate-500 dark:text-slate-400">
-                                    <GeneratedText id="m_0c0a0c730dce33" />{' '}
-                                    <GeneratedValue value={row.injury.workedHoursPriorTo} />
-                                  </p>
-                                ) : null
-                              }
-                            />
-                          </div>
-                          <GeneratedValue
-                            value={
-                              !locked ? (
-                                <div className="flex items-start gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-                                  <Link
-                                    href={
-                                      drawerHref('edit-injury', { editId: row.injury.id }) as any
-                                    }
-                                    scroll={false}
-                                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                                    title={tGenerated('m_011c199f991de6')}
-                                    aria-label={tGenerated('m_011c199f991de6')}
-                                  >
-                                    <Pencil size={14} />
-                                  </Link>
-                                  <form action={deleteIncidentInjury} className="inline">
-                                    <input type="hidden" name="id" value={row.injury.id} />
-                                    <input type="hidden" name="incidentId" value={id} />
-                                    <button
-                                      type="submit"
-                                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                      title={tGenerated('m_1b6d48e2d356e7')}
-                                      aria-label={tGenerated('m_1b6d48e2d356e7')}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </form>
-                                </div>
-                              ) : null
-                            }
-                          />
-                        </li>
-                      ))}
-                    />
-                  </ul>
-                )
+                  <LiveRichText
+                    field="externalPeopleInvolved"
+                    label={tGenerated('m_03283bb876874a')}
+                    initialValue={incident.externalPeopleInvolved}
+                    disabled={locked}
+                  />
+                </div>
+                <LiveField
+                  field="ppeWorn"
+                  label={tGenerated('m_1bb5a963312ef4')}
+                  initialValue={incident.ppeWorn}
+                  disabled={locked}
+                />
+              </div>
+            </Section>
+          </section>
+
+          {/* ===================== PEOPLE ===================== */}
+          <section id="section-people" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_17da6c84e50d2b', { value0: involved.length })}
+              subtitle={tGenerated('m_1fe4bb08dc904f')}
+              icon={<Users size={20} />}
+              tone="teal"
+              actions={
+                !locked ? (
+                  <Link href={drawerHref('add-person') as any} scroll={false}>
+                    <Button type="button" size="sm">
+                      <Plus size={14} /> <GeneratedText id="m_12634c941f2fb6" />
+                    </Button>
+                  </Link>
+                ) : null
               }
-            />
-          </Section>
-        </section>
-
-        {/* ===================== KEY METRICS ===================== */}
-        <section id="section-metrics" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_1f8afc53413180')}
-            subtitle={tGenerated('m_1fb4b64e2c787a')}
-            icon={<Gauge size={20} />}
-            tone="amber"
-          >
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-              <LiveSeverityRating
-                id={id}
-                field="actualSeverity"
-                label={tGenerated('m_19cec370baaabb')}
-                initialValue={incident.actualSeverity}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveSeverityRating
-                id={id}
-                field="potentialSeverity"
-                label={tGenerated('m_04e65f97982772')}
-                initialValue={incident.potentialSeverity}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-              <LiveSeverityRating
-                id={id}
-                field="severityRating"
-                label={tGenerated('m_06cdd9cd175160')}
-                initialValue={incident.severityRating}
-                disabled={locked}
-                updateAction={updateTextField}
-              />
-            </div>
-          </Section>
-        </section>
-
-        {/* ===================== LOST TIME ===================== */}
-        <section id="section-lost-time" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_19b5f77f577fe5', { value0: lostTime.length })}
-            subtitle={tGenerated('m_000bcc93ac6693')}
-            icon={<Clock size={20} />}
-            tone="blue"
-            actions={
-              !locked ? (
-                <Link href={drawerHref('add-lost-time') as any} scroll={false}>
-                  <Button type="button" size="sm">
-                    <Plus size={14} /> <GeneratedText id="m_1eabd71bbc0199" />
-                  </Button>
-                </Link>
-              ) : null
-            }
-          >
-            <GeneratedValue
-              value={
-                lostTime.length === 0 ? (
-                  <EmptyState
-                    title={tGenerated('m_18e2d38da3feb0')}
-                    description={tGenerated('m_1682e345c18062')}
-                  />
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                    <GeneratedValue
-                      value={lostTime.map((e) => (
-                        <li key={e.id} className="flex items-center justify-between gap-3 py-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium">
-                              <GeneratedValue
-                                value={
-                                  e.status === 'off_work' ? (
-                                    <Badge variant="destructive">
-                                      <GeneratedText id="m_131a54d6d8ac12" />
-                                    </Badge>
-                                  ) : e.status === 'restricted_duty' ? (
-                                    <Badge variant="warning">
-                                      <GeneratedText id="m_1d484f3bf58cc5" />
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="success">
-                                      <GeneratedText id="m_1e22cd58b7a004" />
-                                    </Badge>
-                                  )
-                                }
-                              />
-                            </div>
-                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                              <span className="font-mono">
-                                <GeneratedValue value={e.validFrom} />
-                              </span>
-                              <span> → </span>
-                              <span className="font-mono">
+            >
+              <GeneratedValue
+                value={
+                  involved.length === 0 ? (
+                    <EmptyState
+                      title={tGenerated('m_0a0b84eea0d527')}
+                      description={tGenerated('m_172961b4da5b86')}
+                    />
+                  ) : (
+                    <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                      <GeneratedValue
+                        value={involved.map((row) => (
+                          <li
+                            key={row.link.id}
+                            className="group flex items-center justify-between gap-3 py-2.5"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
                                 <GeneratedValue
-                                  value={e.validTo ?? <GeneratedText id="m_0d4c06f3af4f1f" />}
+                                  value={
+                                    row.person ? (
+                                      <Link
+                                        href={`/people/${row.person.id}`}
+                                        className="hover:underline"
+                                      >
+                                        <GeneratedValue value={row.person.firstName} />{' '}
+                                        <GeneratedValue value={row.person.lastName} />
+                                      </Link>
+                                    ) : (
+                                      (row.link.personNameText ?? '—')
+                                    )
+                                  }
                                 />
-                              </span>
+                              </div>
                               <GeneratedValue
                                 value={
-                                  e.notes ? (
-                                    <span className="ml-2">
-                                      · <GeneratedValue value={e.notes} />
-                                    </span>
+                                  row.link.role ? (
+                                    <Badge variant="outline" className="mt-1 capitalize">
+                                      <GeneratedValue value={row.link.role} />
+                                    </Badge>
                                   ) : null
                                 }
                               />
                             </div>
-                          </div>
-                          <GeneratedValue
-                            value={
-                              !locked ? (
-                                <form action={deleteLostTimeEvent} className="inline">
-                                  <input type="hidden" name="id" value={e.id} />
-                                  <input type="hidden" name="incidentId" value={id} />
-                                  <button
-                                    type="submit"
-                                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                    title={tGenerated('m_071f43c9483216')}
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </form>
-                              ) : null
-                            }
-                          />
-                        </li>
-                      ))}
-                    />
-                  </ul>
-                )
-              }
-            />
-          </Section>
-        </section>
-
-        {/* ===================== INVESTIGATION ===================== */}
-        <section id="section-investigation" className="scroll-mt-2 space-y-5">
-          <Section
-            title={tGenerated('m_13302fbd83eedb', { value0: timelineEvents.length })}
-            subtitle={tGenerated('m_1e71d6cc0a2fb7')}
-            icon={<ListChecks size={20} />}
-            tone="teal"
-            actions={
-              !locked && canInvestigate ? (
-                <Link href={drawerHref('new-event') as any} scroll={false}>
-                  <Button size="sm" variant="outline">
-                    <Plus size={14} /> <GeneratedText id="m_09cd8e0f2553a4" />
-                  </Button>
-                </Link>
-              ) : null
-            }
-          >
-            <GeneratedValue
-              value={
-                timelineEvents.length === 0 ? (
-                  <EmptyState
-                    title={tGenerated('m_02bcdaf555a3aa')}
-                    description={tGenerated('m_164ce9bac37c9c')}
-                  />
-                ) : (
-                  <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm dark:border-slate-700">
-                    <GeneratedValue
-                      value={timelineEvents.map((e) => (
-                        <li key={e.id} className="group relative">
-                          <span className="absolute top-1 -left-[26px] h-2.5 w-2.5 rounded-full border-2 border-white bg-teal-500 shadow dark:border-slate-900" />
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                                <GeneratedValue
-                                  value={formatDateTime(
-                                    new Date(e.occurredAt),
-                                    ctx.timezone,
-                                    ctx.locale,
-                                  )}
-                                />
-                              </div>
-                              <div className="mt-0.5 whitespace-pre-wrap text-slate-900 dark:text-slate-100">
-                                <GeneratedValue value={e.description} />
-                              </div>
-                            </div>
                             <GeneratedValue
                               value={
-                                !locked && canInvestigate ? (
+                                !locked ? (
                                   <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                     <Link
-                                      href={drawerHref('edit-event', { editId: e.id }) as any}
+                                      href={
+                                        drawerHref('edit-person', { editId: row.link.id }) as any
+                                      }
                                       scroll={false}
                                       className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                                      title={tGenerated('m_188bbec3041c24')}
+                                      title={tGenerated('m_15a58e7a50ce9f')}
                                     >
                                       <Pencil size={14} />
                                     </Link>
-                                    <form action={deleteEvent} className="inline">
-                                      <input type="hidden" name="id" value={e.id} />
+                                    <form action={deleteIncidentPerson} className="inline">
+                                      <input type="hidden" name="id" value={row.link.id} />
                                       <input type="hidden" name="incidentId" value={id} />
                                       <button
                                         type="submit"
                                         className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                        title={tGenerated('m_02bca2ef9d0a9c')}
+                                        title={tGenerated('m_0861fceae96945')}
                                       >
                                         <Trash2 size={14} />
                                       </button>
@@ -2967,161 +2055,654 @@ export default async function IncidentDetailPage({
                                 ) : null
                               }
                             />
-                          </div>
-                        </li>
-                      ))}
-                    />
-                  </ol>
-                )
-              }
-            />
-          </Section>
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  )
+                }
+              />
+            </Section>
+          </section>
 
-          <Section
-            title={tGenerated('m_166b3b96a3a7b9', { value0: factors.length })}
-            subtitle={tGenerated('m_0fff563a644153')}
-            icon={<AlertTriangle size={20} />}
-            tone="amber"
-            actions={
-              !locked && canInvestigate ? (
-                <Link href={drawerHref('new-factor') as any} scroll={false}>
-                  <Button size="sm" variant="outline">
-                    <Plus size={14} /> <GeneratedText id="m_04e475dcb7d6d7" />
-                  </Button>
-                </Link>
-              ) : null
-            }
-          >
-            <GeneratedValue
-              value={
-                factors.length === 0 ? (
-                  <EmptyState
-                    title={tGenerated('m_13d4bc46702ee8')}
-                    description={tGenerated('m_1e94402d1ed117')}
+          {/* ===================== MEDICAL ===================== */}
+          <section id="section-medical" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_11127230209c9b')}
+              subtitle={tGenerated('m_1f15a4b3321f8b')}
+              icon={<HeartPulse size={20} />}
+              tone="rose"
+            >
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <LiveToggle
+                    field="criticalInjury"
+                    label={tGenerated('m_145ad4ecccb8ca')}
+                    initialValue={incident.criticalInjury}
+                    disabled={locked}
                   />
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                    <GeneratedValue
-                      value={factors.map((f) => (
-                        <li
-                          key={f.id}
-                          className="group flex items-start justify-between gap-3 py-3"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <Badge variant="outline" className="mb-1 tracking-wide uppercase">
-                              <GeneratedValue value={f.category} />
-                            </Badge>
-                            <div className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">
-                              <GeneratedValue value={f.description} />
+                  <LiveToggle
+                    field="ministryOfLabourNotified"
+                    label={regulatoryT('authorityNotified', {
+                      authority: regulatory.authorityName,
+                    })}
+                    initialValue={incident.ministryOfLabourNotified}
+                    disabled={locked}
+                  />
+                  <LiveToggle
+                    field="emsCalled"
+                    label={tGenerated('m_09081dea5ec5bb')}
+                    initialValue={incident.emsCalled}
+                    disabled={locked}
+                  />
+                  <LiveToggle
+                    field="firstAidGiven"
+                    label={tGenerated('m_0d7228f1689c59')}
+                    initialValue={incident.firstAidGiven}
+                    disabled={locked}
+                  />
+                  <LiveToggle
+                    field="medicalAttentionReceived"
+                    label={tGenerated('m_1916246f33213b')}
+                    initialValue={incident.medicalAttentionReceived}
+                    disabled={locked}
+                  />
+                  <LiveToggle
+                    field="lostTime"
+                    label={tGenerated('m_07762fdb1dad26')}
+                    initialValue={incident.lostTime}
+                    disabled={locked}
+                  />
+                  <LiveToggle
+                    field="modifiedDuty"
+                    label={tGenerated('m_18f9bcad979f3b')}
+                    initialValue={incident.modifiedDuty}
+                    disabled={locked}
+                  />
+                  <LiveToggle
+                    field="externallyReportable"
+                    label={tGenerated('m_0ace4bcf5de488')}
+                    initialValue={incident.externallyReportable}
+                    disabled={locked}
+                  />
+                  <LiveToggle
+                    field="policeNotified"
+                    label={tGenerated('m_1fec1e8f5877cf')}
+                    initialValue={incident.policeNotified}
+                    disabled={locked}
+                  />
+                </div>
+
+                <GeneratedValue
+                  value={
+                    incident.emsCalled ? (
+                      <SubBlock title={tGenerated('m_09abf0df23f312')} tone="rose">
+                        <LiveDateTime
+                          field="emsArrivedAt"
+                          label={tGenerated('m_03ccee6c33c3d1')}
+                          initialValue={
+                            incident.emsArrivedAt
+                              ? datetimeLocalValue(incident.emsArrivedAt, ctx.timezone)
+                              : ''
+                          }
+                          disabled={locked}
+                        />
+                      </SubBlock>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    incident.firstAidGiven ? (
+                      <SubBlock title={tGenerated('m_1b39b28001ff31')} tone="amber">
+                        <LiveField
+                          field="firstAidProvider"
+                          label={tGenerated('m_03ec9dccb4df6b')}
+                          initialValue={incident.firstAidProvider}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="firstAidNotes"
+                          label={tGenerated('m_1c76ce6357cc6a')}
+                          initialValue={incident.firstAidNotes}
+                          multiline
+                          rows={2}
+                          disabled={locked}
+                        />
+                      </SubBlock>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    incident.medicalAttentionReceived ? (
+                      <SubBlock title={tGenerated('m_170bb2c39aeda0')} tone="sky">
+                        <LiveField
+                          field="hospitalName"
+                          label={tGenerated('m_14ed8013ab807e')}
+                          initialValue={incident.hospitalName}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="treatedInCity"
+                          label={tGenerated('m_0f8706f757eeb9')}
+                          initialValue={incident.treatedInCity}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="transportation"
+                          label={tGenerated('m_02abf0d6ea0266')}
+                          initialValue={incident.transportation}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="attendingPhysician"
+                          label={tGenerated('m_14695b7ef536e2')}
+                          initialValue={incident.attendingPhysician}
+                          disabled={locked}
+                        />
+                        <LiveDateTime
+                          field="hospitalArrivedAt"
+                          label={tGenerated('m_00223fd1544992')}
+                          initialValue={
+                            incident.hospitalArrivedAt
+                              ? datetimeLocalValue(incident.hospitalArrivedAt, ctx.timezone)
+                              : ''
+                          }
+                          disabled={locked}
+                        />
+                        <LiveDateTime
+                          field="dischargedAt"
+                          label={tGenerated('m_17539cf3f6e833')}
+                          initialValue={
+                            incident.dischargedAt
+                              ? datetimeLocalValue(incident.dischargedAt, ctx.timezone)
+                              : ''
+                          }
+                          disabled={locked}
+                        />
+                      </SubBlock>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    incident.ministryOfLabourNotified ? (
+                      <SubBlock title={regulatory.authorityName} tone="orange">
+                        <LiveDateTime
+                          field="molNotifiedAt"
+                          label={regulatoryT('authorityNotifiedAt', {
+                            abbreviation: regulatory.authorityAbbreviation,
+                          })}
+                          initialValue={
+                            incident.molNotifiedAt
+                              ? datetimeLocalValue(incident.molNotifiedAt, ctx.timezone)
+                              : ''
+                          }
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="molReportNumber"
+                          label={regulatoryT('authorityReportNumber', {
+                            abbreviation: regulatory.authorityAbbreviation,
+                          })}
+                          initialValue={incident.molReportNumber}
+                          disabled={locked}
+                        />
+                      </SubBlock>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    incident.policeNotified ? (
+                      <SubBlock title={tGenerated('m_051ed4848b2b2f')} tone="indigo">
+                        <LiveField
+                          field="policeReportNumber"
+                          label={tGenerated('m_13f7c5b2973809')}
+                          initialValue={incident.policeReportNumber}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="insuranceClaimNumber"
+                          label={tGenerated('m_1db0cce6a15bdd')}
+                          initialValue={incident.insuranceClaimNumber}
+                          disabled={locked}
+                        />
+                      </SubBlock>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    incident.lostTime ? (
+                      <SubBlock title={tGenerated('m_0569d48a16120f')} tone="slate">
+                        <LiveField
+                          field="lostTimeFirstDay"
+                          label={tGenerated('m_1c40d052f5b2b3')}
+                          type="date"
+                          initialValue={incident.lostTimeFirstDay}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="lostTimeLastDay"
+                          label={tGenerated('m_141b64436c5327')}
+                          type="date"
+                          initialValue={incident.lostTimeLastDay}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="lostTimeDays"
+                          label={tGenerated('m_1fdff7e0b28365')}
+                          type="number"
+                          initialValue={
+                            incident.lostTimeDays != null ? String(incident.lostTimeDays) : null
+                          }
+                          disabled={locked}
+                        />
+                      </SubBlock>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    incident.modifiedDuty ? (
+                      <SubBlock title={tGenerated('m_091d9af6dbc966')} tone="slate">
+                        <LiveField
+                          field="modifiedDutyFirstDay"
+                          label={tGenerated('m_15f5f067da4642')}
+                          type="date"
+                          initialValue={incident.modifiedDutyFirstDay}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="modifiedDutyLastDay"
+                          label={tGenerated('m_089d5dcb2ef99f')}
+                          type="date"
+                          initialValue={incident.modifiedDutyLastDay}
+                          disabled={locked}
+                        />
+                        <LiveField
+                          field="modifiedDutyDays"
+                          label={tGenerated('m_10cff3f8f31900')}
+                          type="number"
+                          initialValue={
+                            incident.modifiedDutyDays != null
+                              ? String(incident.modifiedDutyDays)
+                              : null
+                          }
+                          disabled={locked}
+                        />
+                      </SubBlock>
+                    ) : null
+                  }
+                />
+
+                <SubBlock title={tGenerated('m_0c26342a1f1de5')} tone="emerald">
+                  <LiveField
+                    field="damageEstimate"
+                    label={tGenerated('m_131a237455e430')}
+                    type="number"
+                    initialValue={
+                      incident.damageEstimate != null ? String(incident.damageEstimate) : null
+                    }
+                    disabled={locked}
+                  />
+                </SubBlock>
+              </div>
+            </Section>
+          </section>
+
+          {/* ===================== INJURIES ===================== */}
+          <section id="section-injuries" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_1fac0fc3107966', { value0: injuries.length })}
+              subtitle={tGenerated('m_02b4ce99c12709')}
+              icon={<Activity size={20} />}
+              tone="rose"
+              actions={
+                !locked ? (
+                  <Link href={drawerHref('add-injury') as any} scroll={false}>
+                    <Button type="button" size="sm">
+                      <Plus size={14} /> <GeneratedText id="m_141cf443767ce4" />
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              <GeneratedValue
+                value={
+                  injuries.length === 0 ? (
+                    <EmptyState
+                      title={tGenerated('m_00e28e68a27147')}
+                      description={tGenerated('m_157c8fc9c6b318')}
+                    />
+                  ) : (
+                    <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                      <GeneratedValue
+                        value={injuries.map((row) => (
+                          <li
+                            key={row.injury.id}
+                            className="group grid grid-cols-1 gap-2 py-3 sm:grid-cols-[1fr_1fr_auto]"
+                          >
+                            <div>
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
+                                <GeneratedValue
+                                  value={
+                                    row.person ? (
+                                      <Link
+                                        href={`/people/${row.person.id}`}
+                                        className="hover:underline"
+                                      >
+                                        <GeneratedValue value={row.person.firstName} />{' '}
+                                        <GeneratedValue value={row.person.lastName} />
+                                      </Link>
+                                    ) : (
+                                      (row.injury.personName ?? '—')
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                <GeneratedText id="m_0302a5e13ea3a7" />{' '}
+                                <GeneratedValue value={row.injury.bodyParts.join(', ') || '—'} />
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                <GeneratedText id="m_02f291bf53e5ac" />
+                                <GeneratedValue value={' '} />
+                                <GeneratedValue
+                                  value={
+                                    row.assignedTypes.map((type) => type.name).join(', ') || '—'
+                                  }
+                                />
+                              </div>
                             </div>
-                          </div>
-                          <GeneratedValue
-                            value={
-                              !locked && canInvestigate ? (
-                                <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                  <Link
-                                    href={drawerHref('edit-factor', { editId: f.id }) as any}
-                                    scroll={false}
-                                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                                    title={tGenerated('m_0c55222658daf8')}
-                                  >
-                                    <Pencil size={14} />
-                                  </Link>
-                                  <form action={deleteFactor} className="inline">
-                                    <input type="hidden" name="id" value={f.id} />
+                            <div className="text-xs text-slate-600 dark:text-slate-300">
+                              <GeneratedValue
+                                value={
+                                  row.injury.injuryResult ? (
+                                    <p>
+                                      <span className="font-medium">
+                                        <GeneratedText id="m_1a74936369b40e" />
+                                      </span>
+                                      <GeneratedValue value={' '} />
+                                      <GeneratedValue value={row.injury.injuryResult} />
+                                    </p>
+                                  ) : null
+                                }
+                              />
+                              <GeneratedValue
+                                value={
+                                  row.injury.treatment ? (
+                                    <p>
+                                      <span className="font-medium">
+                                        <GeneratedText id="m_1ea19b8ca52c54" />
+                                      </span>{' '}
+                                      <GeneratedValue value={row.injury.treatment} />
+                                    </p>
+                                  ) : null
+                                }
+                              />
+                              <GeneratedValue
+                                value={
+                                  row.injury.treatedAtFacility ? (
+                                    <p className="text-slate-500 dark:text-slate-400">
+                                      <GeneratedText id="m_1d1f173920594c" />{' '}
+                                      <GeneratedValue value={row.injury.treatedAtFacility} />
+                                    </p>
+                                  ) : null
+                                }
+                              />
+                              <GeneratedValue
+                                value={
+                                  typeof row.injury.workedHoursPriorTo === 'number' ? (
+                                    <p className="text-slate-500 dark:text-slate-400">
+                                      <GeneratedText id="m_0c0a0c730dce33" />{' '}
+                                      <GeneratedValue value={row.injury.workedHoursPriorTo} />
+                                    </p>
+                                  ) : null
+                                }
+                              />
+                            </div>
+                            <GeneratedValue
+                              value={
+                                !locked ? (
+                                  <div className="flex items-start gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                                    <Link
+                                      href={
+                                        drawerHref('edit-injury', { editId: row.injury.id }) as any
+                                      }
+                                      scroll={false}
+                                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                                      title={tGenerated('m_011c199f991de6')}
+                                      aria-label={tGenerated('m_011c199f991de6')}
+                                    >
+                                      <Pencil size={14} />
+                                    </Link>
+                                    <form action={deleteIncidentInjury} className="inline">
+                                      <input type="hidden" name="id" value={row.injury.id} />
+                                      <input type="hidden" name="incidentId" value={id} />
+                                      <button
+                                        type="submit"
+                                        className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                        title={tGenerated('m_1b6d48e2d356e7')}
+                                        aria-label={tGenerated('m_1b6d48e2d356e7')}
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </form>
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  )
+                }
+              />
+            </Section>
+          </section>
+
+          {/* ===================== KEY METRICS ===================== */}
+          <section id="section-metrics" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_1f8afc53413180')}
+              subtitle={tGenerated('m_1fb4b64e2c787a')}
+              icon={<Gauge size={20} />}
+              tone="amber"
+            >
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <LiveSeverityRating
+                  field="actualSeverity"
+                  label={tGenerated('m_19cec370baaabb')}
+                  initialValue={incident.actualSeverity}
+                  disabled={locked}
+                />
+                <LiveSeverityRating
+                  field="potentialSeverity"
+                  label={tGenerated('m_04e65f97982772')}
+                  initialValue={incident.potentialSeverity}
+                  disabled={locked}
+                />
+                <LiveSeverityRating
+                  field="severityRating"
+                  label={tGenerated('m_06cdd9cd175160')}
+                  initialValue={incident.severityRating}
+                  disabled={locked}
+                />
+              </div>
+            </Section>
+          </section>
+
+          {/* ===================== LOST TIME ===================== */}
+          <section id="section-lost-time" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_19b5f77f577fe5', { value0: lostTime.length })}
+              subtitle={tGenerated('m_000bcc93ac6693')}
+              icon={<Clock size={20} />}
+              tone="blue"
+              actions={
+                !locked ? (
+                  <Link href={drawerHref('add-lost-time') as any} scroll={false}>
+                    <Button type="button" size="sm">
+                      <Plus size={14} /> <GeneratedText id="m_1eabd71bbc0199" />
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              <GeneratedValue
+                value={
+                  lostTime.length === 0 ? (
+                    <EmptyState
+                      title={tGenerated('m_18e2d38da3feb0')}
+                      description={tGenerated('m_1682e345c18062')}
+                    />
+                  ) : (
+                    <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                      <GeneratedValue
+                        value={lostTime.map((e) => (
+                          <li key={e.id} className="flex items-center justify-between gap-3 py-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium">
+                                <GeneratedValue
+                                  value={
+                                    e.status === 'off_work' ? (
+                                      <Badge variant="destructive">
+                                        <GeneratedText id="m_131a54d6d8ac12" />
+                                      </Badge>
+                                    ) : e.status === 'restricted_duty' ? (
+                                      <Badge variant="warning">
+                                        <GeneratedText id="m_1d484f3bf58cc5" />
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="success">
+                                        <GeneratedText id="m_1e22cd58b7a004" />
+                                      </Badge>
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                <span className="font-mono">
+                                  <GeneratedValue value={e.validFrom} />
+                                </span>
+                                <span> → </span>
+                                <span className="font-mono">
+                                  <GeneratedValue
+                                    value={e.validTo ?? <GeneratedText id="m_0d4c06f3af4f1f" />}
+                                  />
+                                </span>
+                                <GeneratedValue
+                                  value={
+                                    e.notes ? (
+                                      <span className="ml-2">
+                                        · <GeneratedValue value={e.notes} />
+                                      </span>
+                                    ) : null
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <GeneratedValue
+                              value={
+                                !locked ? (
+                                  <form action={deleteLostTimeEvent} className="inline">
+                                    <input type="hidden" name="id" value={e.id} />
                                     <input type="hidden" name="incidentId" value={id} />
                                     <button
                                       type="submit"
                                       className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                      title={tGenerated('m_0b69395e85f40b')}
+                                      title={tGenerated('m_071f43c9483216')}
                                     >
                                       <Trash2 size={14} />
                                     </button>
                                   </form>
-                                </div>
-                              ) : null
-                            }
-                          />
-                        </li>
-                      ))}
-                    />
-                  </ul>
-                )
-              }
-            />
-          </Section>
-
-          <Section
-            title={tGenerated('m_1d618ba267da6f')}
-            subtitle={tGenerated('m_13e191dbfdde54', { value0: whys.length })}
-            icon={<HelpCircle size={20} />}
-            tone="purple"
-            actions={
-              !locked && canInvestigate && whys.length < 5 ? (
-                <Link href={drawerHref('new-why') as any} scroll={false}>
-                  <Button size="sm" variant="outline">
-                    <Plus size={14} /> <GeneratedText id="m_030d3f5756f85d" />
-                  </Button>
-                </Link>
-              ) : null
-            }
-          >
-            <div className="space-y-5">
-              <LiveRichText
-                id={id}
-                field="rootCause"
-                label={tGenerated('m_144853fbc930b0')}
-                initialValue={incident.rootCause}
-                placeholder={tGenerated('m_00cb435f0a2d5a')}
-                disabled={locked}
-                updateAction={updateTextField}
+                                ) : null
+                              }
+                            />
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  )
+                }
               />
-              <div>
-                <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  <GeneratedText id="m_13cb7d7cf77012" />
-                </div>
-                <GeneratedValue
-                  value={
-                    whys.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        <GeneratedText id="m_174321cd6b2464" />
-                      </p>
-                    ) : (
-                      <ol className="space-y-2 text-sm">
-                        <GeneratedValue
-                          value={whys.map((w) => (
-                            <li
-                              key={w.id}
-                              className="group flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2 dark:border-slate-800 dark:bg-slate-800/40"
-                            >
+            </Section>
+          </section>
+
+          {/* ===================== INVESTIGATION ===================== */}
+          <section id="section-investigation" className="scroll-mt-2 space-y-5">
+            <Section
+              title={tGenerated('m_13302fbd83eedb', { value0: timelineEvents.length })}
+              subtitle={tGenerated('m_1e71d6cc0a2fb7')}
+              icon={<ListChecks size={20} />}
+              tone="teal"
+              actions={
+                !locked && canInvestigate ? (
+                  <Link href={drawerHref('new-event') as any} scroll={false}>
+                    <Button size="sm" variant="outline">
+                      <Plus size={14} /> <GeneratedText id="m_09cd8e0f2553a4" />
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              <GeneratedValue
+                value={
+                  timelineEvents.length === 0 ? (
+                    <EmptyState
+                      title={tGenerated('m_02bcdaf555a3aa')}
+                      description={tGenerated('m_164ce9bac37c9c')}
+                    />
+                  ) : (
+                    <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm dark:border-slate-700">
+                      <GeneratedValue
+                        value={timelineEvents.map((e) => (
+                          <li key={e.id} className="group relative">
+                            <span className="absolute top-1 -left-[26px] h-2.5 w-2.5 rounded-full border-2 border-white bg-teal-500 shadow dark:border-slate-900" />
+                            <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0 flex-1">
-                                <span className="mr-2 inline-flex h-5 w-12 items-center justify-center rounded bg-teal-100 text-[10px] font-semibold tracking-wide text-teal-800 uppercase dark:bg-teal-950/50 dark:text-teal-300">
-                                  <GeneratedText id="m_11ba5ccd975250" />
-                                  <GeneratedValue value={w.ordinal} />
-                                </span>
-                                <span className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">
-                                  <GeneratedValue value={w.whyText} />
-                                </span>
+                                <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                                  <GeneratedValue
+                                    value={formatDateTime(
+                                      new Date(e.occurredAt),
+                                      ctx.timezone,
+                                      ctx.locale,
+                                    )}
+                                  />
+                                </div>
+                                <div className="mt-0.5 whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                                  <GeneratedValue value={e.description} />
+                                </div>
                               </div>
                               <GeneratedValue
                                 value={
                                   !locked && canInvestigate ? (
                                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                       <Link
-                                        href={drawerHref('edit-why', { editId: w.id }) as any}
+                                        href={drawerHref('edit-event', { editId: e.id }) as any}
                                         scroll={false}
                                         className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                                        title={tGenerated('m_1f323608dad8aa')}
+                                        title={tGenerated('m_188bbec3041c24')}
                                       >
                                         <Pencil size={14} />
                                       </Link>
-                                      <form action={deleteWhy} className="inline">
-                                        <input type="hidden" name="id" value={w.id} />
+                                      <form action={deleteEvent} className="inline">
+                                        <input type="hidden" name="id" value={e.id} />
                                         <input type="hidden" name="incidentId" value={id} />
                                         <button
                                           type="submit"
                                           className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                          title={tGenerated('m_03c0ac8461f32f')}
+                                          title={tGenerated('m_02bca2ef9d0a9c')}
                                         >
                                           <Trash2 size={14} />
                                         </button>
@@ -3130,541 +2711,711 @@ export default async function IncidentDetailPage({
                                   ) : null
                                 }
                               />
-                            </li>
-                          ))}
-                        />
-                      </ol>
-                    )
+                            </div>
+                          </li>
+                        ))}
+                      />
+                    </ol>
+                  )
+                }
+              />
+            </Section>
+
+            <Section
+              title={tGenerated('m_166b3b96a3a7b9', { value0: factors.length })}
+              subtitle={tGenerated('m_0fff563a644153')}
+              icon={<AlertTriangle size={20} />}
+              tone="amber"
+              actions={
+                !locked && canInvestigate ? (
+                  <Link href={drawerHref('new-factor') as any} scroll={false}>
+                    <Button size="sm" variant="outline">
+                      <Plus size={14} /> <GeneratedText id="m_04e475dcb7d6d7" />
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              <GeneratedValue
+                value={
+                  factors.length === 0 ? (
+                    <EmptyState
+                      title={tGenerated('m_13d4bc46702ee8')}
+                      description={tGenerated('m_1e94402d1ed117')}
+                    />
+                  ) : (
+                    <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                      <GeneratedValue
+                        value={factors.map((f) => (
+                          <li
+                            key={f.id}
+                            className="group flex items-start justify-between gap-3 py-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <Badge variant="outline" className="mb-1 tracking-wide uppercase">
+                                <GeneratedValue value={f.category} />
+                              </Badge>
+                              <div className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                                <GeneratedValue value={f.description} />
+                              </div>
+                            </div>
+                            <GeneratedValue
+                              value={
+                                !locked && canInvestigate ? (
+                                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <Link
+                                      href={drawerHref('edit-factor', { editId: f.id }) as any}
+                                      scroll={false}
+                                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                                      title={tGenerated('m_0c55222658daf8')}
+                                    >
+                                      <Pencil size={14} />
+                                    </Link>
+                                    <form action={deleteFactor} className="inline">
+                                      <input type="hidden" name="id" value={f.id} />
+                                      <input type="hidden" name="incidentId" value={id} />
+                                      <button
+                                        type="submit"
+                                        className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                        title={tGenerated('m_0b69395e85f40b')}
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </form>
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  )
+                }
+              />
+            </Section>
+
+            <Section
+              title={tGenerated('m_1d618ba267da6f')}
+              subtitle={tGenerated('m_13e191dbfdde54', { value0: whys.length })}
+              icon={<HelpCircle size={20} />}
+              tone="purple"
+              actions={
+                !locked && canInvestigate && whys.length < 5 ? (
+                  <Link href={drawerHref('new-why') as any} scroll={false}>
+                    <Button size="sm" variant="outline">
+                      <Plus size={14} /> <GeneratedText id="m_030d3f5756f85d" />
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              <div className="space-y-5">
+                <LiveRichText
+                  field="rootCause"
+                  label={tGenerated('m_144853fbc930b0')}
+                  initialValue={incident.rootCause}
+                  placeholder={tGenerated('m_00cb435f0a2d5a')}
+                  disabled={locked}
+                />
+                <div>
+                  <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                    <GeneratedText id="m_13cb7d7cf77012" />
+                  </div>
+                  <GeneratedValue
+                    value={
+                      whys.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          <GeneratedText id="m_174321cd6b2464" />
+                        </p>
+                      ) : (
+                        <ol className="space-y-2 text-sm">
+                          <GeneratedValue
+                            value={whys.map((w) => (
+                              <li
+                                key={w.id}
+                                className="group flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2 dark:border-slate-800 dark:bg-slate-800/40"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <span className="mr-2 inline-flex h-5 w-12 items-center justify-center rounded bg-teal-100 text-[10px] font-semibold tracking-wide text-teal-800 uppercase dark:bg-teal-950/50 dark:text-teal-300">
+                                    <GeneratedText id="m_11ba5ccd975250" />
+                                    <GeneratedValue value={w.ordinal} />
+                                  </span>
+                                  <span className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                                    <GeneratedValue value={w.whyText} />
+                                  </span>
+                                </div>
+                                <GeneratedValue
+                                  value={
+                                    !locked && canInvestigate ? (
+                                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                                        <Link
+                                          href={drawerHref('edit-why', { editId: w.id }) as any}
+                                          scroll={false}
+                                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                                          title={tGenerated('m_1f323608dad8aa')}
+                                        >
+                                          <Pencil size={14} />
+                                        </Link>
+                                        <form action={deleteWhy} className="inline">
+                                          <input type="hidden" name="id" value={w.id} />
+                                          <input type="hidden" name="incidentId" value={id} />
+                                          <button
+                                            type="submit"
+                                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                            title={tGenerated('m_03c0ac8461f32f')}
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        </form>
+                                      </div>
+                                    ) : null
+                                  }
+                                />
+                              </li>
+                            ))}
+                          />
+                        </ol>
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            </Section>
+
+            <Section
+              title={tGenerated('m_14b49f9de00884', { value0: prevSteps.length })}
+              subtitle={tGenerated('m_19b8b1b6aec9e3')}
+              icon={<ListChecks size={20} />}
+              tone="emerald"
+              actions={
+                !locked && canInvestigate ? (
+                  <Link href={drawerHref('new-prev-step') as any} scroll={false}>
+                    <Button size="sm" variant="outline">
+                      <Plus size={14} /> <GeneratedText id="m_0ce705b8fa979c" />
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              <GeneratedValue
+                value={
+                  prevSteps.length === 0 ? (
+                    <EmptyState
+                      title={tGenerated('m_0aae8523273f7e')}
+                      description={tGenerated('m_11023c424d6b5a')}
+                    />
+                  ) : (
+                    <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                      <GeneratedValue
+                        value={prevSteps.map((row) => (
+                          <li
+                            key={row.step.id}
+                            className="group flex items-start justify-between gap-3 py-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <PrevStepStatusBadge status={row.step.status as PrevStepStatus} />
+                                <GeneratedValue
+                                  value={
+                                    row.step.targetDate ? (
+                                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                                        <GeneratedText id="m_0fed2a204aff5a" />{' '}
+                                        <span className="font-mono">
+                                          <GeneratedValue value={row.step.targetDate} />
+                                        </span>
+                                      </span>
+                                    ) : null
+                                  }
+                                />
+                                <GeneratedValue
+                                  value={
+                                    row.owner ? (
+                                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                                        <GeneratedText id="m_1dd6db678806d3" />
+                                        <GeneratedValue value={' '} />
+                                        <Link
+                                          href={`/people/${row.owner.id}`}
+                                          className="text-teal-700 hover:underline dark:text-teal-400"
+                                        >
+                                          <GeneratedValue value={row.owner.firstName} />{' '}
+                                          <GeneratedValue value={row.owner.lastName} />
+                                        </Link>
+                                      </span>
+                                    ) : null
+                                  }
+                                />
+                              </div>
+                              <div className="mt-1 whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                                <GeneratedValue value={row.step.description} />
+                              </div>
+                            </div>
+                            <GeneratedValue
+                              value={
+                                !locked && canInvestigate ? (
+                                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <Link
+                                      href={
+                                        drawerHref('edit-prev-step', { editId: row.step.id }) as any
+                                      }
+                                      scroll={false}
+                                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                                      title={tGenerated('m_1ca665e2ce9353')}
+                                    >
+                                      <Pencil size={14} />
+                                    </Link>
+                                    <form action={deletePrevStep} className="inline">
+                                      <input type="hidden" name="id" value={row.step.id} />
+                                      <input type="hidden" name="incidentId" value={id} />
+                                      <button
+                                        type="submit"
+                                        className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                        title={tGenerated('m_1fa3c60a0275d2')}
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </form>
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  )
+                }
+              />
+            </Section>
+
+            <Section
+              title={tGenerated('m_02241dba0c339e', { value0: linkedCAs.length })}
+              icon={<ListChecks size={20} />}
+              tone="slate"
+              defaultOpen={false}
+            >
+              <GeneratedValue
+                value={
+                  linkedCAs.length === 0 ? (
+                    <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+                      <span>
+                        <GeneratedText id="m_016e8ea73b729f" />
+                      </span>
+                      <Link
+                        href={`/corrective-actions/new?sourceEntityType=incident&sourceEntityId=${id}`}
+                        className="text-teal-700 hover:underline dark:text-teal-400"
+                      >
+                        <GeneratedText id="m_1f4c52fb482da1" />
+                      </Link>
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                      <GeneratedValue
+                        value={linkedCAs.map((ca) => (
+                          <li key={ca.id} className="flex items-center justify-between py-2">
+                            <Link
+                              href={`/corrective-actions/${ca.id}`}
+                              className="font-medium hover:underline"
+                            >
+                              <GeneratedValue value={ca.reference} /> ·{' '}
+                              <GeneratedValue value={ca.title} />
+                            </Link>
+                            <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>
+                              <GeneratedValue value={ca.status} />
+                            </Badge>
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  )
+                }
+              />
+            </Section>
+          </section>
+
+          {/* ===================== PHOTOS ===================== */}
+          <section id="section-photos" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_11939da4a6a866', { value0: photos.length })}
+              icon={<Camera size={20} />}
+              tone="slate"
+              defaultOpen={photos.length > 0}
+            >
+              <div className="space-y-3">
+                <PhotoGallery
+                  photos={galleryPhotos}
+                  editable={!locked}
+                  onUpdate={updateIncidentPhotoAction}
+                  onRemove={removeIncidentPhotoAction}
+                  onReorder={reorderIncidentPhotosAction}
+                />
+                <GeneratedValue
+                  value={
+                    !locked ? (
+                      <PhotoUploaderSection
+                        attachAction={async (ids) => {
+                          'use server'
+                          await attachPhotos(id, ids)
+                        }}
+                      />
+                    ) : null
                   }
                 />
               </div>
-            </div>
-          </Section>
+            </Section>
+          </section>
 
-          <Section
-            title={tGenerated('m_14b49f9de00884', { value0: prevSteps.length })}
-            subtitle={tGenerated('m_19b8b1b6aec9e3')}
-            icon={<ListChecks size={20} />}
-            tone="emerald"
-            actions={
-              !locked && canInvestigate ? (
-                <Link href={drawerHref('new-prev-step') as any} scroll={false}>
-                  <Button size="sm" variant="outline">
-                    <Plus size={14} /> <GeneratedText id="m_0ce705b8fa979c" />
-                  </Button>
-                </Link>
-              ) : null
-            }
-          >
-            <GeneratedValue
-              value={
-                prevSteps.length === 0 ? (
-                  <EmptyState
-                    title={tGenerated('m_0aae8523273f7e')}
-                    description={tGenerated('m_11023c424d6b5a')}
-                  />
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                    <GeneratedValue
-                      value={prevSteps.map((row) => (
-                        <li
-                          key={row.step.id}
-                          className="group flex items-start justify-between gap-3 py-3"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <PrevStepStatusBadge status={row.step.status as PrevStepStatus} />
-                              <GeneratedValue
-                                value={
-                                  row.step.targetDate ? (
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                                      <GeneratedText id="m_0fed2a204aff5a" />{' '}
-                                      <span className="font-mono">
-                                        <GeneratedValue value={row.step.targetDate} />
-                                      </span>
-                                    </span>
-                                  ) : null
-                                }
-                              />
-                              <GeneratedValue
-                                value={
-                                  row.owner ? (
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                                      <GeneratedText id="m_1dd6db678806d3" />
-                                      <GeneratedValue value={' '} />
-                                      <Link
-                                        href={`/people/${row.owner.id}`}
-                                        className="text-teal-700 hover:underline dark:text-teal-400"
-                                      >
-                                        <GeneratedValue value={row.owner.firstName} />{' '}
-                                        <GeneratedValue value={row.owner.lastName} />
-                                      </Link>
-                                    </span>
-                                  ) : null
-                                }
-                              />
-                            </div>
-                            <div className="mt-1 whitespace-pre-wrap text-slate-900 dark:text-slate-100">
-                              <GeneratedValue value={row.step.description} />
-                            </div>
-                          </div>
-                          <GeneratedValue
-                            value={
-                              !locked && canInvestigate ? (
-                                <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                  <Link
-                                    href={
-                                      drawerHref('edit-prev-step', { editId: row.step.id }) as any
-                                    }
-                                    scroll={false}
-                                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                                    title={tGenerated('m_1ca665e2ce9353')}
-                                  >
-                                    <Pencil size={14} />
-                                  </Link>
-                                  <form action={deletePrevStep} className="inline">
-                                    <input type="hidden" name="id" value={row.step.id} />
-                                    <input type="hidden" name="incidentId" value={id} />
-                                    <button
-                                      type="submit"
-                                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                      title={tGenerated('m_1fa3c60a0275d2')}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </form>
-                                </div>
-                              ) : null
-                            }
-                          />
-                        </li>
-                      ))}
-                    />
-                  </ul>
-                )
-              }
-            />
-          </Section>
-
-          <Section
-            title={tGenerated('m_02241dba0c339e', { value0: linkedCAs.length })}
-            icon={<ListChecks size={20} />}
-            tone="slate"
-            defaultOpen={false}
-          >
-            <GeneratedValue
-              value={
-                linkedCAs.length === 0 ? (
-                  <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
-                    <span>
-                      <GeneratedText id="m_016e8ea73b729f" />
-                    </span>
-                    <Link
-                      href={`/corrective-actions/new?sourceEntityType=incident&sourceEntityId=${id}`}
-                      className="text-teal-700 hover:underline dark:text-teal-400"
-                    >
-                      <GeneratedText id="m_1f4c52fb482da1" />
-                    </Link>
-                  </div>
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                    <GeneratedValue
-                      value={linkedCAs.map((ca) => (
-                        <li key={ca.id} className="flex items-center justify-between py-2">
-                          <Link
-                            href={`/corrective-actions/${ca.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            <GeneratedValue value={ca.reference} /> ·{' '}
-                            <GeneratedValue value={ca.title} />
-                          </Link>
-                          <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>
-                            <GeneratedValue value={ca.status} />
-                          </Badge>
-                        </li>
-                      ))}
-                    />
-                  </ul>
-                )
-              }
-            />
-          </Section>
-        </section>
-
-        {/* ===================== PHOTOS ===================== */}
-        <section id="section-photos" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_11939da4a6a866', { value0: photos.length })}
-            icon={<Camera size={20} />}
-            tone="slate"
-            defaultOpen={photos.length > 0}
-          >
-            <div className="space-y-3">
-              <PhotoGallery
-                photos={galleryPhotos}
-                editable={!locked}
-                onUpdate={updateIncidentPhotoAction}
-                onRemove={removeIncidentPhotoAction}
-                onReorder={reorderIncidentPhotosAction}
-              />
-              <GeneratedValue
-                value={
-                  !locked ? (
-                    <PhotoUploaderSection
-                      attachAction={async (ids) => {
-                        'use server'
-                        await attachPhotos(id, ids)
-                      }}
-                    />
-                  ) : null
-                }
-              />
-            </div>
-          </Section>
-        </section>
-
-        {/* ===================== ACTIVITY ===================== */}
-        <section id="section-activity" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_158532c8e94ad5', { value0: activity.length })}
-            icon={<History size={20} />}
-            tone="slate"
-            defaultOpen={false}
-          >
-            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
-          </Section>
-        </section>
-      </div>
-
-      {/* ===================== DRAWERS ===================== */}
-
-      {/* People + injuries */}
-      <PersonDrawer
-        open={drawer === 'add-person'}
-        closeHref={`${basePath}#section-people`}
-        incidentId={id}
-        action={saveIncidentPerson}
-        mode="create"
-      />
-      <PersonDrawer
-        open={drawer === 'edit-person' && !!editPersonRow}
-        closeHref={`${basePath}#section-people`}
-        incidentId={id}
-        action={saveIncidentPerson}
-        mode="edit"
-        defaults={
-          editPersonRow
-            ? {
-                id: editPersonRow.link.id,
-                personId: editPersonRow.link.personId,
-                personNameText: editPersonRow.link.personNameText,
-                role: editPersonRow.link.role,
-              }
-            : undefined
-        }
-      />
-      <InjuryDrawer
-        open={drawer === 'add-injury'}
-        closeHref={`${basePath}#section-injuries`}
-        incidentId={id}
-        action={saveIncidentInjury}
-        mode="create"
-      />
-      <InjuryDrawer
-        open={drawer === 'edit-injury' && !!editInjuryRow}
-        closeHref={`${basePath}#section-injuries`}
-        incidentId={id}
-        action={saveIncidentInjury}
-        mode="edit"
-        defaults={
-          editInjuryRow
-            ? {
-                id: editInjuryRow.injury.id,
-                personId: editInjuryRow.injury.personId,
-                personName: editInjuryRow.injury.personName,
-                assignedTypes: editInjuryRow.assignedTypes,
-                injuryResult: editInjuryRow.injury.injuryResult,
-                bodyParts: editInjuryRow.injury.bodyParts,
-                treatment: editInjuryRow.injury.treatment,
-                treatedAtFacility: editInjuryRow.injury.treatedAtFacility,
-                workedHoursPriorTo: editInjuryRow.injury.workedHoursPriorTo,
-              }
-            : undefined
-        }
-      />
-
-      {/* Investigation */}
-      <EventDrawer
-        open={canInvestigate && drawer === 'new-event'}
-        closeHref={`${basePath}#section-investigation`}
-        incidentId={id}
-        action={saveEventAction}
-        mode="create"
-      />
-      <EventDrawer
-        open={canInvestigate && drawer === 'edit-event' && !!editingEvent}
-        closeHref={`${basePath}#section-investigation`}
-        incidentId={id}
-        action={saveEventAction}
-        mode="edit"
-        defaults={
-          editingEvent
-            ? {
-                id: editingEvent.id,
-                occurredAt: toLocalDatetime(editingEvent.occurredAt),
-                description: editingEvent.description,
-              }
-            : undefined
-        }
-      />
-      <FactorDrawer
-        open={canInvestigate && drawer === 'new-factor'}
-        closeHref={`${basePath}#section-investigation`}
-        incidentId={id}
-        action={saveFactorAction}
-        mode="create"
-      />
-      <FactorDrawer
-        open={canInvestigate && drawer === 'edit-factor' && !!editingFactor}
-        closeHref={`${basePath}#section-investigation`}
-        incidentId={id}
-        action={saveFactorAction}
-        mode="edit"
-        defaults={
-          editingFactor
-            ? {
-                id: editingFactor.id,
-                category: editingFactor.category as FactorCategory,
-                description: editingFactor.description,
-              }
-            : undefined
-        }
-      />
-      <WhyDrawer
-        open={canInvestigate && drawer === 'new-why' && whys.length < 5}
-        closeHref={`${basePath}#section-investigation`}
-        incidentId={id}
-        action={saveWhyAction}
-        mode="create"
-        nextOrdinal={nextWhyOrdinal}
-      />
-      <WhyDrawer
-        open={canInvestigate && drawer === 'edit-why' && !!editingWhy}
-        closeHref={`${basePath}#section-investigation`}
-        incidentId={id}
-        action={saveWhyAction}
-        mode="edit"
-        nextOrdinal={nextWhyOrdinal}
-        defaults={
-          editingWhy
-            ? { id: editingWhy.id, ordinal: editingWhy.ordinal, whyText: editingWhy.whyText }
-            : undefined
-        }
-      />
-      <PrevStepDrawer
-        open={canInvestigate && drawer === 'new-prev-step'}
-        closeHref={`${basePath}#section-investigation`}
-        incidentId={id}
-        action={savePrevStepAction}
-        mode="create"
-      />
-      <PrevStepDrawer
-        open={canInvestigate && drawer === 'edit-prev-step' && !!editingPrev}
-        closeHref={`${basePath}#section-investigation`}
-        incidentId={id}
-        action={savePrevStepAction}
-        mode="edit"
-        defaults={
-          editingPrev
-            ? {
-                id: editingPrev.id,
-                description: editingPrev.description,
-                ownerPersonId: editingPrev.ownerPersonId,
-                targetDate: editingPrev.targetDate,
-                status: editingPrev.status as PrevStepStatus,
-              }
-            : undefined
-        }
-      />
-
-      {/* Lost-time add */}
-      <UrlDrawer
-        open={drawer === 'add-lost-time'}
-        closeHref={`${basePath}#section-lost-time`}
-        title={tGenerated('m_0d246c6ac6b39a')}
-        description={tGenerated('m_0ffa46d85b740d')}
-        size="md"
-        footer={
-          <>
-            <Link href={`${basePath}#section-lost-time`}>
-              <Button type="button" variant="outline">
-                <GeneratedText id="m_112e2e8ecda428" />
-              </Button>
-            </Link>
-            <Button type="submit" form="inc-lost-time-form">
-              <GeneratedText id="m_1eabd71bbc0199" />
-            </Button>
-          </>
-        }
-      >
-        <LostTimeAddForm
-          formId="inc-lost-time-form"
-          addAction={async (fd) => {
-            'use server'
-            fd.set('incidentId', id)
-            await addLostTimeEvent(fd)
-          }}
-          injuryOptions={injuries.map((row) => ({
-            id: row.injury.id,
-            label: row.person
-              ? `${row.person.firstName} ${row.person.lastName}`
-              : (row.injury.personName ?? 'Unknown'),
-          }))}
-        />
-      </UrlDrawer>
-
-      {/* Send email */}
-      <UrlDrawer
-        open={drawer === 'send-email'}
-        closeHref={basePath}
-        title={tGenerated('m_1c456341f763fe', { value0: incident.reference })}
-        description={tGenerated('m_059320db1d18da')}
-        size="md"
-        footer={
-          <>
-            <Link href={basePath}>
-              <Button type="button" variant="outline">
-                <GeneratedText id="m_112e2e8ecda428" />
-              </Button>
-            </Link>
-            <Button type="submit" form="inc-send-email-form">
-              <GeneratedText id="m_09dfca28fc95ba" />
-            </Button>
-          </>
-        }
-      >
-        <form
-          id="inc-send-email-form"
-          action={async (fd) => {
-            'use server'
-            fd.set('id', id)
-            await sendEmailAction(fd)
-          }}
-          className="space-y-3"
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="inc-se-subject">
-              <GeneratedText id="m_155e869f893331" />
-            </Label>
-            <Input
-              id="inc-se-subject"
-              name="subjectPrefix"
-              defaultValue="Update"
-              placeholder={tGenerated('m_1a1fe99effa1f0')}
-            />
-            <p className="text-xs text-slate-500">
-              <GeneratedText id="m_179df8c6e86ca9" />
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="inc-se-recipients">
-              <GeneratedText id="m_0d99b2b56f8b5d" />
-            </Label>
-            <Input
-              id="inc-se-recipients"
-              name="recipients"
-              type="text"
-              required
-              placeholder={tGenerated('m_01747fbecd701f')}
-            />
-            <p className="text-xs text-slate-500">
-              <GeneratedText id="m_0fb66d6a190ad4" />
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="inc-se-message">
-              <GeneratedText id="m_1edfd286d11988" />
-            </Label>
-            <Textarea
-              id="inc-se-message"
-              name="message"
-              rows={4}
-              placeholder={tGenerated('m_03ec1b3acac658')}
-            />
-          </div>
-        </form>
-      </UrlDrawer>
-
-      {/* Copy */}
-      <UrlDrawer
-        open={drawer === 'copy'}
-        closeHref={basePath}
-        title={tGenerated('m_159dba59ad1469', { value0: incident.reference })}
-        description={tGenerated('m_0e22871f172955')}
-        size="md"
-        footer={
-          <>
-            <Link href={basePath}>
-              <Button type="button" variant="outline">
-                <GeneratedText id="m_112e2e8ecda428" />
-              </Button>
-            </Link>
-            <Button type="submit" form="inc-copy-form">
-              <Copy size={14} /> <GeneratedText id="m_1f45061c87e9d8" />
-            </Button>
-          </>
-        }
-      >
-        <form id="inc-copy-form" action={copyIncident} className="space-y-3">
-          <input type="hidden" name="id" value={id} />
-          <div className="space-y-1.5">
-            <Label htmlFor="inc-copy-title">
-              <GeneratedText id="m_09418687fa6c5d" />
-            </Label>
-            <Input
-              id="inc-copy-title"
-              name="title"
-              defaultValue={`Copy of ${incident.title}`}
-              placeholder={tGenerated('m_060afde21bc0c2')}
-            />
-            <p className="text-xs text-slate-500">
-              <GeneratedText id="m_0fa1c32fc5f6fb" />
-            </p>
-          </div>
-        </form>
-      </UrlDrawer>
-
-      {/* Delete confirmation */}
-      <UrlDrawer
-        open={drawer === 'confirm-delete'}
-        closeHref={basePath}
-        title={tGenerated('m_05088543b0ac2e')}
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
-              <GeneratedValue value={incident.reference} />
-            </span>
-            <GeneratedValue value={' '} />
-            <GeneratedText id="m_1a4a84621ce774" />
-          </p>
-          <div className="flex items-center justify-end gap-2">
-            <Link href={basePath as any}>
-              <Button type="button" variant="outline">
-                <GeneratedText id="m_112e2e8ecda428" />
-              </Button>
-            </Link>
-            <form action={deleteIncident}>
-              <input type="hidden" name="id" value={id} />
-              <Button type="submit" className="bg-red-600 text-white hover:bg-red-700">
-                <Trash2 size={14} /> <GeneratedText id="m_10534a969ce869" />
-              </Button>
-            </form>
-          </div>
+          {/* ===================== ACTIVITY ===================== */}
+          <section id="section-activity" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_158532c8e94ad5', { value0: activity.length })}
+              icon={<History size={20} />}
+              tone="slate"
+              defaultOpen={false}
+            >
+              <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+            </Section>
+          </section>
         </div>
-      </UrlDrawer>
-    </DetailPageLayout>
+
+        {/* ===================== DRAWERS ===================== */}
+
+        {/* People + injuries */}
+        <PersonDrawer
+          open={drawer === 'add-person'}
+          closeHref={`${basePath}#section-people`}
+          incidentId={id}
+          action={saveIncidentPerson}
+          mode="create"
+        />
+        <PersonDrawer
+          open={drawer === 'edit-person' && !!editPersonRow}
+          closeHref={`${basePath}#section-people`}
+          incidentId={id}
+          action={saveIncidentPerson}
+          mode="edit"
+          defaults={
+            editPersonRow
+              ? {
+                  id: editPersonRow.link.id,
+                  personId: editPersonRow.link.personId,
+                  personNameText: editPersonRow.link.personNameText,
+                  role: editPersonRow.link.role,
+                }
+              : undefined
+          }
+        />
+        <InjuryDrawer
+          open={drawer === 'add-injury'}
+          closeHref={`${basePath}#section-injuries`}
+          incidentId={id}
+          action={saveIncidentInjury}
+          mode="create"
+        />
+        <InjuryDrawer
+          open={drawer === 'edit-injury' && !!editInjuryRow}
+          closeHref={`${basePath}#section-injuries`}
+          incidentId={id}
+          action={saveIncidentInjury}
+          mode="edit"
+          defaults={
+            editInjuryRow
+              ? {
+                  id: editInjuryRow.injury.id,
+                  personId: editInjuryRow.injury.personId,
+                  personName: editInjuryRow.injury.personName,
+                  assignedTypes: editInjuryRow.assignedTypes,
+                  injuryResult: editInjuryRow.injury.injuryResult,
+                  bodyParts: editInjuryRow.injury.bodyParts,
+                  treatment: editInjuryRow.injury.treatment,
+                  treatedAtFacility: editInjuryRow.injury.treatedAtFacility,
+                  workedHoursPriorTo: editInjuryRow.injury.workedHoursPriorTo,
+                }
+              : undefined
+          }
+        />
+
+        {/* Investigation */}
+        <EventDrawer
+          open={canInvestigate && drawer === 'new-event'}
+          closeHref={`${basePath}#section-investigation`}
+          incidentId={id}
+          defaultOccurredAt={datetimeLocalValue(new Date(), ctx.timezone)}
+          action={saveEventAction}
+          mode="create"
+        />
+        <EventDrawer
+          open={canInvestigate && drawer === 'edit-event' && !!editingEvent}
+          closeHref={`${basePath}#section-investigation`}
+          incidentId={id}
+          defaultOccurredAt={datetimeLocalValue(new Date(), ctx.timezone)}
+          action={saveEventAction}
+          mode="edit"
+          defaults={
+            editingEvent
+              ? {
+                  id: editingEvent.id,
+                  occurredAt: datetimeLocalValue(editingEvent.occurredAt, ctx.timezone),
+                  description: editingEvent.description,
+                }
+              : undefined
+          }
+        />
+        <FactorDrawer
+          open={canInvestigate && drawer === 'new-factor'}
+          closeHref={`${basePath}#section-investigation`}
+          incidentId={id}
+          action={saveFactorAction}
+          mode="create"
+        />
+        <FactorDrawer
+          open={canInvestigate && drawer === 'edit-factor' && !!editingFactor}
+          closeHref={`${basePath}#section-investigation`}
+          incidentId={id}
+          action={saveFactorAction}
+          mode="edit"
+          defaults={
+            editingFactor
+              ? {
+                  id: editingFactor.id,
+                  category: editingFactor.category as FactorCategory,
+                  description: editingFactor.description,
+                }
+              : undefined
+          }
+        />
+        <WhyDrawer
+          open={canInvestigate && drawer === 'new-why' && whys.length < 5}
+          closeHref={`${basePath}#section-investigation`}
+          incidentId={id}
+          action={saveWhyAction}
+          mode="create"
+          nextOrdinal={nextWhyOrdinal}
+        />
+        <WhyDrawer
+          open={canInvestigate && drawer === 'edit-why' && !!editingWhy}
+          closeHref={`${basePath}#section-investigation`}
+          incidentId={id}
+          action={saveWhyAction}
+          mode="edit"
+          nextOrdinal={nextWhyOrdinal}
+          defaults={
+            editingWhy
+              ? { id: editingWhy.id, ordinal: editingWhy.ordinal, whyText: editingWhy.whyText }
+              : undefined
+          }
+        />
+        <PrevStepDrawer
+          open={canInvestigate && drawer === 'new-prev-step'}
+          closeHref={`${basePath}#section-investigation`}
+          incidentId={id}
+          action={savePrevStepAction}
+          mode="create"
+        />
+        <PrevStepDrawer
+          open={canInvestigate && drawer === 'edit-prev-step' && !!editingPrev}
+          closeHref={`${basePath}#section-investigation`}
+          incidentId={id}
+          action={savePrevStepAction}
+          mode="edit"
+          defaults={
+            editingPrev
+              ? {
+                  id: editingPrev.id,
+                  description: editingPrev.description,
+                  ownerPersonId: editingPrev.ownerPersonId,
+                  targetDate: editingPrev.targetDate,
+                  status: editingPrev.status as PrevStepStatus,
+                }
+              : undefined
+          }
+        />
+
+        {/* Lost-time add */}
+        <UrlDrawer
+          open={drawer === 'add-lost-time'}
+          closeHref={`${basePath}#section-lost-time`}
+          title={tGenerated('m_0d246c6ac6b39a')}
+          description={tGenerated('m_0ffa46d85b740d')}
+          size="md"
+          footer={
+            <>
+              <Link href={`${basePath}#section-lost-time`}>
+                <Button type="button" variant="outline">
+                  <GeneratedText id="m_112e2e8ecda428" />
+                </Button>
+              </Link>
+              <Button type="submit" form="inc-lost-time-form">
+                <GeneratedText id="m_1eabd71bbc0199" />
+              </Button>
+            </>
+          }
+        >
+          <LostTimeAddForm
+            formId="inc-lost-time-form"
+            addAction={async (fd) => {
+              'use server'
+              fd.set('incidentId', id)
+              await addLostTimeEvent(fd)
+            }}
+            injuryOptions={injuries.map((row) => ({
+              id: row.injury.id,
+              label: row.person
+                ? `${row.person.firstName} ${row.person.lastName}`
+                : (row.injury.personName ?? 'Unknown'),
+            }))}
+          />
+        </UrlDrawer>
+
+        {/* Send email */}
+        <UrlDrawer
+          open={drawer === 'send-email'}
+          closeHref={basePath}
+          title={tGenerated('m_1c456341f763fe', { value0: incident.reference })}
+          description={tGenerated('m_059320db1d18da')}
+          size="md"
+          footer={
+            <>
+              <Link href={basePath}>
+                <Button type="button" variant="outline">
+                  <GeneratedText id="m_112e2e8ecda428" />
+                </Button>
+              </Link>
+              <Button type="submit" form="inc-send-email-form">
+                <GeneratedText id="m_09dfca28fc95ba" />
+              </Button>
+            </>
+          }
+        >
+          <OnlineActionForm
+            purpose="finish"
+            id="inc-send-email-form"
+            action={async (fd) => {
+              'use server'
+              fd.set('id', id)
+              await sendEmailAction(fd)
+            }}
+            className="space-y-3"
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="inc-se-subject">
+                <GeneratedText id="m_155e869f893331" />
+              </Label>
+              <Input
+                id="inc-se-subject"
+                name="subjectPrefix"
+                defaultValue="Update"
+                placeholder={tGenerated('m_1a1fe99effa1f0')}
+              />
+              <p className="text-xs text-slate-500">
+                <GeneratedText id="m_179df8c6e86ca9" />
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="inc-se-recipients">
+                <GeneratedText id="m_0d99b2b56f8b5d" />
+              </Label>
+              <Input
+                id="inc-se-recipients"
+                name="recipients"
+                type="text"
+                required
+                placeholder={tGenerated('m_01747fbecd701f')}
+              />
+              <p className="text-xs text-slate-500">
+                <GeneratedText id="m_0fb66d6a190ad4" />
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="inc-se-message">
+                <GeneratedText id="m_1edfd286d11988" />
+              </Label>
+              <Textarea
+                id="inc-se-message"
+                name="message"
+                rows={4}
+                placeholder={tGenerated('m_03ec1b3acac658')}
+              />
+            </div>
+          </OnlineActionForm>
+        </UrlDrawer>
+
+        {/* Copy */}
+        <UrlDrawer
+          open={drawer === 'copy'}
+          closeHref={basePath}
+          title={tGenerated('m_159dba59ad1469', { value0: incident.reference })}
+          description={tGenerated('m_0e22871f172955')}
+          size="md"
+          footer={
+            <>
+              <Link href={basePath}>
+                <Button type="button" variant="outline">
+                  <GeneratedText id="m_112e2e8ecda428" />
+                </Button>
+              </Link>
+              <Button type="submit" form="inc-copy-form">
+                <Copy size={14} /> <GeneratedText id="m_1f45061c87e9d8" />
+              </Button>
+            </>
+          }
+        >
+          <OnlineActionForm
+            purpose="start"
+            id="inc-copy-form"
+            action={copyIncident}
+            className="space-y-3"
+          >
+            <input type="hidden" name="id" value={id} />
+            <div className="space-y-1.5">
+              <Label htmlFor="inc-copy-title">
+                <GeneratedText id="m_09418687fa6c5d" />
+              </Label>
+              <Input
+                id="inc-copy-title"
+                name="title"
+                defaultValue={`Copy of ${incident.title}`}
+                placeholder={tGenerated('m_060afde21bc0c2')}
+              />
+              <p className="text-xs text-slate-500">
+                <GeneratedText id="m_0fa1c32fc5f6fb" />
+              </p>
+            </div>
+          </OnlineActionForm>
+        </UrlDrawer>
+
+        {/* Delete confirmation */}
+        <UrlDrawer
+          open={drawer === 'confirm-delete'}
+          closeHref={basePath}
+          title={tGenerated('m_05088543b0ac2e')}
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
+                <GeneratedValue value={incident.reference} />
+              </span>
+              <GeneratedValue value={' '} />
+              <GeneratedText id="m_1a4a84621ce774" />
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <Link href={basePath as any}>
+                <Button type="button" variant="outline">
+                  <GeneratedText id="m_112e2e8ecda428" />
+                </Button>
+              </Link>
+              <form action={deleteIncident}>
+                <input type="hidden" name="id" value={id} />
+                <Button type="submit" className="bg-red-600 text-white hover:bg-red-700">
+                  <Trash2 size={14} /> <GeneratedText id="m_10534a969ce869" />
+                </Button>
+              </form>
+            </div>
+          </div>
+        </UrlDrawer>
+      </DetailPageLayout>
+    </OfflineRecordProvider>
   )
 }
 
@@ -3719,16 +3470,6 @@ function PrevStepStatusBadge({ status }: { status: PrevStepStatus }) {
       <GeneratedText id="m_0d841caeb35af0" />
     </Badge>
   )
-}
-
-// Convert a UTC Date into the local "YYYY-MM-DDTHH:MM" form that
-// <input type="datetime-local"> expects.
-function toLocalDatetime(d: Date | string): string {
-  const date = typeof d === 'string' ? new Date(d) : d
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`
 }
 
 function formatRel(d: Date | string, timeZone: string, locale: AppLocale): string {

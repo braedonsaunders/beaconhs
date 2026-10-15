@@ -60,24 +60,111 @@ export async function lockInspectionRecordForMutation(
   return record ?? null
 }
 
+/**
+ * Lock a live tenant record and check the caller can see it. Null when it is
+ * missing, archived, or outside the caller's read tier. Locked/closed records
+ * are returned — callers decide whether that blocks them.
+ */
+export async function lockVisibleInspectionRecord(
+  tx: InspectionTx,
+  ctx: RequestContext,
+  recordId: string,
+): Promise<typeof inspectionRecords.$inferSelect | null> {
+  const record = await lockInspectionRecordForMutation(tx, ctx.tenantId, recordId)
+  if (!record) return null
+  const visible = await canSeeRecord(ctx, tx, {
+    prefix: 'inspections',
+    ownerIds: [record.inspectorTenantUserId, record.submittedByTenantUserId],
+    siteId: record.siteOrgUnitId,
+  })
+  return visible ? record : null
+}
+
+/** A locked or closed inspection is read-only until it is unlocked or reopened. */
+export function inspectionRecordIsImmutable(
+  record: Pick<typeof inspectionRecords.$inferSelect, 'locked' | 'status'>,
+): boolean {
+  return record.locked || record.status === 'closed'
+}
+
+export const INSPECTION_RECORD_LOCKED_MESSAGE =
+  'Record is closed or locked. Reopen or unlock it before making changes.'
+
 export async function lockVisibleInspectionRecordForMutation(
   tx: InspectionTx,
   ctx: RequestContext,
   recordId: string,
   opts?: { allowLocked?: boolean },
 ): Promise<typeof inspectionRecords.$inferSelect> {
-  const record = await lockInspectionRecordForMutation(tx, ctx.tenantId, recordId)
+  const record = await lockVisibleInspectionRecord(tx, ctx, recordId)
   if (!record) throw new Error('Inspection record not found')
-  const visible = await canSeeRecord(ctx, tx, {
-    prefix: 'inspections',
-    ownerIds: [record.inspectorTenantUserId, record.submittedByTenantUserId],
-    siteId: record.siteOrgUnitId,
-  })
-  if (!visible) throw new Error('Inspection record not found')
-  if ((record.locked || record.status === 'closed') && !opts?.allowLocked) {
-    throw new Error('Record is closed or locked. Reopen or unlock it before making changes.')
+  if (inspectionRecordIsImmutable(record) && !opts?.allowLocked) {
+    throw new Error(INSPECTION_RECORD_LOCKED_MESSAGE)
   }
   return record
+}
+
+/** One criterion row of a parent the caller has already locked, locked too. */
+export async function lockInspectionCriterionForMutation(
+  tx: InspectionTx,
+  tenantId: string,
+  recordId: string,
+  rowId: string,
+): Promise<typeof inspectionRecordCriteria.$inferSelect | null> {
+  const [criterion] = await tx
+    .select()
+    .from(inspectionRecordCriteria)
+    .where(
+      and(
+        eq(inspectionRecordCriteria.tenantId, tenantId),
+        eq(inspectionRecordCriteria.id, rowId),
+        eq(inspectionRecordCriteria.recordId, recordId),
+      ),
+    )
+    .limit(1)
+    .for('update')
+  return criterion ?? null
+}
+
+/**
+ * The first answer on a draft starts the work: publish and audit the
+ * draft → in-progress transition. Caller must hold the parent row lock.
+ */
+export async function markInspectionInProgressIfDraft(
+  tx: InspectionTx,
+  ctx: RequestContext,
+  record: typeof inspectionRecords.$inferSelect,
+): Promise<boolean> {
+  if (record.status !== 'draft') return false
+  const [updated] = await tx
+    .update(inspectionRecords)
+    .set({ status: 'in_progress' })
+    .where(
+      and(
+        eq(inspectionRecords.tenantId, ctx.tenantId),
+        eq(inspectionRecords.id, record.id),
+        eq(inspectionRecords.status, 'draft'),
+        isNull(inspectionRecords.deletedAt),
+      ),
+    )
+    .returning({ id: inspectionRecords.id })
+  if (!updated) throw new Error('Inspection status changed before work could begin')
+  await recordModuleFlowEvent(tx, ctx, {
+    subjectId: record.id,
+    moduleKey: 'inspections',
+    event: 'status_change',
+    toStatus: 'in_progress',
+    occurrenceKey: randomUUID(),
+  })
+  await recordAuditInTransaction(tx, ctx, {
+    entityType: 'inspection_record',
+    entityId: record.id,
+    action: 'update',
+    summary: 'Started inspection work',
+    before: { status: 'draft' },
+    after: { status: 'in_progress' },
+  })
+  return true
 }
 
 export function parseAnswer(raw: unknown): CriterionAnswer | null {

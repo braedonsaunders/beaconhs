@@ -11,7 +11,9 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { DownloadLink } from '@/components/download-link'
+import { OnlineActionForm } from '@/components/online-action-form'
 import { Button, Select, cn } from '@beaconhs/ui'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { Copy, FileText, Lock, Mail, MoreHorizontal, Trash2, Unlock } from 'lucide-react'
 
 export function IncidentHeaderActions({
@@ -42,13 +44,18 @@ export function IncidentHeaderActions({
   const tGenerated = useGeneratedTranslations()
   const [open, setOpen] = useState(false)
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
 
+  // A status change runs flows (and closing locks): it needs signal and the
+  // latest field edits.
   function onStatusChange(next: string) {
     if (next === status) return
     const fd = new FormData()
     fd.set('id', id)
     fd.set('status', next)
-    start(() => updateStatusAction(fd))
+    start(async () => {
+      await runOnline('finish', () => updateStatusAction(fd))
+    })
   }
 
   const statusSelect = (
@@ -67,8 +74,8 @@ export function IncidentHeaderActions({
     </Select>
   )
 
-  const lockForm = (
-    <form action={toggleLockAction}>
+  const lockFields = (
+    <>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="lock" value={locked ? 'false' : 'true'} />
       <Button variant="outline" type="submit">
@@ -86,7 +93,19 @@ export function IncidentHeaderActions({
           }
         />
       </Button>
+    </>
+  )
+  // Locking pushes the queued field edits first. Unlocking does not wait for
+  // them: it is what makes edits left on a locked record deliverable again
+  // (the offline submit guard still covers it).
+  const lockForm = locked ? (
+    <form action={toggleLockAction}>
+      <GeneratedValue value={lockFields} />
     </form>
+  ) : (
+    <OnlineActionForm action={toggleLockAction} purpose="finish">
+      <GeneratedValue value={lockFields} />
+    </OnlineActionForm>
   )
 
   const menuItem =

@@ -386,11 +386,15 @@ export function FormRenderer({
     },
     [schema],
   )
+  const readRecordServerValue = useCallback(
+    (fieldId: string) => ({ value: initialValues[fieldId] }),
+    [initialValues],
+  )
   const recordEdits = useOfflineRecordEdits({
     enabled: inlineAutosave && !readOnly,
-    templateId,
-    responseId: initialResponseId,
-    serverValues: initialValues,
+    module: 'apps',
+    recordId: initialResponseId,
+    readServerValue: readRecordServerValue,
     onRestore: restoreRecordValues,
   })
   // Per-picker entity attribute maps, fed into the evaluator on every render

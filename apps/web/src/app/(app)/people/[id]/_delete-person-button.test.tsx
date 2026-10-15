@@ -20,6 +20,7 @@ vi.mock('next/navigation', async (original) => ({
 vi.mock('@/lib/toast', () => ({ toast: { error: mocks.error } }))
 vi.mock('@/i18n/generated', () => ({
   useGeneratedValueTranslations: () => (value: string) => value,
+  useGeneratedTranslations: () => (id: string) => id,
 }))
 import { DeletePersonButton } from './_delete-person-button'
 
@@ -44,6 +45,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
+  vi.restoreAllMocks()
 })
 const click = async () => {
   await act(async () => button().click())
@@ -86,6 +88,15 @@ describe('Delete person control', () => {
     await render(<DeletePersonButton id="person" synced={false} />)
     await click()
     expect(mocks.error).toHaveBeenCalledWith('Managed by sync')
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+  it('needs signal: refuses offline without pushing edits or deleting', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    await render(<DeletePersonButton id="person" synced={false} />)
+    await click()
+    expect(mocks.flush).not.toHaveBeenCalled()
+    expect(mocks.remove).not.toHaveBeenCalled()
+    expect(mocks.error).toHaveBeenCalledTimes(1)
     expect(mocks.push).not.toHaveBeenCalled()
   })
   it('blocks deletion when an edit cannot save', async () => {

@@ -13,7 +13,6 @@ import { activePeopleWhere } from '@beaconhs/db'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
 import {
   attachments,
   auditLog,
@@ -23,103 +22,15 @@ import {
   trainingSkillCertificates,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { materializeEvidenceTargetsObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAuditInTransaction } from '@/lib/audit'
-import { addMonthsIso, isoToday } from '../_lib/dates'
+import { dateIsoInTimeZone } from '@/lib/datetime'
+import { addMonthsIso } from '../_lib/dates'
 import { requireUuidInput } from '@/lib/mutation-input'
 import { MAX_TRAINING_VALIDITY_MONTHS } from '@/lib/training-mutation-validation'
-import {
-  assertSkillAssignmentDateOrder,
-  parseRevocationReason,
-  parseSkillAssignmentFieldUpdate,
-  parseSkillFileInput,
-  type SkillAssignmentFieldUpdate,
-} from './_mutation-input'
-
-type SkillAssignment = typeof trainingSkillAssignments.$inferSelect
-
-async function materializeSkillEvidence(
-  tx: Database,
-  tenantId: string,
-  skillTypeIds: readonly (string | null)[],
-): Promise<void> {
-  await materializeEvidenceTargetsObligations(
-    tx,
-    tenantId,
-    [...new Set(skillTypeIds.filter((id): id is string => Boolean(id)))].map((skillTypeId) => ({
-      sourceModule: 'skill_requirement' as const,
-      targetRef: { skillTypeId },
-    })),
-  )
-}
-
-function skillAssignmentFieldValue(
-  assignment: SkillAssignment,
-  field: SkillAssignmentFieldUpdate['field'],
-): string | null {
-  switch (field) {
-    case 'personId':
-      return assignment.personId
-    case 'skillTypeId':
-      return assignment.skillTypeId
-    case 'grantedOn':
-      return assignment.grantedOn
-    case 'expiresOn':
-      return assignment.expiresOn
-    case 'status':
-      return assignment.status
-    case 'notes':
-      return assignment.notes
-  }
-}
-
-async function updateSkillAssignmentColumn(
-  tx: Database,
-  id: string,
-  update: SkillAssignmentFieldUpdate,
-): Promise<{ id: string }[]> {
-  const where = and(eq(trainingSkillAssignments.id, id), isNull(trainingSkillAssignments.deletedAt))
-  switch (update.field) {
-    case 'personId':
-      return tx
-        .update(trainingSkillAssignments)
-        .set({ personId: update.value })
-        .where(where)
-        .returning({ id: trainingSkillAssignments.id })
-    case 'skillTypeId':
-      return tx
-        .update(trainingSkillAssignments)
-        .set({ skillTypeId: update.value })
-        .where(where)
-        .returning({ id: trainingSkillAssignments.id })
-    case 'grantedOn':
-      return tx
-        .update(trainingSkillAssignments)
-        .set({ grantedOn: update.value })
-        .where(where)
-        .returning({ id: trainingSkillAssignments.id })
-    case 'expiresOn':
-      return tx
-        .update(trainingSkillAssignments)
-        .set({ expiresOn: update.value })
-        .where(where)
-        .returning({ id: trainingSkillAssignments.id })
-    case 'status':
-      return tx
-        .update(trainingSkillAssignments)
-        .set({ status: update.value })
-        .where(where)
-        .returning({ id: trainingSkillAssignments.id })
-    case 'notes':
-      return tx
-        .update(trainingSkillAssignments)
-        .set({ notes: update.value })
-        .where(where)
-        .returning({ id: trainingSkillAssignments.id })
-  }
-}
+import { materializeSkillEvidence } from './_skill-evidence'
+import { parseRevocationReason, parseSkillFileInput } from './_mutation-input'
 
 function skillExpiry(grantedOn: string, validForMonths: number | null): string | null {
   if (validForMonths == null || validForMonths === 0) return null
@@ -148,7 +59,7 @@ export async function startSkillAssignment(): Promise<void> {
       .insert(trainingSkillAssignments)
       .values({
         tenantId: ctx.tenantId,
-        grantedOn: isoToday(),
+        grantedOn: dateIsoInTimeZone(new Date(), ctx.timezone),
         grantedByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning({ id: trainingSkillAssignments.id })
@@ -165,95 +76,6 @@ export async function startSkillAssignment(): Promise<void> {
   revalidatePath('/people/[id]', 'page')
   revalidatePath('/training/skills/types/[id]', 'page')
   redirect(`/training/skills/${newId}`)
-}
-
-// ---------------------------------------------------------------------------
-// Per-field auto-save for the shared Live* field set — the unified create/edit/
-// view surface (mirrors the class / incident detail pages).
-// ---------------------------------------------------------------------------
-
-export async function updateSkillAssignmentField(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'training')
-  const id = requireUuidInput(formData.get('id'), 'Skill assignment')
-  const update = parseSkillAssignmentFieldUpdate(formData.get('field'), formData.get('value'))
-
-  const changed = await ctx.db(async (tx) => {
-    const [assignment] = await tx
-      .select()
-      .from(trainingSkillAssignments)
-      .where(eq(trainingSkillAssignments.id, id))
-      .for('update')
-      .limit(1)
-    if (!assignment) throw new Error('Skill assignment not found.')
-    if (assignment.deletedAt) throw new Error('Revoked skill assignments cannot be edited.')
-    if (
-      update.field === 'status' &&
-      update.value !== 'draft' &&
-      (!assignment.personId || !assignment.skillTypeId)
-    )
-      throw new Error('Choose a person and skill type before setting an outcome.')
-
-    if (update.field === 'personId' && update.value !== assignment.personId) {
-      const [person] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.id, update.value), activePeopleWhere()))
-        .limit(1)
-      if (!person) throw new Error('The selected person is not active in this workspace.')
-    }
-    if (update.field === 'skillTypeId' && update.value !== assignment.skillTypeId) {
-      const [skillType] = await tx
-        .select({ id: trainingSkillTypes.id })
-        .from(trainingSkillTypes)
-        .where(
-          and(
-            eq(trainingSkillTypes.id, update.value),
-            eq(trainingSkillTypes.isActive, true),
-            isNull(trainingSkillTypes.deletedAt),
-          ),
-        )
-        .limit(1)
-      if (!skillType) throw new Error('The selected skill type is not available in this workspace.')
-    }
-
-    if (update.field === 'grantedOn') {
-      assertSkillAssignmentDateOrder(update.value, assignment.expiresOn)
-    } else if (update.field === 'expiresOn') {
-      assertSkillAssignmentDateOrder(assignment.grantedOn, update.value)
-    }
-
-    const previous = skillAssignmentFieldValue(assignment, update.field)
-    if (previous === update.value) return false
-    const [updated] = await updateSkillAssignmentColumn(tx, id, update)
-    if (!updated) throw new Error('Skill assignment could not be updated.')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'training_skill',
-      entityId: id,
-      action: 'update',
-      summary: `Updated ${update.field}`,
-      before: { [update.field]: previous },
-      after: { [update.field]: update.value },
-    })
-    if (
-      update.field === 'personId' ||
-      update.field === 'skillTypeId' ||
-      update.field === 'grantedOn' ||
-      update.field === 'expiresOn' ||
-      update.field === 'status'
-    ) {
-      await materializeSkillEvidence(tx, ctx.tenantId, [
-        assignment.skillTypeId,
-        update.field === 'skillTypeId' ? update.value : assignment.skillTypeId,
-      ])
-    }
-    return true
-  })
-  if (!changed) return
-  revalidatePath(`/training/skills/${id}`)
-  revalidatePath('/training/skills')
-  revalidatePath('/people/[id]', 'page')
-  revalidatePath('/training/skills/types/[id]', 'page')
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +142,7 @@ export async function renewSkillAssignment(formData: FormData): Promise<void> {
       .limit(1)
     if (!skillType) throw new Error('The skill type is no longer available.')
 
-    const grantedOn = isoToday()
+    const grantedOn = dateIsoInTimeZone(new Date(), ctx.timezone)
     const expiresOn = skillExpiry(grantedOn, skillType.validForMonths)
     const [row] = await tx
       .insert(trainingSkillAssignments)

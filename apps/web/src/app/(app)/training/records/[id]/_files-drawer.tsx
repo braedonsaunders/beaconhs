@@ -12,6 +12,7 @@ import {
 } from '@/i18n/generated'
 import { requestUpload, finalizeUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { addTrainingRecordFile } from '../_actions'
 
 const FILE_KINDS = [
@@ -38,6 +39,7 @@ export function TrainingRecordFilesDrawer({
   const [uploaded, setUploaded] = useState<{ attachmentId: string; filename: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function reset() {
     setKind('certificate')
@@ -52,21 +54,23 @@ export function TrainingRecordFilesDrawer({
       return
     }
     startTransition(async () => {
-      const result = await addTrainingRecordFile({
-        recordId,
-        attachmentId: uploaded.attachmentId,
-        label: label.trim() || uploaded.filename,
-        kind,
+      await runOnline('finish', async () => {
+        const result = await addTrainingRecordFile({
+          recordId,
+          attachmentId: uploaded.attachmentId,
+          label: label.trim() || uploaded.filename,
+          kind,
+        })
+        if (!result.ok) {
+          setError(result.error)
+          toast.error(result.error)
+          return
+        }
+        toast.success(tGenerated('m_101abca7e52179'))
+        reset()
+        router.push(closeHref)
+        router.refresh()
       })
-      if (!result.ok) {
-        setError(result.error)
-        toast.error(result.error)
-        return
-      }
-      toast.success(tGenerated('m_101abca7e52179'))
-      reset()
-      router.push(closeHref)
-      router.refresh()
     })
   }
 

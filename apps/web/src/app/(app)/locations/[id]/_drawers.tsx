@@ -18,6 +18,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 
 export type ContactRow = {
   id: string
@@ -119,6 +120,7 @@ function ContactForm({
   const [isPrimary, setIsPrimary] = useState(contact?.isPrimary ?? false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -127,20 +129,22 @@ function ContactForm({
       setError(tGenerated('m_1c66cb30434189'))
       return
     }
+    const payload = {
+      name: trimmed,
+      role: role.trim() || null,
+      email: email.trim() || null,
+      phone: phone.trim() || null,
+      notes: notes.trim() || null,
+      isPrimary,
+    }
     startTransition(async () => {
-      const payload = {
-        name: trimmed,
-        role: role.trim() || null,
-        email: email.trim() || null,
-        phone: phone.trim() || null,
-        notes: notes.trim() || null,
-        isPrimary,
-      }
-      const res = contact
-        ? await updateAction({ contactId: contact.id, orgUnitId, ...payload })
-        : await createAction({ orgUnitId, ...payload })
-      if (res.ok) onDone()
-      else setError(tGeneratedValue(res.error))
+      await runOnline(contact ? 'finish' : 'start', async () => {
+        const res = contact
+          ? await updateAction({ contactId: contact.id, orgUnitId, ...payload })
+          : await createAction({ orgUnitId, ...payload })
+        if (res.ok) onDone()
+        else setError(tGeneratedValue(res.error))
+      })
     })
   }
 

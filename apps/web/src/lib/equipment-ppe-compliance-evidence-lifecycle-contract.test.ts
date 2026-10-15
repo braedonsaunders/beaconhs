@@ -14,11 +14,12 @@ function between(value: string, start: string, end: string): string {
 }
 
 const typeEvidence = source('./compliance-type-evidence.ts')
-const equipmentDetail = source('../app/(app)/equipment/[id]/page.tsx')
+const equipmentEdits = source('../app/(app)/equipment/_record-edits.ts')
 const equipmentBulk = source('../app/(app)/equipment/_actions.ts')
 const equipmentSchedules = source('../app/(app)/equipment/_maintenance-actions.ts')
 const equipmentInspections = source('../app/(app)/equipment/inspections/_lib.ts')
 const ppeDetail = source('../app/(app)/ppe/[id]/page.tsx')
+const ppeEdits = source('../app/(app)/ppe/_record-edits.ts')
 const ppeInspectionActions = source('../app/(app)/ppe/_inspection-actions.ts')
 const ppeBulk = source('../app/(app)/ppe/_actions.ts')
 const ppeLifecycle = source('../app/(app)/ppe/_lib.ts')
@@ -34,11 +35,9 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
   })
 
   it('refreshes equipment draft finalization, type/status edits, and bulk status atomically', () => {
-    const update = between(
-      equipmentDetail,
-      'async function updateEquipmentField',
-      'async function reportMissing',
-    )
+    // Inline field edits are applied by the equipment record saver: the item
+    // row is locked in `load`, and `afterWrites` runs in the same transaction.
+    const update = equipmentEdits
     const bulkStatus = between(
       equipmentBulk,
       'export async function bulkSetEquipmentStatus',
@@ -46,9 +45,11 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
     )
 
     expect(update).toContain(".for('update')")
-    expect(update).toContain("prior.isDraft || field === 'status' || field === 'typeId'")
-    expect(update).toContain('await recordAuditInTransaction(tx, ctx')
-    expect(update).toContain('await materializeEquipmentTypeEvidence(tx, ctx.tenantId')
+    expect(update).toContain('if (wasDraft || statusChange || typeChanged)')
+    expect(update).toContain('await auditFieldChanges(tx, ctx')
+    expect(update).toContain(
+      'await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [priorTypeId, row.typeId])',
+    )
     expect(bulkStatus).toContain('await materializeEquipmentTypeEvidence(')
   })
 
@@ -78,7 +79,9 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
   })
 
   it('refreshes PPE field, inspection, status, and certificate evidence in locked transactions', () => {
-    const update = between(ppeDetail, 'async function updatePpeField', 'async function setStatus')
+    // Inline field edits are applied by the PPE record saver (row locked in
+    // `load`, audit + evidence in `afterWrites`, same transaction).
+    const update = ppeEdits
     const inspection = between(
       ppeInspectionActions,
       'async function recordPpeInspection',
@@ -89,6 +92,9 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
     for (const mutation of [update, inspection, certificate]) {
       expect(mutation).toContain(".for('update')")
       expect(mutation).toContain('await materializePpeTypeEvidence(tx, ctx.tenantId')
+    }
+    expect(update).toContain('await auditFieldChanges(tx, ctx')
+    for (const mutation of [inspection, certificate]) {
       expect(mutation).toContain('await recordAuditInTransaction(tx, ctx')
     }
 
@@ -99,7 +105,7 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
     const status = between(ppeDetail, 'async function setStatus', 'async function reportIssue')
     expect(status).toContain('await recordPpeIssueAction(ctx, {')
     expect(status).not.toContain('.update(ppeItems)')
-    expect(update).toContain("field === 'expiresOn' || field === 'typeId'")
+    expect(update).toContain("change.op === 'expiresOn' || change.op === 'typeId'")
   })
 
   it('keeps PPE custody, registration, bulk removal, and API evidence complete', () => {

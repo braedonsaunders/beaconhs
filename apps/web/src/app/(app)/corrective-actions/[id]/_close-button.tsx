@@ -11,6 +11,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription, Input, Label, Textarea } from '@beaconhs/ui'
 import { closeCorrectiveAction } from '../_actions'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 
 /**
  * Body of the close-and-lock drawer (opened via `?drawer=close` from
@@ -32,6 +33,7 @@ export function CloseBody({
   const [cost, setCost] = useState('')
   const [note, setNote] = useState('')
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
   const [error, setError] = useState<string | null>(null)
 
   function submit() {
@@ -41,17 +43,19 @@ export function CloseBody({
       return
     }
     start(async () => {
-      const res = await closeCorrectiveAction({
-        caId,
-        costImpact: cost.trim() || null,
-        closeNotes: note.trim() || null,
+      await runOnline('finish', async () => {
+        const res = await closeCorrectiveAction({
+          caId,
+          costImpact: cost.trim() || null,
+          closeNotes: note.trim() || null,
+        })
+        if (!res.ok) {
+          setError(tGeneratedValue(res.error))
+          return
+        }
+        router.push(closeHref as any)
+        router.refresh()
       })
-      if (!res.ok) {
-        setError(tGeneratedValue(res.error))
-        return
-      }
-      router.push(closeHref as any)
-      router.refresh()
     })
   }
 

@@ -20,7 +20,6 @@ import { randomUUID } from 'node:crypto'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
 import {
   attachments,
   auditLog,
@@ -31,128 +30,19 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
-import { materializeEvidenceTargetsObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
-import { addMonthsIso, isoToday } from '../_lib/dates'
+import { dateIsoInTimeZone } from '@/lib/datetime'
+import { addMonthsIso } from '../_lib/dates'
 import { newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
 import { requireUuidInput } from '@/lib/mutation-input'
 import { MAX_TRAINING_VALIDITY_MONTHS } from '@/lib/training-mutation-validation'
+import { materializeCourseEvidence } from './_course-evidence'
 import {
-  assertTrainingRecordDateOrder,
   parseTrainingRecordFileInput,
-  parseTrainingRecordFieldUpdate,
   parseTrainingRecordRevocationReason,
-  type TrainingRecordFieldUpdate,
 } from './_mutation-input'
-
-type TrainingRecord = typeof trainingRecords.$inferSelect
-
-async function materializeCourseEvidence(
-  tx: Database,
-  tenantId: string,
-  courseIds: readonly (string | null)[],
-): Promise<void> {
-  await materializeEvidenceTargetsObligations(
-    tx,
-    tenantId,
-    [...new Set(courseIds.filter((id): id is string => Boolean(id)))].map((courseId) => ({
-      sourceModule: 'training' as const,
-      targetRef: { courseId },
-    })),
-  )
-}
-
-function trainingRecordFieldValue(
-  record: TrainingRecord,
-  field: TrainingRecordFieldUpdate['field'],
-): string | number | null {
-  switch (field) {
-    case 'personId':
-      return record.personId
-    case 'courseId':
-      return record.courseId
-    case 'source':
-      return record.source
-    case 'completedOn':
-      return record.completedOn
-    case 'expiresOn':
-      return record.expiresOn
-    case 'grade':
-      return record.grade
-    case 'instructor':
-      return record.instructor
-    case 'details':
-      return record.details
-    case 'notes':
-      return record.notes
-  }
-}
-
-async function updateTrainingRecordColumn(
-  tx: Database,
-  id: string,
-  update: TrainingRecordFieldUpdate,
-): Promise<{ id: string }[]> {
-  const where = and(eq(trainingRecords.id, id), isNull(trainingRecords.deletedAt))
-  switch (update.field) {
-    case 'personId':
-      return tx
-        .update(trainingRecords)
-        .set({ personId: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-    case 'courseId':
-      return tx
-        .update(trainingRecords)
-        .set({ courseId: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-    case 'source':
-      return tx
-        .update(trainingRecords)
-        .set({ source: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-    case 'completedOn':
-      return tx
-        .update(trainingRecords)
-        .set({ completedOn: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-    case 'expiresOn':
-      return tx
-        .update(trainingRecords)
-        .set({ expiresOn: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-    case 'grade':
-      return tx
-        .update(trainingRecords)
-        .set({ grade: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-    case 'instructor':
-      return tx
-        .update(trainingRecords)
-        .set({ instructor: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-    case 'details':
-      return tx
-        .update(trainingRecords)
-        .set({ details: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-    case 'notes':
-      return tx
-        .update(trainingRecords)
-        .set({ notes: update.value })
-        .where(where)
-        .returning({ id: trainingRecords.id })
-  }
-}
 
 function expiryForValidity(completedOn: string, validForMonths: number | null): string | null {
   if (validForMonths == null || validForMonths === 0) return null
@@ -181,7 +71,7 @@ export async function startTrainingRecord(): Promise<void> {
       .values({
         tenantId: ctx.tenantId,
         source: 'external_upload',
-        completedOn: isoToday(),
+        completedOn: dateIsoInTimeZone(new Date(), ctx.timezone),
         issuedByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning({ id: trainingRecords.id })
@@ -196,80 +86,6 @@ export async function startTrainingRecord(): Promise<void> {
   })
   revalidatePath('/training/records')
   redirect(`/training/records/${newId}`)
-}
-
-// Per-field auto-save for the shared Live* field set — the unified create/edit/
-// view surface (mirrors the class / incident / hazard-assessment detail pages).
-// Identity (person/course) and lifecycle fields are editable; revoked records
-// are locked.
-export async function updateTrainingRecordField(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'training.record.create')
-  const id = requireUuidInput(formData.get('id'), 'Training record')
-  const update = parseTrainingRecordFieldUpdate(formData.get('field'), formData.get('value'))
-
-  const changed = await ctx.db(async (tx) => {
-    const [record] = await tx
-      .select()
-      .from(trainingRecords)
-      .where(eq(trainingRecords.id, id))
-      .for('update')
-      .limit(1)
-    if (!record) throw new Error('Training record not found.')
-    if (record.deletedAt) throw new Error('Revoked training records cannot be edited.')
-
-    if (update.field === 'personId' && update.value !== record.personId) {
-      const [person] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.id, update.value), activePeopleWhere()))
-        .limit(1)
-      if (!person) throw new Error('The selected person is not active in this workspace.')
-    }
-    if (update.field === 'courseId' && update.value !== record.courseId) {
-      const [course] = await tx
-        .select({ id: trainingCourses.id })
-        .from(trainingCourses)
-        .where(and(eq(trainingCourses.id, update.value), isNull(trainingCourses.deletedAt)))
-        .limit(1)
-      if (!course) throw new Error('The selected course is not available in this workspace.')
-    }
-
-    if (update.field === 'completedOn') {
-      assertTrainingRecordDateOrder(update.value, record.expiresOn)
-    } else if (update.field === 'expiresOn') {
-      assertTrainingRecordDateOrder(record.completedOn, update.value)
-    }
-
-    const previous = trainingRecordFieldValue(record, update.field)
-    if (previous === update.value) return false
-
-    const [updated] = await updateTrainingRecordColumn(tx, id, update)
-    if (!updated) throw new Error('Training record could not be updated.')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'training_record',
-      entityId: id,
-      action: 'update',
-      summary: `Updated ${update.field}`,
-      before: { [update.field]: previous },
-      after: { [update.field]: update.value },
-    })
-    if (
-      update.field === 'personId' ||
-      update.field === 'courseId' ||
-      update.field === 'completedOn' ||
-      update.field === 'expiresOn'
-    ) {
-      await materializeCourseEvidence(tx, ctx.tenantId, [
-        record.courseId,
-        update.field === 'courseId' ? update.value : record.courseId,
-      ])
-    }
-    return true
-  })
-  if (!changed) return
-  revalidatePath(`/training/records/${id}`)
-  revalidatePath('/training/records')
 }
 
 /**
@@ -329,7 +145,7 @@ export async function renewTrainingRecord(formData: FormData): Promise<void> {
       .limit(1)
     if (!course) throw new Error('The course is no longer available.')
 
-    const completedOn = isoToday()
+    const completedOn = dateIsoInTimeZone(new Date(), ctx.timezone)
     const expiresOn = expiryForValidity(completedOn, course.validForMonths)
     const [created] = await tx
       .insert(trainingRecords)
@@ -543,7 +359,7 @@ export async function bulkRenewTrainingRecords(args: {
   if (!parsedIds.ok) return parsedIds
   const ids = parsedIds.ids
   const batchId = newBulkActionBatchId()
-  const today = isoToday()
+  const today = dateIsoInTimeZone(new Date(), ctx.timezone)
   const issuedByTenantUserId = ctx.membership?.id ?? null
 
   const result = await ctx.db(async (tx) => {

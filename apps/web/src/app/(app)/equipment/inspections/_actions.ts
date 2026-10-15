@@ -2,8 +2,9 @@
 
 // Runtime actions for performing an equipment inspection. Every mutation
 // locks the tenant-scoped parent record first, then validates and writes its
-// child rows in that same transaction. This makes autosave, submit, and reopen
-// serialize on one lifecycle lock instead of racing across separate requests.
+// child rows in that same transaction. This makes field sync (_record-edits.ts),
+// photos, submit, and reopen serialize on one lifecycle lock instead of racing
+// across separate requests.
 
 import { and, asc, eq, inArray, isNull, notInArray } from 'drizzle-orm'
 import { redirect } from 'next/navigation'
@@ -23,18 +24,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
-import { parseDatetimeLocal } from '@/lib/datetime'
 import { formatInterval } from '@/lib/equipment/intervals'
-import {
-  normalizeInspectionNumberAnswer,
-  normalizeInspectionTextAnswer,
-} from '@/lib/inspection-response-config'
-import {
-  requireEnumInput,
-  requireUuidInput,
-  optionalUuidInput,
-  optionalNumberInput,
-} from '@/lib/mutation-input'
 import { isUuid } from '@/lib/list-params'
 import { sanitizeFrom } from '@/lib/back-nav'
 import { parsePhotoEdits } from '@/lib/photo-edits'
@@ -42,12 +32,11 @@ import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import {
   finaliseEquipmentInspection,
   reconcileEquipmentInspectionDatesInTx,
-  syncInspectionHoursInTx,
+  lockEquipmentInspectionCriterionForMutation,
   lockVisibleEquipmentInspectionForMutation,
+  markEquipmentInspectionInProgressIfDraft,
   materialiseEquipmentCriteriaInTx,
   nextEquipmentInspectionReferenceInTx,
-  parseEqAnswer,
-  parseEqSeverity,
   type EquipmentInspectionTx,
 } from './_lib'
 
@@ -56,56 +45,6 @@ function revalidateRecord(id: string) {
   revalidatePath('/equipment/inspections')
   revalidatePath('/equipment/maintenance')
   revalidatePath('/equipment/[id]', 'page')
-}
-
-async function criterionForMutationInTx(
-  tx: EquipmentInspectionTx,
-  tenantId: string,
-  recordId: string,
-  rowId: string,
-) {
-  const [criterion] = await tx
-    .select()
-    .from(equipmentInspectionRecordCriteria)
-    .where(
-      and(
-        eq(equipmentInspectionRecordCriteria.tenantId, tenantId),
-        eq(equipmentInspectionRecordCriteria.recordId, recordId),
-        eq(equipmentInspectionRecordCriteria.id, rowId),
-      ),
-    )
-    .limit(1)
-  if (!criterion) throw new Error('Equipment inspection item not found')
-  return criterion
-}
-
-async function markEquipmentInspectionInProgressIfDraft(
-  tx: EquipmentInspectionTx,
-  ctx: RequestContext,
-  record: typeof equipmentInspectionRecords.$inferSelect,
-): Promise<void> {
-  if (record.status !== 'draft') return
-  const [updated] = await tx
-    .update(equipmentInspectionRecords)
-    .set({ status: 'in_progress' })
-    .where(
-      and(
-        eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
-        eq(equipmentInspectionRecords.id, record.id),
-        eq(equipmentInspectionRecords.status, 'draft'),
-        isNull(equipmentInspectionRecords.deletedAt),
-      ),
-    )
-    .returning({ id: equipmentInspectionRecords.id })
-  if (!updated) throw new Error('Equipment inspection changed before work could begin')
-  await recordAuditInTransaction(tx, ctx, {
-    entityType: 'equipment_inspection_record',
-    entityId: record.id,
-    action: 'update',
-    summary: 'Started inspection work',
-    before: { status: 'draft' },
-    after: { status: 'in_progress' },
-  })
 }
 
 async function withLockedCriterionMutation(
@@ -123,7 +62,13 @@ async function withLockedCriterionMutation(
   }
   return ctx.db(async (tx) => {
     const record = await lockVisibleEquipmentInspectionForMutation(tx, ctx, recordId)
-    const criterion = await criterionForMutationInTx(tx, ctx.tenantId, recordId, rowId)
+    const criterion = await lockEquipmentInspectionCriterionForMutation(
+      tx,
+      ctx.tenantId,
+      recordId,
+      rowId,
+    )
+    if (!criterion) throw new Error('Equipment inspection item not found')
     const changed = await mutate(tx, record, criterion)
     if (changed) await markEquipmentInspectionInProgressIfDraft(tx, ctx, record)
     return changed
@@ -328,213 +273,9 @@ export async function startEquipmentInspection(formData: FormData) {
   redirect(`${path}?${params.toString()}`)
 }
 
-// --- per-criterion autosave -------------------------------------------------
-
-export async function setAnswer(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const answer = parseEqAnswer(formData.get('answer'))
-  if (!answer) throw new Error('Inspection answer is invalid')
-
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (criterion.kind !== 'pass_fail' && criterion.kind !== 'pass_fail_na') {
-        throw new Error('This inspection item does not accept a pass/fail answer')
-      }
-      if (answer === 'n_a' && criterion.kind !== 'pass_fail_na') {
-        throw new Error('N/A is not allowed for this inspection item')
-      }
-      const clearFinding = answer !== 'fail'
-      const hasStaleFinding =
-        clearFinding &&
-        (criterion.comment != null ||
-          criterion.actionTaken != null ||
-          criterion.correctedOn != null)
-      if (criterion.answer === answer && !hasStaleFinding) return false
-      const now = new Date()
-      const [updated] = await tx
-        .update(equipmentInspectionRecordCriteria)
-        .set({
-          answer,
-          answeredAt: now,
-          answeredByTenantUserId: ctx.membership?.id ?? null,
-          ...(clearFinding ? { comment: null, actionTaken: null, correctedOn: null } : {}),
-        })
-        .where(
-          and(
-            eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(equipmentInspectionRecordCriteria.recordId, recordId),
-            eq(equipmentInspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: equipmentInspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection item changed before its answer could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'equipment_inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: `Answered inspection item "${answer === 'n_a' ? 'N/A' : answer}"`,
-        before: { rowId, answer: criterion.answer },
-        after: { rowId, answer },
-      })
-      return true
-    },
-  )
-  if (changed) revalidateRecord(recordId)
-}
-
-export async function setSeverity(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const raw = String(formData.get('severity') ?? '').trim()
-  const severity = raw ? parseEqSeverity(raw) : null
-  if (raw && !severity) throw new Error('Inspection severity is invalid')
-
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (criterion.answer !== 'fail') {
-        throw new Error('Severity can only be set on a failed inspection item')
-      }
-      if (criterion.severity === severity) return false
-      const [updated] = await tx
-        .update(equipmentInspectionRecordCriteria)
-        .set({ severity })
-        .where(
-          and(
-            eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(equipmentInspectionRecordCriteria.recordId, recordId),
-            eq(equipmentInspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: equipmentInspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection item changed before severity could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'equipment_inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: severity ? `Set finding severity to ${severity}` : 'Cleared finding severity',
-        before: { rowId, severity: criterion.severity },
-        after: { rowId, severity },
-      })
-      return true
-    },
-  )
-  if (changed) revalidateRecord(recordId)
-}
-
-async function setFindingText(formData: FormData, field: 'comment' | 'actionTaken', label: string) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const value = normalizeInspectionTextAnswer(formData.get('value'))
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (criterion.answer !== 'fail') {
-        throw new Error(`${label} can only be set on a failed inspection item`)
-      }
-      if (criterion[field] === value) return false
-      const [updated] = await tx
-        .update(equipmentInspectionRecordCriteria)
-        .set({ [field]: value })
-        .where(
-          and(
-            eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(equipmentInspectionRecordCriteria.recordId, recordId),
-            eq(equipmentInspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: equipmentInspectionRecordCriteria.id })
-      if (!updated) throw new Error(`Inspection item changed before ${label.toLowerCase()} saved`)
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'equipment_inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary: value
-          ? `Updated finding ${label.toLowerCase()}`
-          : `Cleared finding ${label.toLowerCase()}`,
-        before: { rowId, [field]: criterion[field] },
-        after: { rowId, [field]: value },
-      })
-      return true
-    },
-  )
-  if (changed) revalidateRecord(recordId)
-}
-
-export async function setComment(formData: FormData) {
-  await setFindingText(formData, 'comment', 'Comment')
-}
-
-export async function setActionTaken(formData: FormData) {
-  await setFindingText(formData, 'actionTaken', 'Action taken')
-}
-
-/** Text and numeric answers; the trusted kind comes from the snapshot row. */
-export async function setValue(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
-  const rowId = String(formData.get('rowId') ?? '')
-  const changed = await withLockedCriterionMutation(
-    ctx,
-    recordId,
-    rowId,
-    async (tx, _record, criterion) => {
-      if (criterion.kind !== 'text' && criterion.kind !== 'numeric') {
-        throw new Error('This inspection item does not accept a text or numeric value')
-      }
-      const value =
-        criterion.kind === 'numeric'
-          ? normalizeInspectionNumberAnswer(formData.get('value'))
-          : normalizeInspectionTextAnswer(formData.get('value'))
-      const textValue = criterion.kind === 'text' ? value : null
-      const numericValue = criterion.kind === 'numeric' ? value : null
-      if (criterion.textValue === textValue && criterion.numericValue === numericValue) return false
-      const [updated] = await tx
-        .update(equipmentInspectionRecordCriteria)
-        .set({
-          textValue,
-          numericValue,
-          answeredAt: value === null ? null : new Date(),
-          answeredByTenantUserId: value === null ? null : (ctx.membership?.id ?? null),
-        })
-        .where(
-          and(
-            eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(equipmentInspectionRecordCriteria.recordId, recordId),
-            eq(equipmentInspectionRecordCriteria.id, rowId),
-          ),
-        )
-        .returning({ id: equipmentInspectionRecordCriteria.id })
-      if (!updated) throw new Error('Inspection item changed before its value could be saved')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'equipment_inspection_record',
-        entityId: recordId,
-        action: 'update',
-        summary:
-          value === null ? 'Cleared inspection item response' : 'Updated inspection item response',
-        before: { rowId, textValue: criterion.textValue, numericValue: criterion.numericValue },
-        after: { rowId, textValue, numericValue },
-      })
-      return true
-    },
-  )
-  if (changed) revalidateRecord(recordId)
-}
+// --- per-criterion photos ---------------------------------------------------
+// Answers, findings, and record details are edited on the device and synced
+// by the record saver (_record-edits.ts); photos need signal.
 
 export async function addCriterionPhotos(formData: FormData) {
   const ctx = await requireRequestContext()
@@ -938,113 +679,6 @@ export async function passAllEquipmentInspection(formData: FormData) {
   if (flipped > 0) revalidateRecord(recordId)
 }
 
-// --- record-level live fields ----------------------------------------------
-
-async function setRecordNotes(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
-  const value = normalizeInspectionTextAnswer(formData.get('value'))
-  const changed = await withLockedRecordMutation(ctx, recordId, async (tx, record) => {
-    if (record.notes === value) return false
-    const [updated] = await tx
-      .update(equipmentInspectionRecords)
-      .set({ notes: value })
-      .where(
-        and(
-          eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
-          eq(equipmentInspectionRecords.id, recordId),
-          isNull(equipmentInspectionRecords.deletedAt),
-        ),
-      )
-      .returning({ id: equipmentInspectionRecords.id })
-    if (!updated) throw new Error('Equipment inspection changed before notes could be saved')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'equipment_inspection_record',
-      entityId: recordId,
-      action: 'update',
-      summary: value ? 'Updated inspection notes' : 'Cleared inspection notes',
-      before: { notes: record.notes },
-      after: { notes: value },
-    })
-    return true
-  })
-  if (changed) revalidateRecord(recordId)
-}
-
-async function setRecordHours(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
-  const parsed = optionalNumberInput(formData.get('value'), 'Hours reading', {
-    min: 0,
-    max: 999999999.9,
-    maxScale: 1,
-  })
-  const value = parsed === null ? null : parsed.toFixed(1)
-  const changed = await withLockedRecordMutation(ctx, recordId, async (tx, record) => {
-    if (record.hours === value) return false
-    const [updated] = await tx
-      .update(equipmentInspectionRecords)
-      .set({ hours: value })
-      .where(
-        and(
-          eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
-          eq(equipmentInspectionRecords.id, recordId),
-          isNull(equipmentInspectionRecords.deletedAt),
-        ),
-      )
-      .returning({ id: equipmentInspectionRecords.id })
-    if (!updated) throw new Error('Equipment inspection changed before hours could be saved')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'equipment_inspection_record',
-      entityId: recordId,
-      action: 'update',
-      summary: value == null ? 'Cleared hours reading' : 'Updated hours reading',
-      before: { hours: record.hours },
-      after: { hours: value },
-    })
-    await syncInspectionHoursInTx(tx, ctx, record, value)
-    return true
-  })
-  if (changed) revalidateRecord(recordId)
-}
-
-async function setRecordOccurredAt(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
-  const raw = String(formData.get('value') ?? '').trim()
-  const occurredAt = raw ? parseDatetimeLocal(raw, ctx.timezone) : null
-  if (!occurredAt) throw new Error('Inspection date and time is invalid')
-  const changed = await withLockedRecordMutation(ctx, recordId, async (tx, record) => {
-    if (record.occurredAt.getTime() === occurredAt.getTime()) return false
-    const [updated] = await tx
-      .update(equipmentInspectionRecords)
-      .set({ occurredAt })
-      .where(
-        and(
-          eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
-          eq(equipmentInspectionRecords.id, recordId),
-          isNull(equipmentInspectionRecords.deletedAt),
-        ),
-      )
-      .returning({ id: equipmentInspectionRecords.id })
-    if (!updated) throw new Error('Equipment inspection changed before its date could be saved')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'equipment_inspection_record',
-      entityId: recordId,
-      action: 'update',
-      summary: 'Updated inspection date and time',
-      before: { occurredAt: record.occurredAt },
-      after: { occurredAt },
-    })
-    await syncInspectionHoursInTx(tx, ctx, record, record.hours, occurredAt)
-    return true
-  })
-  if (changed) revalidateRecord(recordId)
-}
-
 // --- submit / reopen --------------------------------------------------------
 
 export async function submitEquipmentInspection(formData: FormData) {
@@ -1139,49 +773,4 @@ export async function reopenEquipmentInspection(formData: FormData) {
     return true
   })
   if (reopened) revalidateRecord(recordId)
-}
-
-async function setRecordSite(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const id = requireUuidInput(formData.get('recordId'), 'Inspection')
-  const value = optionalUuidInput(formData.get('value'), 'Location')
-  const changed = await withLockedRecordMutation(ctx, id, async (tx, record) => {
-    if (value === record.siteOrgUnitId) return false
-    if (value) {
-      const [site] = await tx
-        .select({ id: orgUnits.id })
-        .from(orgUnits)
-        .where(and(eq(orgUnits.id, value), isNull(orgUnits.deletedAt)))
-        .limit(1)
-      if (!site) throw new Error('Location not found.')
-    }
-    await tx
-      .update(equipmentInspectionRecords)
-      .set({ siteOrgUnitId: value })
-      .where(eq(equipmentInspectionRecords.id, id))
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'equipment_inspection_record',
-      entityId: id,
-      action: 'update',
-      summary: 'Updated inspection location',
-      before: { siteOrgUnitId: record.siteOrgUnitId },
-      after: { siteOrgUnitId: value },
-    })
-    return true
-  })
-  if (changed) revalidateRecord(id)
-}
-
-export async function updateEquipmentInspectionMeta(formData: FormData): Promise<void> {
-  formData.set('recordId', requireUuidInput(formData.get('id'), 'Inspection'))
-  const field = requireEnumInput(
-    formData.get('field'),
-    ['occurredAt', 'siteOrgUnitId', 'hours', 'notes'] as const,
-    'Field',
-  )
-  if (field === 'occurredAt') return setRecordOccurredAt(formData)
-  if (field === 'siteOrgUnitId') return setRecordSite(formData)
-  if (field === 'hours') return setRecordHours(formData)
-  return setRecordNotes(formData)
 }

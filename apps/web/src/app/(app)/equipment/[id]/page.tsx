@@ -11,7 +11,6 @@ import type { Route } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { randomUUID } from 'node:crypto'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import {
   Activity,
@@ -80,6 +79,11 @@ import {
 } from '@/components/live-field'
 import { RawImage } from '@/components/raw-image'
 import {
+  OfflineRecordProvider,
+  RecordSyncBanner,
+  RecordSyncStatus,
+} from '@/lib/offline-drafts/offline-record'
+import {
   attachments,
   departments,
   equipmentCategories,
@@ -100,12 +104,10 @@ import {
   users as user,
 } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
-import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recentActivityForEntity, recordAudit, recordAuditInTransaction } from '@/lib/audit'
-import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -118,14 +120,12 @@ import { readCustomFieldValues } from '@beaconhs/forms-core'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { CustomFieldInput } from '@/components/custom-fields/custom-field-input'
 import { loadVisibleCustomFieldDefs, type CustomFieldDefRow } from '@/lib/custom-fields/queries'
-import { updateCustomFieldValueAction } from '@/lib/custom-fields/actions'
-import { resolveEnabledFieldGroups } from '@/lib/equipment/field-groups'
+import { equipmentFieldWireValue, resolveEnabledFieldGroups } from '@/lib/equipment/field-groups'
 import {
   EQUIPMENT_FILE_KINDS,
   EQUIPMENT_STATUSES,
   EQUIPMENT_LOG_KINDS,
   mergeEquipmentFileMetadata,
-  parseEquipmentAutosaveInput,
   WORK_ORDER_PRIORITIES,
 } from '@/lib/equipment/mutation-input'
 import {
@@ -189,89 +189,6 @@ function subParams(sp: Record<string, string | string[] | undefined>, prefix: st
 }
 
 // ---------------- Server actions ----------------
-
-// Inline field editor — the single-page form's workhorse. Each Live* field
-// posts {id, field, value}; this validates the field against an allowlist,
-// coerces it for its column, persists, audits, and revalidates. Editing any
-// field commits a draft item (clears the Draft badge), mirroring the old save.
-async function updateEquipmentField(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
-  const id = requireUuidInput(formData.get('id'), 'Equipment item')
-  const { field, value: val } = parseEquipmentAutosaveInput(
-    formData.get('field'),
-    formData.get('value'),
-  )
-
-  await ctx.db(async (tx) => {
-    const [prior] = await tx
-      .select({
-        isDraft: equipmentItems.isDraft,
-        status: equipmentItems.status,
-        typeId: equipmentItems.typeId,
-      })
-      .from(equipmentItems)
-      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
-      .limit(1)
-      .for('update')
-    if (!prior) throw new Error('Equipment item was not found.')
-    if (field === 'departmentId' && val !== null) {
-      const [department] = await tx
-        .select({ id: departments.id })
-        .from(departments)
-        .where(and(eq(departments.id, val as string), eq(departments.tenantId, ctx.tenantId)))
-        .limit(1)
-      if (!department) throw new Error('Department was not found.')
-    }
-    const [updated] = await tx
-      .update(equipmentItems)
-      .set({
-        [field]: val,
-        // Editing the asset commits a draft (clears the Draft badge).
-        isDraft: false,
-        // Meter readings carry a read-at timestamp so staleness is visible.
-        ...(field === 'currentHours' || field === 'currentOdometer'
-          ? { metersUpdatedAt: new Date() }
-          : {}),
-      } as Partial<typeof equipmentItems.$inferInsert>)
-      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
-      .returning({ id: equipmentItems.id })
-    if (!updated) throw new Error('Equipment item was not updated.')
-    const nextTypeId = field === 'typeId' ? (val as string | null) : prior.typeId
-    if (field === 'status') {
-      await refreshEquipmentAvailability(tx, [id])
-    }
-    if (prior.isDraft) {
-      await recordModuleFlowEvent(tx, ctx, {
-        subjectId: id,
-        moduleKey: 'equipment-assets',
-        event: 'on_create',
-        occurrenceKey: randomUUID(),
-      })
-    } else if (field === 'status' && prior.status !== val) {
-      await recordModuleFlowEvent(tx, ctx, {
-        subjectId: id,
-        moduleKey: 'equipment-assets',
-        event: 'status_change',
-        toStatus: String(val),
-        occurrenceKey: randomUUID(),
-      })
-    }
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'equipment',
-      entityId: id,
-      action: 'update',
-      summary: `Updated ${field}`,
-      after: { [field]: val },
-    })
-    if (prior.isDraft || field === 'status' || field === 'typeId') {
-      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [prior.typeId, nextTypeId])
-    }
-  })
-  revalidatePath(`/equipment/${id}`)
-  revalidatePath('/equipment')
-}
 
 async function reportMissing(formData: FormData) {
   'use server'
@@ -1288,946 +1205,603 @@ export default async function EquipmentDetailPage({
     active === 'activity' ? await recentActivityForEntity(ctx, 'equipment', id, 50) : []
 
   return (
-    <PageContainer>
-      <div className="space-y-5">
-        <DetailHeader
-          back={{ href: '/equipment', label: 'Back to equipment' }}
-          title={tGeneratedValue(item.name)}
-          subtitle={tGeneratedValue(
-            `${item.assetTag}${item.serialNumber ? ` · ${item.serialNumber}` : ''}`,
-          )}
-          badge={
-            <div className="flex items-center gap-2">
-              <Badge variant={item.status === 'in_service' ? 'success' : 'warning'}>
-                <GeneratedValue value={item.status.replace('_', ' ')} />
-              </Badge>
-              <GeneratedValue
-                value={
-                  item.isMissing ? (
-                    <Badge variant="destructive">
-                      <GeneratedText id="m_033d838430bc5f" />
-                    </Badge>
-                  ) : null
-                }
-              />
-              <GeneratedValue
-                value={
-                  item.isDraft ? (
-                    <Badge variant="outline">
-                      <GeneratedText id="m_13f3db1d0ca2fe" />
-                    </Badge>
-                  ) : null
-                }
-              />
-            </div>
-          }
-          actions={
-            <>
-              {canAdminEquipment ? (
-                <form action={setEquipmentDeleted}>
-                  <input type="hidden" name="id" value={id} />
-                  <input type="hidden" name="restore" value={item.deletedAt ? '1' : '0'} />
-                  <ConfirmButton
-                    variant={item.deletedAt ? 'outline' : 'destructive'}
-                    message={
-                      item.deletedAt
-                        ? tGenerated('m_0b4b2da7d40e48')
-                        : tGenerated('m_057301e9d56688')
-                    }
-                  >
-                    {item.deletedAt
-                      ? tGenerated('m_19500e41842c99')
-                      : tGenerated('m_11773f3c3f7558')}
-                  </ConfirmButton>
-                </form>
-              ) : null}
-              <GeneratedValue
-                value={
-                  canCreateWorkOrder ? (
-                    <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}>
-                      <Button variant="outline">
-                        <Wrench size={14} />
-                        <GeneratedText id="m_028792f1fdc70a" />
-                      </Button>
-                    </Link>
-                  ) : null
-                }
-              />
-              <GeneratedValue
-                value={
-                  canManageEquipment ? (
-                    <Link href={`${basePath}?tab=log&drawer=new-truck-log-entry` as Route}>
-                      <Button variant="outline">
-                        <Truck size={14} />
-                        <GeneratedText id="m_1004059f966a2a" />
-                      </Button>
-                    </Link>
-                  ) : null
-                }
-              />
-              <DownloadLink href={`/equipment/${id}/pdf`}>
-                <Button variant="outline">
-                  <FileText size={14} />
-                  <GeneratedText id="m_016088be0b1e51" />
-                </Button>
-              </DownloadLink>
-              <Link href={`/equipment/${id}/qr`}>
-                <Button variant="outline">
-                  <QrCode size={14} />
-                  <GeneratedText id="m_183a008d67c7c1" />
-                </Button>
-              </Link>
-              <GeneratedValue
-                value={
-                  item.isMissing ? (
-                    <Link href={`${basePath}?drawer=report-found` as Route}>
-                      <Button variant="outline">
-                        <Search size={14} />
-                        <GeneratedText id="m_1b925bd65abff0" />
-                      </Button>
-                    </Link>
-                  ) : (
-                    <Link href={`${basePath}?drawer=report-missing` as Route}>
-                      <Button variant="outline">
-                        <Search size={14} />
-                        <GeneratedText id="m_08cbe6945650bd" />
-                      </Button>
-                    </Link>
-                  )
-                }
-              />
-            </>
-          }
-        />
-
-        <GeneratedValue
-          value={
-            item.isMissing ? (
-              <Alert variant="destructive">
-                <AlertTitle>
-                  <GeneratedText id="m_00ffd43dd757ec" />
-                </AlertTitle>
-                <AlertDescription>
-                  <GeneratedValue
-                    value={(() => {
-                      const parts: string[] = []
-                      if (item.missingReportedAt) {
-                        parts.push(
-                          `Reported on ${formatDate(new Date(item.missingReportedAt), ctx.timezone, ctx.locale)}`,
-                        )
-                      }
-                      if (missingReporter?.name) {
-                        parts.push(`by ${missingReporter.name}`)
-                      }
-                      if (item.missingLastSeenAt) {
-                        parts.push(`— last seen ${item.missingLastSeenAt}`)
-                      }
-                      if (item.missingLastSeenLocation) {
-                        parts.push(`at ${item.missingLastSeenLocation}`)
-                      }
-                      const headline = parts.length
-                        ? parts.join(' ')
-                        : `Last seen ${item.lastSeenAt ? formatDateTime(new Date(item.lastSeenAt), ctx.timezone, ctx.locale) : '—'}`
-                      return (
-                        <>
-                          <div>
-                            <GeneratedValue value={headline} />.
-                          </div>
-                          <GeneratedValue
-                            value={
-                              item.missingNotes ? (
-                                <div className="mt-1 text-xs whitespace-pre-wrap">
-                                  <GeneratedValue value={item.missingNotes} />
-                                </div>
-                              ) : null
-                            }
-                          />
-                          <div className="mt-1 text-xs">
-                            <GeneratedText id="m_18faed4570d3e8" />{' '}
-                            <strong>
-                              <GeneratedText id="m_1b925bd65abff0" />
-                            </strong>{' '}
-                            <GeneratedText id="m_0b8398cfc958ca" />
-                          </div>
-                        </>
-                      )
-                    })()}
-                  />
-                </AlertDescription>
-              </Alert>
-            ) : null
-          }
-        />
-
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="min-w-0 space-y-3">
-            <Card>
-              <CardContent className="space-y-3 p-5 text-sm">
+    <OfflineRecordProvider module="equipment" recordId={id} editable={!locked}>
+      <PageContainer>
+        <div className="space-y-5">
+          <DetailHeader
+            back={{ href: '/equipment', label: 'Back to equipment' }}
+            title={tGeneratedValue(item.name)}
+            subtitle={tGeneratedValue(
+              `${item.assetTag}${item.serialNumber ? ` · ${item.serialNumber}` : ''}`,
+            )}
+            badge={
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={item.status === 'in_service' ? 'success' : 'warning'}>
+                  <GeneratedValue value={item.status.replace('_', ' ')} />
+                </Badge>
                 <GeneratedValue
                   value={
-                    photoUrl ? (
-                      <a
-                        href={photoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block"
-                        title={tGenerated('m_1facadad2a5607')}
-                      >
-                        {/* object-contain + a capped height shows portrait and
-                        landscape photos in full without cropping; the neutral
-                        backdrop fills the letterbox gap. */}
-                        <RawImage
-                          src={photoUrl}
-                          alt={tGeneratedValue(item.name)}
-                          optimizationReason="authenticated"
-                          className="max-h-56 w-full rounded-md bg-slate-100 object-contain dark:bg-slate-800"
-                        />
-                      </a>
+                    item.isMissing ? (
+                      <Badge variant="destructive">
+                        <GeneratedText id="m_033d838430bc5f" />
+                      </Badge>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    item.isDraft ? (
+                      <Badge variant="outline">
+                        <GeneratedText id="m_13f3db1d0ca2fe" />
+                      </Badge>
+                    ) : null
+                  }
+                />
+                <GeneratedValue value={canAdminEquipment ? <RecordSyncStatus /> : null} />
+              </div>
+            }
+            actions={
+              <>
+                {canAdminEquipment ? (
+                  <form action={setEquipmentDeleted}>
+                    <input type="hidden" name="id" value={id} />
+                    <input type="hidden" name="restore" value={item.deletedAt ? '1' : '0'} />
+                    <ConfirmButton
+                      variant={item.deletedAt ? 'outline' : 'destructive'}
+                      message={
+                        item.deletedAt
+                          ? tGenerated('m_0b4b2da7d40e48')
+                          : tGenerated('m_057301e9d56688')
+                      }
+                    >
+                      {item.deletedAt
+                        ? tGenerated('m_19500e41842c99')
+                        : tGenerated('m_11773f3c3f7558')}
+                    </ConfirmButton>
+                  </form>
+                ) : null}
+                <GeneratedValue
+                  value={
+                    canCreateWorkOrder ? (
+                      <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}>
+                        <Button variant="outline">
+                          <Wrench size={14} />
+                          <GeneratedText id="m_028792f1fdc70a" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canManageEquipment ? (
+                      <Link href={`${basePath}?tab=log&drawer=new-truck-log-entry` as Route}>
+                        <Button variant="outline">
+                          <Truck size={14} />
+                          <GeneratedText id="m_1004059f966a2a" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
+                <DownloadLink href={`/equipment/${id}/pdf`}>
+                  <Button variant="outline">
+                    <FileText size={14} />
+                    <GeneratedText id="m_016088be0b1e51" />
+                  </Button>
+                </DownloadLink>
+                <Link href={`/equipment/${id}/qr`}>
+                  <Button variant="outline">
+                    <QrCode size={14} />
+                    <GeneratedText id="m_183a008d67c7c1" />
+                  </Button>
+                </Link>
+                <GeneratedValue
+                  value={
+                    item.isMissing ? (
+                      <Link href={`${basePath}?drawer=report-found` as Route}>
+                        <Button variant="outline">
+                          <Search size={14} />
+                          <GeneratedText id="m_1b925bd65abff0" />
+                        </Button>
+                      </Link>
                     ) : (
-                      <div className="flex h-32 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                        <Truck size={48} />
-                      </div>
+                      <Link href={`${basePath}?drawer=report-missing` as Route}>
+                        <Button variant="outline">
+                          <Search size={14} />
+                          <GeneratedText id="m_08cbe6945650bd" />
+                        </Button>
+                      </Link>
                     )
                   }
                 />
-                <div className="text-center">
-                  <div className="text-base font-semibold">
-                    <GeneratedValue value={item.name} />
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    <GeneratedValue value={type?.name ?? '—'} />
-                  </div>
-                </div>
-                <div className="space-y-1.5 border-t border-slate-100 pt-3">
-                  <SidebarRow label={tGenerated('m_0d9ccb155777db')}>
-                    <GeneratedValue value={item.assetTag} />
-                  </SidebarRow>
-                  <SidebarRow label={tGenerated('m_179218139b624a')}>
-                    <GeneratedValue value={item.serialNumber ?? '—'} />
-                  </SidebarRow>
-                  <SidebarRow label={tGenerated('m_108b41637f364f')}>
-                    <GeneratedValue value={category?.name ?? '—'} />
-                  </SidebarRow>
-                  <SidebarRow label={tGenerated('m_020146dd3d3d5a')}>
-                    <GeneratedValue value={site?.name ?? '—'} />
-                  </SidebarRow>
-                  <SidebarRow label={tGenerated('m_1dd437d2b4ab7f')}>
+              </>
+            }
+          />
+
+          <RecordSyncBanner />
+
+          <GeneratedValue
+            value={
+              item.isMissing ? (
+                <Alert variant="destructive">
+                  <AlertTitle>
+                    <GeneratedText id="m_00ffd43dd757ec" />
+                  </AlertTitle>
+                  <AlertDescription>
                     <GeneratedValue
-                      value={holder ? `${holder.firstName} ${holder.lastName}` : '—'}
-                    />
-                  </SidebarRow>
-                  <SidebarRow label={tGenerated('m_1d9c32b35390f6')}>
-                    <GeneratedValue value={item.purchaseDate ?? '—'} />
-                  </SidebarRow>
-                  <SidebarRow label={tGenerated('m_0ecb62a6c8c55b')}>
-                    <GeneratedValue value={item.warrantyExpiresOn ?? '—'} />
-                  </SidebarRow>
-                  <SidebarRow label={tGenerated('m_1fb9055f09702d')}>
-                    <GeneratedValue
-                      value={
-                        nextInspectionDue ? (
-                          <span
-                            className={
-                              nextInspectionDue < todayIso
-                                ? 'font-medium text-rose-600 dark:text-rose-400'
-                                : undefined
-                            }
-                          >
-                            <GeneratedValue value={nextInspectionDue} />
-                          </span>
-                        ) : (
-                          '—'
-                        )
-                      }
-                    />
-                  </SidebarRow>
-                </div>
-              </CardContent>
-            </Card>
-          </aside>
-
-          <div className="min-w-0 space-y-4">
-            <TabNav
-              basePath={basePath}
-              currentParams={sp}
-              active={active}
-              variant="pills"
-              tabs={[
-                { key: 'overview', label: 'Overview' },
-                { key: 'location', label: 'Location & custody', count: historyTotal },
-                {
-                  key: 'inspections',
-                  label: 'Equipment Checks',
-                  count: scheduleStats.active + openReminderCount,
-                },
-                { key: 'work_orders', label: 'Work orders', count: openWoCount },
-                { key: 'log', label: 'Log', count: logTotal },
-                { key: 'files', label: 'Files', count: certTotal },
-                { key: 'activity', label: 'Activity' },
-              ]}
-            />
-
-            {/*
-             * Tab body crossfade. The `key={active}` on TabContent means each
-             * server-rendered swap triggers an AnimatePresence cycle so the
-             * outgoing panel fades while the incoming one slides in.
-             */}
-            <TabContent tabKey={active}>
-              <GeneratedValue
-                value={
-                  active === 'overview' ? (
-                    <div className="space-y-4">
-                      <Section title={tGenerated('m_1086584d9aca6a')}>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                          <LiveField
-                            id={id}
-                            field="name"
-                            label={tGenerated('m_02b18d5c7f6f2d')}
-                            initialValue={item.name}
-                            maxLength={240}
-                            disabled={locked}
-                            updateAction={updateEquipmentField}
-                          />
-                          <LiveField
-                            id={id}
-                            field="assetTag"
-                            label={tGenerated('m_0d9ccb155777db')}
-                            initialValue={item.assetTag}
-                            maxLength={120}
-                            disabled={locked}
-                            updateAction={updateEquipmentField}
-                          />
-                          <LiveField
-                            id={id}
-                            field="serialNumber"
-                            label={tGenerated('m_179218139b624a')}
-                            initialValue={item.serialNumber}
-                            maxLength={240}
-                            disabled={locked}
-                            updateAction={updateEquipmentField}
-                          />
-                          <LiveRemoteSelect
-                            id={id}
-                            field="typeId"
-                            label={tGenerated('m_074ba2f160c506')}
-                            initialValue={item.typeId}
-                            initialOption={type ? { value: type.id, label: type.name } : undefined}
-                            lookup="equipment-edit-types"
-                            disabled={locked}
-                            updateAction={updateEquipmentField}
-                          />
-                          <LiveRemoteSelect
-                            id={id}
-                            field="categoryId"
-                            label={tGenerated('m_108b41637f364f')}
-                            initialValue={item.categoryId}
-                            initialOption={
-                              category ? { value: category.id, label: category.name } : undefined
-                            }
-                            lookup="equipment-edit-categories"
-                            emptyLabel={tGenerated('m_1f4315be81761d')}
-                            disabled={locked}
-                            updateAction={updateEquipmentField}
-                          />
-                          <LiveRemoteSelect
-                            id={id}
-                            field="departmentId"
-                            label={tGenerated('m_1af68228b8305a')}
-                            initialValue={item.departmentId}
-                            initialOption={
-                              department
-                                ? { value: department.id, label: department.name }
-                                : undefined
-                            }
-                            lookup="equipment-edit-departments"
-                            emptyLabel={tGenerated('m_14ba205dfb4aab')}
-                            disabled={locked}
-                            updateAction={updateEquipmentField}
-                          />
-                          <LiveSelect
-                            id={id}
-                            field="status"
-                            label={tGenerated('m_0b9da892d6faf0')}
-                            initialValue={item.status}
-                            allowEmpty={false}
-                            options={EQUIPMENT_STATUSES.map((s) => ({
-                              value: s,
-                              label: s.replace('_', ' '),
-                            }))}
-                            disabled={locked}
-                            updateAction={updateEquipmentField}
-                          />
-                          <div className="sm:col-span-2">
-                            <LiveField
-                              id={id}
-                              field="description"
-                              label={tGenerated('m_14d923495cf14c')}
-                              initialValue={item.description}
-                              multiline
-                              maxLength={5000}
-                              disabled={locked}
-                              updateAction={updateEquipmentField}
-                            />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <LiveRichText
-                              id={id}
-                              field="notes"
-                              label={tGenerated('m_0b8dadcb78cd08')}
-                              initialValue={item.notes}
-                              placeholder={tGenerated('m_0d8e6ea52b9335')}
-                              disabled={locked}
-                              updateAction={updateEquipmentField}
-                            />
-                          </div>
-                        </div>
-                      </Section>
-
-                      {/*
-                       * Category-driven field groups. Which sections appear is
-                       * configured per equipment category (Manage → Categories),
-                       * so a hand tool shows only what applies while a truck gets
-                       * registration, meters, and specs. Tenant custom fields
-                       * targeting a group render inside it.
-                       */}
-                      <GeneratedValue
-                        value={fieldGroups.map((group) => (
-                          <Section key={group.key} title={tGeneratedValue(group.label)}>
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                              <GeneratedValue
-                                value={group.fields.map((f) =>
-                                  f.type === 'select' ? (
-                                    <LiveSelect
-                                      key={f.field}
-                                      id={id}
-                                      field={f.field}
-                                      label={tGeneratedValue(f.label)}
-                                      initialValue={
-                                        (item as unknown as Record<string, unknown>)[f.field] ==
-                                        null
-                                          ? null
-                                          : String(
-                                              (item as unknown as Record<string, unknown>)[f.field],
-                                            )
-                                      }
-                                      options={f.options ?? []}
-                                      allowEmpty={false}
-                                      disabled={locked}
-                                      updateAction={updateEquipmentField}
-                                    />
-                                  ) : (
-                                    <LiveField
-                                      key={f.field}
-                                      id={id}
-                                      field={f.field}
-                                      label={tGeneratedValue(
-                                        f.field === 'currentHours' || f.field === 'currentOdometer'
-                                          ? `${f.label}${item.metersUpdatedAt ? ` · read ${formatDate(new Date(item.metersUpdatedAt), ctx.timezone, ctx.locale)}` : ''}`
-                                          : f.label,
-                                      )}
-                                      type={f.type}
-                                      placeholder={tGeneratedValue(f.placeholder)}
-                                      maxLength={f.type === 'text' ? 500 : undefined}
-                                      initialValue={
-                                        (item as unknown as Record<string, unknown>)[f.field] ==
-                                        null
-                                          ? null
-                                          : String(
-                                              (item as unknown as Record<string, unknown>)[f.field],
-                                            )
-                                      }
-                                      disabled={locked}
-                                      updateAction={updateEquipmentField}
-                                    />
-                                  ),
-                                )}
-                              />
-                              <GeneratedValue
-                                value={(customByGroup.get(group.key) ?? []).map((def) => (
-                                  <CustomFieldInput
-                                    key={def.id}
-                                    entityKind="equipment"
-                                    recordId={id}
-                                    def={{
-                                      key: def.key,
-                                      label: def.label,
-                                      helpText: def.helpText,
-                                      fieldType: def.fieldType,
-                                      required: def.required,
-                                      config: def.config,
-                                    }}
-                                    initialValue={customValues[def.key] ?? null}
-                                    disabled={locked}
-                                    updateAction={updateCustomFieldValueAction}
-                                  />
-                                ))}
-                              />
-                            </div>
-                          </Section>
-                        ))}
-                      />
-
-                      <CustomFieldsSection
-                        ctx={ctx}
-                        entityKind="equipment"
-                        recordId={id}
-                        subtypeId={item.typeId}
-                        metadata={item.metadata}
-                        locked={locked}
-                        defs={standaloneCustomDefs}
-                      />
-                    </div>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  active === 'work_orders' ? (
-                    <div className="space-y-4">
-                      <Card>
-                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                          <CardTitle>
-                            <GeneratedText id="m_1902a1015f0a65" />
-                            <GeneratedValue value={workOrdersTotal} />)
-                          </CardTitle>
-                          <GeneratedValue
-                            value={
-                              canCreateWorkOrder ? (
-                                <Link
-                                  href={
-                                    `${basePath}?tab=work_orders&drawer=new-work-order` as Route
-                                  }
-                                >
-                                  <Button size="sm">
-                                    <Wrench size={14} /> <GeneratedText id="m_028792f1fdc70a" />
-                                  </Button>
-                                </Link>
-                              ) : null
-                            }
-                          />
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <SearchInput
-                            paramKey="wo_q"
-                            pageParamKey="wo_p"
-                            placeholder={tGenerated('m_02c4d288df2a2e')}
-                          />
-                          <GeneratedValue
-                            value={
-                              workOrders.length === 0 ? (
-                                <EmptyState
-                                  icon={<Wrench size={24} />}
-                                  title={tGeneratedValue(
-                                    woP.q
-                                      ? tGenerated('m_0208b2983f4109')
-                                      : tGenerated('m_191befd5e4ff41'),
-                                  )}
-                                  description={tGenerated('m_11c7a4abb4a409')}
-                                  action={
-                                    canCreateWorkOrder ? (
-                                      <Link
-                                        href={
-                                          `${basePath}?tab=work_orders&drawer=new-work-order` as Route
-                                        }
-                                      >
-                                        <Button size="sm" variant="outline">
-                                          <Wrench size={14} />{' '}
-                                          <GeneratedText id="m_028792f1fdc70a" />
-                                        </Button>
-                                      </Link>
-                                    ) : undefined
-                                  }
-                                />
-                              ) : (
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>
-                                        <GeneratedText id="m_036b564bb88dfe" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_031c356c80b70f" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0b9da892d6faf0" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_10fb4212cee361" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_003ea77d773d2d" />
-                                      </TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    <GeneratedValue
-                                      value={workOrders.map((w) => (
-                                        <RecordTableRow
-                                          key={w.id}
-                                          href={`/equipment/work-orders/${w.id}`}
-                                        >
-                                          <TableCell className="font-mono text-xs">
-                                            <GeneratedValue value={w.reference} />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue value={w.summary} />
-                                          </TableCell>
-                                          <TableCell>
-                                            <Badge
-                                              variant={
-                                                w.status === 'closed'
-                                                  ? 'success'
-                                                  : w.status === 'cancelled'
-                                                    ? 'secondary'
-                                                    : 'warning'
-                                              }
-                                            >
-                                              <GeneratedValue value={w.status.replace('_', ' ')} />
-                                            </Badge>
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={formatDate(
-                                                new Date(w.openedAt),
-                                                ctx.timezone,
-                                                ctx.locale,
-                                              )}
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                w.closedAt
-                                                  ? formatDate(
-                                                      new Date(w.closedAt),
-                                                      ctx.timezone,
-                                                      ctx.locale,
-                                                    )
-                                                  : '—'
-                                              }
-                                            />
-                                          </TableCell>
-                                        </RecordTableRow>
-                                      ))}
-                                    />
-                                  </TableBody>
-                                </Table>
-                              )
-                            }
-                          />
-                          <SubPagination
-                            basePath={basePath}
-                            sp={sp}
-                            prefix="wo"
-                            total={workOrdersTotal}
-                            page={woP.page}
-                          />
-                        </CardContent>
-                      </Card>
-                    </div>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  active === 'location' ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="max-w-full min-w-0">
-                          <TabNav
-                            variant="pills"
-                            paramKey="locationView"
-                            basePath={basePath}
-                            currentParams={{ ...sp, tab: 'location' }}
-                            active={locationView}
-                            tabs={[
-                              { key: 'map', label: 'Map', hidden: !data.hasTracker },
-                              {
-                                key: 'gps_history',
-                                label: 'GPS history',
-                                hidden: !data.hasTracker,
-                              },
-                              {
-                                key: 'tracker',
-                                label: 'Tracker details',
-                                hidden: !data.hasTracker,
-                              },
-                              { key: 'custody', label: 'Custody' },
-                              {
-                                key: 'custody_history',
-                                label: 'Custody history',
-                                count: historyTotal,
-                              },
-                            ]}
-                          />
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <GeneratedValue
-                            value={
-                              canTransferCustody ? (
-                                <Link
-                                  href={
-                                    mergeHref(basePath, sp, {
-                                      tab: 'location',
-                                      drawer: 'transfer',
-                                    }) as Route
-                                  }
-                                >
-                                  <Button size="sm" variant="outline">
-                                    <ArrowLeftRight size={14} />{' '}
-                                    <GeneratedText id="m_164016b2b73317" />
-                                  </Button>
-                                </Link>
-                              ) : null
-                            }
-                          />
-                          <GeneratedValue
-                            value={
-                              canCheckIn ? (
-                                <Link
-                                  href={
-                                    mergeHref(basePath, sp, {
-                                      tab: 'location',
-                                      drawer: 'check-in',
-                                    }) as Route
-                                  }
-                                >
-                                  <Button size="sm">
-                                    <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
-                                  </Button>
-                                </Link>
-                              ) : canCheckOut ? (
-                                <Link
-                                  href={
-                                    mergeHref(basePath, sp, {
-                                      tab: 'location',
-                                      drawer: 'check-out',
-                                    }) as Route
-                                  }
-                                >
-                                  <Button size="sm">
-                                    <LogOut size={14} /> <GeneratedText id="m_0a8918b3f9c991" />
-                                  </Button>
-                                </Link>
-                              ) : null
-                            }
-                          />
-                        </div>
-                      </div>
-                      {locationView === 'map' ||
-                      locationView === 'gps_history' ||
-                      locationView === 'tracker' ? (
-                        <EquipmentTelemetryPanel
-                          itemId={id}
-                          basePath={basePath}
-                          searchParams={{ ...sp, tab: 'location', locationView }}
-                          view={
-                            locationView === 'gps_history'
-                              ? 'history'
-                              : locationView === 'tracker'
-                                ? 'details'
-                                : 'map'
-                          }
-                        />
-                      ) : null}
-
-                      {locationView === 'custody' ? (
-                        <Card>
-                          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                            <CardTitle>
-                              <GeneratedText id="m_0de40eb20074ca" />
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4 text-sm">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <MapPin size={16} className="text-slate-400" />
-                                <GeneratedValue
-                                  value={site?.name ?? <GeneratedText id="m_10d1d0d92a9aaa" />}
-                                />
-                              </div>
-                              <GeneratedValue
-                                value={
-                                  holder ? (
-                                    <div className="text-slate-600 dark:text-slate-400">
-                                      <GeneratedText id="m_0c7e58476facb9" />
-                                      <GeneratedValue value={' '} />
-                                      <Link
-                                        href={`/people/${holder.id}`}
-                                        className="text-teal-700 hover:underline dark:text-teal-400"
-                                      >
-                                        <GeneratedValue value={holder.firstName} />{' '}
-                                        <GeneratedValue value={holder.lastName} />
-                                      </Link>
-                                    </div>
-                                  ) : null
-                                }
-                              />
-                              <GeneratedValue
-                                value={
-                                  openCheckout ? (
-                                    <div className="text-slate-600 dark:text-slate-400">
-                                      <GeneratedText id="m_0e13fb7d29d9df" />
-                                      <GeneratedValue
-                                        value={
-                                          openCheckout.co.expectedReturnOn ? (
-                                            <GeneratedText
-                                              id="m_1f5072ac43774e"
-                                              values={{ value0: openCheckout.co.expectedReturnOn }}
-                                            />
-                                          ) : (
-                                            ''
-                                          )
-                                        }
-                                      />
-                                      .
-                                    </div>
-                                  ) : null
-                                }
-                              />
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ) : null}
-
-                      {locationView === 'custody_history' ? (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>
-                              <GeneratedValue value={'Custody history'} />
-                              <span className="ml-1 font-normal text-slate-500">
-                                ({historyTotal})
-                              </span>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <div className="min-w-0 flex-1">
-                                <SearchInput
-                                  paramKey="lh_q"
-                                  pageParamKey="lh_p"
-                                  placeholder={tGenerated('m_0f68bc19b64344')}
-                                />
-                              </div>
-                              <SearchFilter
-                                basePath={basePath}
-                                currentParams={sp}
-                                paramKey="lh_kind"
-                                pageParamKey="lh_p"
-                                options={[
-                                  { value: 'check_in', label: 'In' },
-                                  { value: 'check_out', label: 'Out' },
-                                  { value: 'transfer', label: 'Moved' },
-                                ]}
-                                placeholder={tGenerated('m_00896a07ebfbd6')}
-                              />
+                      value={(() => {
+                        const parts: string[] = []
+                        if (item.missingReportedAt) {
+                          parts.push(
+                            `Reported on ${formatDate(new Date(item.missingReportedAt), ctx.timezone, ctx.locale)}`,
+                          )
+                        }
+                        if (missingReporter?.name) {
+                          parts.push(`by ${missingReporter.name}`)
+                        }
+                        if (item.missingLastSeenAt) {
+                          parts.push(`— last seen ${item.missingLastSeenAt}`)
+                        }
+                        if (item.missingLastSeenLocation) {
+                          parts.push(`at ${item.missingLastSeenLocation}`)
+                        }
+                        const headline = parts.length
+                          ? parts.join(' ')
+                          : `Last seen ${item.lastSeenAt ? formatDateTime(new Date(item.lastSeenAt), ctx.timezone, ctx.locale) : '—'}`
+                        return (
+                          <>
+                            <div>
+                              <GeneratedValue value={headline} />.
                             </div>
                             <GeneratedValue
                               value={
-                                history.length === 0 ? (
-                                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    <GeneratedValue
-                                      value={
-                                        lhP.q || sp.lh_kind ? (
-                                          <GeneratedText id="m_0df9a3c13764d8" />
-                                        ) : (
-                                          <GeneratedText id="m_0700918f8ecf46" />
-                                        )
-                                      }
+                                item.missingNotes ? (
+                                  <div className="mt-1 text-xs whitespace-pre-wrap">
+                                    <GeneratedValue value={item.missingNotes} />
+                                  </div>
+                                ) : null
+                              }
+                            />
+                            <div className="mt-1 text-xs">
+                              <GeneratedText id="m_18faed4570d3e8" />{' '}
+                              <strong>
+                                <GeneratedText id="m_1b925bd65abff0" />
+                              </strong>{' '}
+                              <GeneratedText id="m_0b8398cfc958ca" />
+                            </div>
+                          </>
+                        )
+                      })()}
+                    />
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <aside className="min-w-0 space-y-3">
+              <Card>
+                <CardContent className="space-y-3 p-5 text-sm">
+                  <GeneratedValue
+                    value={
+                      photoUrl ? (
+                        <a
+                          href={photoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                          title={tGenerated('m_1facadad2a5607')}
+                        >
+                          {/* object-contain + a capped height shows portrait and
+                        landscape photos in full without cropping; the neutral
+                        backdrop fills the letterbox gap. */}
+                          <RawImage
+                            src={photoUrl}
+                            alt={tGeneratedValue(item.name)}
+                            optimizationReason="authenticated"
+                            className="max-h-56 w-full rounded-md bg-slate-100 object-contain dark:bg-slate-800"
+                          />
+                        </a>
+                      ) : (
+                        <div className="flex h-32 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                          <Truck size={48} />
+                        </div>
+                      )
+                    }
+                  />
+                  <div className="text-center">
+                    <div className="text-base font-semibold">
+                      <GeneratedValue value={item.name} />
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      <GeneratedValue value={type?.name ?? '—'} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 border-t border-slate-100 pt-3">
+                    <SidebarRow label={tGenerated('m_0d9ccb155777db')}>
+                      <GeneratedValue value={item.assetTag} />
+                    </SidebarRow>
+                    <SidebarRow label={tGenerated('m_179218139b624a')}>
+                      <GeneratedValue value={item.serialNumber ?? '—'} />
+                    </SidebarRow>
+                    <SidebarRow label={tGenerated('m_108b41637f364f')}>
+                      <GeneratedValue value={category?.name ?? '—'} />
+                    </SidebarRow>
+                    <SidebarRow label={tGenerated('m_020146dd3d3d5a')}>
+                      <GeneratedValue value={site?.name ?? '—'} />
+                    </SidebarRow>
+                    <SidebarRow label={tGenerated('m_1dd437d2b4ab7f')}>
+                      <GeneratedValue
+                        value={holder ? `${holder.firstName} ${holder.lastName}` : '—'}
+                      />
+                    </SidebarRow>
+                    <SidebarRow label={tGenerated('m_1d9c32b35390f6')}>
+                      <GeneratedValue value={item.purchaseDate ?? '—'} />
+                    </SidebarRow>
+                    <SidebarRow label={tGenerated('m_0ecb62a6c8c55b')}>
+                      <GeneratedValue value={item.warrantyExpiresOn ?? '—'} />
+                    </SidebarRow>
+                    <SidebarRow label={tGenerated('m_1fb9055f09702d')}>
+                      <GeneratedValue
+                        value={
+                          nextInspectionDue ? (
+                            <span
+                              className={
+                                nextInspectionDue < todayIso
+                                  ? 'font-medium text-rose-600 dark:text-rose-400'
+                                  : undefined
+                              }
+                            >
+                              <GeneratedValue value={nextInspectionDue} />
+                            </span>
+                          ) : (
+                            '—'
+                          )
+                        }
+                      />
+                    </SidebarRow>
+                  </div>
+                </CardContent>
+              </Card>
+            </aside>
+
+            <div className="min-w-0 space-y-4">
+              <TabNav
+                basePath={basePath}
+                currentParams={sp}
+                active={active}
+                variant="pills"
+                tabs={[
+                  { key: 'overview', label: 'Overview' },
+                  { key: 'location', label: 'Location & custody', count: historyTotal },
+                  {
+                    key: 'inspections',
+                    label: 'Equipment Checks',
+                    count: scheduleStats.active + openReminderCount,
+                  },
+                  { key: 'work_orders', label: 'Work orders', count: openWoCount },
+                  { key: 'log', label: 'Log', count: logTotal },
+                  { key: 'files', label: 'Files', count: certTotal },
+                  { key: 'activity', label: 'Activity' },
+                ]}
+              />
+
+              {/*
+               * Tab body crossfade. The `key={active}` on TabContent means each
+               * server-rendered swap triggers an AnimatePresence cycle so the
+               * outgoing panel fades while the incoming one slides in.
+               */}
+              <TabContent tabKey={active}>
+                <GeneratedValue
+                  value={
+                    active === 'overview' ? (
+                      <div className="space-y-4">
+                        <Section title={tGenerated('m_1086584d9aca6a')}>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <LiveField
+                              field="name"
+                              label={tGenerated('m_02b18d5c7f6f2d')}
+                              initialValue={item.name}
+                              maxLength={240}
+                              disabled={locked}
+                            />
+                            <LiveField
+                              field="assetTag"
+                              label={tGenerated('m_0d9ccb155777db')}
+                              initialValue={item.assetTag}
+                              maxLength={120}
+                              disabled={locked}
+                            />
+                            <LiveField
+                              field="serialNumber"
+                              label={tGenerated('m_179218139b624a')}
+                              initialValue={item.serialNumber}
+                              maxLength={240}
+                              disabled={locked}
+                            />
+                            <LiveRemoteSelect
+                              field="typeId"
+                              label={tGenerated('m_074ba2f160c506')}
+                              initialValue={item.typeId}
+                              initialOption={
+                                type ? { value: type.id, label: type.name } : undefined
+                              }
+                              lookup="equipment-edit-types"
+                              disabled={locked}
+                            />
+                            <LiveRemoteSelect
+                              field="categoryId"
+                              label={tGenerated('m_108b41637f364f')}
+                              initialValue={item.categoryId}
+                              initialOption={
+                                category ? { value: category.id, label: category.name } : undefined
+                              }
+                              lookup="equipment-edit-categories"
+                              emptyLabel={tGenerated('m_1f4315be81761d')}
+                              disabled={locked}
+                            />
+                            <LiveRemoteSelect
+                              field="departmentId"
+                              label={tGenerated('m_1af68228b8305a')}
+                              initialValue={item.departmentId}
+                              initialOption={
+                                department
+                                  ? { value: department.id, label: department.name }
+                                  : undefined
+                              }
+                              lookup="equipment-edit-departments"
+                              emptyLabel={tGenerated('m_14ba205dfb4aab')}
+                              disabled={locked}
+                            />
+                            <LiveSelect
+                              field="status"
+                              label={tGenerated('m_0b9da892d6faf0')}
+                              initialValue={item.status}
+                              allowEmpty={false}
+                              options={EQUIPMENT_STATUSES.map((s) => ({
+                                value: s,
+                                label: s.replace('_', ' '),
+                              }))}
+                              disabled={locked}
+                            />
+                            <div className="sm:col-span-2">
+                              <LiveField
+                                field="description"
+                                label={tGenerated('m_14d923495cf14c')}
+                                initialValue={item.description}
+                                multiline
+                                maxLength={5000}
+                                disabled={locked}
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <LiveRichText
+                                field="notes"
+                                label={tGenerated('m_0b8dadcb78cd08')}
+                                initialValue={item.notes}
+                                placeholder={tGenerated('m_0d8e6ea52b9335')}
+                                disabled={locked}
+                              />
+                            </div>
+                          </div>
+                        </Section>
+
+                        {/*
+                         * Category-driven field groups. Which sections appear is
+                         * configured per equipment category (Manage → Categories),
+                         * so a hand tool shows only what applies while a truck gets
+                         * registration, meters, and specs. Tenant custom fields
+                         * targeting a group render inside it.
+                         */}
+                        <GeneratedValue
+                          value={fieldGroups.map((group) => (
+                            <Section key={group.key} title={tGeneratedValue(group.label)}>
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <GeneratedValue
+                                  value={group.fields.map((f) =>
+                                    f.type === 'select' ? (
+                                      <LiveSelect
+                                        key={f.field}
+                                        field={f.field}
+                                        label={tGeneratedValue(f.label)}
+                                        initialValue={equipmentFieldWireValue(
+                                          f,
+                                          (item as unknown as Record<string, unknown>)[f.field],
+                                        )}
+                                        options={f.options ?? []}
+                                        allowEmpty={false}
+                                        disabled={locked}
+                                      />
+                                    ) : (
+                                      <LiveField
+                                        key={f.field}
+                                        field={f.field}
+                                        label={tGeneratedValue(
+                                          f.field === 'currentHours' ||
+                                            f.field === 'currentOdometer'
+                                            ? `${f.label}${item.metersUpdatedAt ? ` · read ${formatDate(new Date(item.metersUpdatedAt), ctx.timezone, ctx.locale)}` : ''}`
+                                            : f.label,
+                                        )}
+                                        type={f.type}
+                                        placeholder={tGeneratedValue(f.placeholder)}
+                                        maxLength={f.type === 'text' ? 500 : undefined}
+                                        initialValue={equipmentFieldWireValue(
+                                          f,
+                                          (item as unknown as Record<string, unknown>)[f.field],
+                                        )}
+                                        disabled={locked}
+                                      />
+                                    ),
+                                  )}
+                                />
+                                <GeneratedValue
+                                  value={(customByGroup.get(group.key) ?? []).map((def) => (
+                                    <CustomFieldInput
+                                      key={def.id}
+                                      entityKind="equipment"
+                                      def={{
+                                        key: def.key,
+                                        label: def.label,
+                                        helpText: def.helpText,
+                                        fieldType: def.fieldType,
+                                        required: def.required,
+                                        config: def.config,
+                                      }}
+                                      initialValue={customValues[def.key] ?? null}
+                                      disabled={locked}
                                     />
-                                  </p>
+                                  ))}
+                                />
+                              </div>
+                            </Section>
+                          ))}
+                        />
+
+                        <CustomFieldsSection
+                          ctx={ctx}
+                          entityKind="equipment"
+                          subtypeId={item.typeId}
+                          metadata={item.metadata}
+                          locked={locked}
+                          defs={standaloneCustomDefs}
+                        />
+                      </div>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    active === 'work_orders' ? (
+                      <div className="space-y-4">
+                        <Card>
+                          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                            <CardTitle>
+                              <GeneratedText id="m_1902a1015f0a65" />
+                              <GeneratedValue value={workOrdersTotal} />)
+                            </CardTitle>
+                            <GeneratedValue
+                              value={
+                                canCreateWorkOrder ? (
+                                  <Link
+                                    href={
+                                      `${basePath}?tab=work_orders&drawer=new-work-order` as Route
+                                    }
+                                  >
+                                    <Button size="sm">
+                                      <Wrench size={14} /> <GeneratedText id="m_028792f1fdc70a" />
+                                    </Button>
+                                  </Link>
+                                ) : null
+                              }
+                            />
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <SearchInput
+                              paramKey="wo_q"
+                              pageParamKey="wo_p"
+                              placeholder={tGenerated('m_02c4d288df2a2e')}
+                            />
+                            <GeneratedValue
+                              value={
+                                workOrders.length === 0 ? (
+                                  <EmptyState
+                                    icon={<Wrench size={24} />}
+                                    title={tGeneratedValue(
+                                      woP.q
+                                        ? tGenerated('m_0208b2983f4109')
+                                        : tGenerated('m_191befd5e4ff41'),
+                                    )}
+                                    description={tGenerated('m_11c7a4abb4a409')}
+                                    action={
+                                      canCreateWorkOrder ? (
+                                        <Link
+                                          href={
+                                            `${basePath}?tab=work_orders&drawer=new-work-order` as Route
+                                          }
+                                        >
+                                          <Button size="sm" variant="outline">
+                                            <Wrench size={14} />{' '}
+                                            <GeneratedText id="m_028792f1fdc70a" />
+                                          </Button>
+                                        </Link>
+                                      ) : undefined
+                                    }
+                                  />
                                 ) : (
                                   <Table>
                                     <TableHeader>
                                       <TableRow>
                                         <TableHead>
-                                          <GeneratedText id="m_102c6fce820610" />
+                                          <GeneratedText id="m_036b564bb88dfe" />
                                         </TableHead>
                                         <TableHead>
-                                          <GeneratedText id="m_13cc128f69897c" />
+                                          <GeneratedText id="m_031c356c80b70f" />
                                         </TableHead>
                                         <TableHead>
-                                          <GeneratedText id="m_020146dd3d3d5a" />
+                                          <GeneratedText id="m_0b9da892d6faf0" />
                                         </TableHead>
                                         <TableHead>
-                                          <GeneratedText id="m_1dd437d2b4ab7f" />
+                                          <GeneratedText id="m_10fb4212cee361" />
                                         </TableHead>
                                         <TableHead>
-                                          <GeneratedText id="m_0c33471afd0f99" />
-                                        </TableHead>
-                                        <TableHead>
-                                          <GeneratedText id="m_16d241f76641bb" />
+                                          <GeneratedText id="m_003ea77d773d2d" />
                                         </TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                       <GeneratedValue
-                                        value={history.map((row) => (
-                                          <TableRow key={row.history.id}>
+                                        value={workOrders.map((w) => (
+                                          <RecordTableRow
+                                            key={w.id}
+                                            href={`/equipment/work-orders/${w.id}`}
+                                          >
+                                            <TableCell className="font-mono text-xs">
+                                              <GeneratedValue value={w.reference} />
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue value={w.summary} />
+                                            </TableCell>
                                             <TableCell>
                                               <Badge
                                                 variant={
-                                                  row.history.movementKind === 'check_in'
+                                                  w.status === 'closed'
                                                     ? 'success'
-                                                    : row.history.movementKind === 'check_out'
-                                                      ? 'warning'
-                                                      : 'default'
+                                                    : w.status === 'cancelled'
+                                                      ? 'secondary'
+                                                      : 'warning'
                                                 }
                                               >
                                                 <GeneratedValue
-                                                  value={
-                                                    row.history.movementKind === 'check_in'
-                                                      ? 'In'
-                                                      : row.history.movementKind === 'check_out'
-                                                        ? 'Out'
-                                                        : 'Moved'
-                                                  }
+                                                  value={w.status.replace('_', ' ')}
                                                 />
                                               </Badge>
                                             </TableCell>
                                             <TableCell>
                                               <GeneratedValue
-                                                value={formatDateTime(
-                                                  new Date(row.history.recordedAt),
+                                                value={formatDate(
+                                                  new Date(w.openedAt),
                                                   ctx.timezone,
                                                   ctx.locale,
                                                 )}
                                               />
                                             </TableCell>
                                             <TableCell>
-                                              <GeneratedValue value={row.site?.name ?? '—'} />
-                                            </TableCell>
-                                            <TableCell>
                                               <GeneratedValue
                                                 value={
-                                                  row.holder
-                                                    ? `${row.holder.firstName} ${row.holder.lastName}`
+                                                  w.closedAt
+                                                    ? formatDate(
+                                                        new Date(w.closedAt),
+                                                        ctx.timezone,
+                                                        ctx.locale,
+                                                      )
                                                     : '—'
                                                 }
                                               />
                                             </TableCell>
-                                            <TableCell>
-                                              <GeneratedValue
-                                                value={
-                                                  row.history.condition
-                                                    ? (
-                                                        {
-                                                          good: 'Good',
-                                                          fair: 'Fair',
-                                                          damaged: 'Damaged',
-                                                          unusable: 'Unusable',
-                                                        } as const
-                                                      )[row.history.condition]
-                                                    : '—'
-                                                }
-                                              />
-                                            </TableCell>
-                                            <TableCell className="text-slate-600 dark:text-slate-300">
-                                              <GeneratedValue value={row.history.note ?? '—'} />
-                                            </TableCell>
-                                          </TableRow>
+                                          </RecordTableRow>
                                         ))}
                                       />
                                     </TableBody>
@@ -2238,912 +1812,387 @@ export default async function EquipmentDetailPage({
                             <SubPagination
                               basePath={basePath}
                               sp={sp}
-                              prefix="lh"
-                              total={historyTotal}
-                              page={lhP.page}
+                              prefix="wo"
+                              total={workOrdersTotal}
+                              page={woP.page}
                             />
                           </CardContent>
                         </Card>
-                      ) : null}
-                    </div>
-                  ) : null
-                }
-              />
+                      </div>
+                    ) : null
+                  }
+                />
 
-              <GeneratedValue
-                value={
-                  active === 'files' ? (
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                        <CardTitle>
-                          <GeneratedText id="m_09a3c98fe10087" />
-                          <GeneratedValue value={certTotal} />)
-                        </CardTitle>
-                        <GeneratedValue
-                          value={
-                            locked ? null : (
-                              <Link href={`${basePath}?tab=files&drawer=upload-file` as Route}>
-                                <Button size="sm">
-                                  <Plus size={14} /> <GeneratedText id="m_06dc5804d9c769" />
-                                </Button>
-                              </Link>
-                            )
-                          }
-                        />
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <SearchInput
-                          paramKey="f_q"
-                          pageParamKey="f_p"
-                          placeholder={tGenerated('m_14336d47f7a210')}
-                        />
-                        <GeneratedValue
-                          value={
-                            certAttachments.length === 0 ? (
-                              <EmptyState
-                                icon={<FileText size={24} />}
-                                title={tGeneratedValue(
-                                  fP.q
-                                    ? tGenerated('m_1bc5136c243bd4')
-                                    : tGenerated('m_122d94d2e8b453'),
-                                )}
-                                description={tGenerated('m_00a186628dba7e')}
-                                action={
-                                  locked ? undefined : (
-                                    <Link
-                                      href={`${basePath}?tab=files&drawer=upload-file` as Route}
-                                    >
-                                      <Button size="sm" variant="outline">
-                                        <Plus size={14} /> <GeneratedText id="m_06dc5804d9c769" />
-                                      </Button>
-                                    </Link>
-                                  )
-                                }
-                              />
-                            ) : (
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>
-                                      <GeneratedText id="m_102a42d098d1d2" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_108b41637f364f" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_11ad4bbeced31b" />
-                                    </TableHead>
-                                    <TableHead>
-                                      <GeneratedText id="m_028e286aa7b299" />
-                                    </TableHead>
-                                    <TableHead></TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
+                <GeneratedValue
+                  value={
+                    active === 'location' ? (
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="max-w-full min-w-0">
+                            <TabNav
+                              variant="pills"
+                              paramKey="locationView"
+                              basePath={basePath}
+                              currentParams={{ ...sp, tab: 'location' }}
+                              active={locationView}
+                              tabs={[
+                                { key: 'map', label: 'Map', hidden: !data.hasTracker },
+                                {
+                                  key: 'gps_history',
+                                  label: 'GPS history',
+                                  hidden: !data.hasTracker,
+                                },
+                                {
+                                  key: 'tracker',
+                                  label: 'Tracker details',
+                                  hidden: !data.hasTracker,
+                                },
+                                { key: 'custody', label: 'Custody' },
+                                {
+                                  key: 'custody_history',
+                                  label: 'Custody history',
+                                  count: historyTotal,
+                                },
+                              ]}
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <GeneratedValue
+                              value={
+                                canTransferCustody ? (
+                                  <Link
+                                    href={
+                                      mergeHref(basePath, sp, {
+                                        tab: 'location',
+                                        drawer: 'transfer',
+                                      }) as Route
+                                    }
+                                  >
+                                    <Button size="sm" variant="outline">
+                                      <ArrowLeftRight size={14} />{' '}
+                                      <GeneratedText id="m_164016b2b73317" />
+                                    </Button>
+                                  </Link>
+                                ) : null
+                              }
+                            />
+                            <GeneratedValue
+                              value={
+                                canCheckIn ? (
+                                  <Link
+                                    href={
+                                      mergeHref(basePath, sp, {
+                                        tab: 'location',
+                                        drawer: 'check-in',
+                                      }) as Route
+                                    }
+                                  >
+                                    <Button size="sm">
+                                      <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
+                                    </Button>
+                                  </Link>
+                                ) : canCheckOut ? (
+                                  <Link
+                                    href={
+                                      mergeHref(basePath, sp, {
+                                        tab: 'location',
+                                        drawer: 'check-out',
+                                      }) as Route
+                                    }
+                                  >
+                                    <Button size="sm">
+                                      <LogOut size={14} /> <GeneratedText id="m_0a8918b3f9c991" />
+                                    </Button>
+                                  </Link>
+                                ) : null
+                              }
+                            />
+                          </div>
+                        </div>
+                        {locationView === 'map' ||
+                        locationView === 'gps_history' ||
+                        locationView === 'tracker' ? (
+                          <EquipmentTelemetryPanel
+                            itemId={id}
+                            basePath={basePath}
+                            searchParams={{ ...sp, tab: 'location', locationView }}
+                            view={
+                              locationView === 'gps_history'
+                                ? 'history'
+                                : locationView === 'tracker'
+                                  ? 'details'
+                                  : 'map'
+                            }
+                          />
+                        ) : null}
+
+                        {locationView === 'custody' ? (
+                          <Card>
+                            <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                              <CardTitle>
+                                <GeneratedText id="m_0de40eb20074ca" />
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4 text-sm">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <MapPin size={16} className="text-slate-400" />
                                   <GeneratedValue
-                                    value={certAttachments.map((a) => {
-                                      const exif = a.exif as Record<string, unknown> | null
-                                      const fileLabel = exif?.label
-                                      const fileKind =
-                                        typeof exif?.kind === 'string' ? exif.kind : null
-                                      return (
-                                        <TableRow key={a.id}>
-                                          <TableCell className="font-medium">
-                                            <GeneratedValue
-                                              value={
-                                                typeof fileLabel === 'string' && fileLabel ? (
-                                                  <>
-                                                    <div>{fileLabel}</div>
-                                                    <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                                                      {a.filename}
-                                                    </div>
-                                                  </>
-                                                ) : (
-                                                  a.filename
-                                                )
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <Badge variant="secondary">
-                                              <GeneratedValue
-                                                value={(fileKind ?? 'document').replace('_', ' ')}
-                                              />
-                                            </Badge>
-                                          </TableCell>
-                                          <TableCell className="text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue value={humanSize(a.sizeBytes)} />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={formatDate(
-                                                new Date(a.createdAt),
-                                                ctx.timezone,
-                                                ctx.locale,
-                                              )}
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <div className="flex items-center justify-end gap-3">
-                                              <a
-                                                href={attachmentUrl(a.id)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                              >
-                                                <GeneratedText id="m_0871fb8eeeedd0" />
-                                              </a>
-                                              <GeneratedValue
-                                                value={
-                                                  locked ? null : (
-                                                    <form
-                                                      action={deleteEquipmentFile}
-                                                      className="inline"
-                                                    >
-                                                      <input
-                                                        type="hidden"
-                                                        name="itemId"
-                                                        value={id}
-                                                      />
-                                                      <input
-                                                        type="hidden"
-                                                        name="attachmentId"
-                                                        value={a.id}
-                                                      />
-                                                      <button
-                                                        type="submit"
-                                                        title={tGenerated('m_02038865a602d6')}
-                                                        className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
-                                                      >
-                                                        <Trash2 size={14} />
-                                                      </button>
-                                                    </form>
-                                                  )
-                                                }
-                                              />
-                                            </div>
-                                          </TableCell>
-                                        </TableRow>
-                                      )
-                                    })}
+                                    value={site?.name ?? <GeneratedText id="m_10d1d0d92a9aaa" />}
                                   />
-                                </TableBody>
-                              </Table>
-                            )
-                          }
-                        />
-                        <SubPagination
-                          basePath={basePath}
-                          sp={sp}
-                          prefix="f"
-                          total={certTotal}
-                          page={fP.page}
-                        />
-                      </CardContent>
-                    </Card>
-                  ) : null
-                }
-              />
-
-              <GeneratedValue
-                value={
-                  active === 'inspections' ? (
-                    <div className="space-y-4">
-                      <TabNav
-                        variant="pills"
-                        paramKey="itab"
-                        basePath={basePath}
-                        currentParams={sp}
-                        active={itab}
-                        tabs={[
-                          {
-                            key: 'schedules',
-                            label: 'Schedules',
-                            count: scheduleStats.active + (item.preUseInspectionTypeId ? 1 : 0),
-                          },
-                          { key: 'oil', label: 'Oil changes' },
-                          { key: 'reminders', label: 'Reminders', count: openReminderCount },
-                          { key: 'history', label: 'History', count: inspectionsTotal },
-                        ]}
-                      />
-                      {itab === 'oil' ? (
-                        <OilChangeCard
-                          key={`${item.updatedAt}`}
-                          itemId={id}
-                          enabled={item.requiresOilChange}
-                          interval={item.oilChangeIntervalMonths}
-                          last={item.lastOilChangeOn}
-                          next={item.nextOilChangeDue}
-                          hours={
-                            typeof item.metadata.lastOilHours === 'number'
-                              ? item.metadata.lastOilHours
-                              : null
-                          }
-                          canEdit={canManageEquipment}
-                        />
-                      ) : null}
-                      {/*
-                       * Pre-use is the check a crew actually runs every shift,
-                       * so it leads the tab in its own section rather than
-                       * sitting under the schedules table's pagination.
-                       */}
-
-                      {/*
-                       * Recurring schedules — the per-unit cadences (any interval:
-                       * daily, monthly, every 3 months, annual, 5-year, …) that
-                       * drive the maintenance cockpit and overdue tracking.
-                       */}
-                      <GeneratedValue
-                        value={
-                          itab === 'schedules' ? (
-                            <Card>
-                              <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                                <CardTitle>
-                                  <GeneratedText id="m_0fc16ae9bd180d" />
-                                  <GeneratedValue value={scheduleStats.active} />)
-                                </CardTitle>
+                                </div>
                                 <GeneratedValue
                                   value={
-                                    locked ? null : (
-                                      <Link
-                                        href={
-                                          `${basePath}?tab=inspections&drawer=schedule-new` as Route
-                                        }
-                                      >
-                                        <Button size="sm">
-                                          <CalendarClock size={14} />{' '}
-                                          <GeneratedText id="m_0009414f09bdd1" />
-                                        </Button>
-                                      </Link>
-                                    )
+                                    holder ? (
+                                      <div className="text-slate-600 dark:text-slate-400">
+                                        <GeneratedText id="m_0c7e58476facb9" />
+                                        <GeneratedValue value={' '} />
+                                        <Link
+                                          href={`/people/${holder.id}`}
+                                          className="text-teal-700 hover:underline dark:text-teal-400"
+                                        >
+                                          <GeneratedValue value={holder.firstName} />{' '}
+                                          <GeneratedValue value={holder.lastName} />
+                                        </Link>
+                                      </div>
+                                    ) : null
                                   }
                                 />
-                              </CardHeader>
-                              <CardContent className="space-y-4">
-                                <SearchInput
-                                  paramKey="sch_q"
-                                  pageParamKey="sch_p"
-                                  placeholder={tGenerated('m_193581bf81b594')}
-                                />
                                 <GeneratedValue
                                   value={
-                                    schedules.length === 0 ? (
-                                      <EmptyState
-                                        icon={<CalendarClock size={24} />}
-                                        title={tGeneratedValue(
-                                          schP.q
-                                            ? tGenerated('m_0deb45ba5d4218')
-                                            : tGenerated('m_0867daf3f85e1e'),
-                                        )}
-                                        description={tGeneratedValue(
-                                          schP.q
-                                            ? tGenerated('m_1216539ec285b3')
-                                            : tGenerated('m_08a5da9cb43769'),
-                                        )}
-                                        action={
-                                          locked || schP.q ? undefined : (
-                                            <Link
-                                              href={
-                                                `${basePath}?tab=inspections&drawer=schedule-new` as Route
-                                              }
-                                            >
-                                              <Button size="sm" variant="outline">
-                                                <CalendarClock size={14} />{' '}
-                                                <GeneratedText id="m_0009414f09bdd1" />
-                                              </Button>
-                                            </Link>
-                                          )
-                                        }
-                                      />
-                                    ) : (
-                                      <Table>
-                                        <TableHeader>
-                                          <TableRow>
-                                            <TableHead>
-                                              <GeneratedText id="m_0ef24e5f31b073" />
-                                            </TableHead>
-                                            <TableHead>
-                                              <GeneratedText id="m_0a847756f27f7f" />
-                                            </TableHead>
-                                            <TableHead>
-                                              <GeneratedText id="m_0db0ed865d584f" />
-                                            </TableHead>
-                                            <TableHead>
-                                              <GeneratedText id="m_11af411751990f" />
-                                            </TableHead>
-                                            <TableHead></TableHead>
-                                          </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                          {/* Pre-use is a schedule too — the
-                                              one the crew runs every shift —
-                                              so it leads the same table
-                                              instead of hiding in its own tab. */}
-                                          <GeneratedValue
-                                            value={
-                                              item.preUseInspectionTypeId ? (
-                                                <TableRow>
-                                                  <TableCell className="font-medium">
-                                                    <GeneratedValue
-                                                      value={preUseTypeName ?? 'Pre-use checklist'}
-                                                    />
-                                                  </TableCell>
-                                                  <TableCell>
-                                                    <Badge variant="secondary">
-                                                      <GeneratedText id="m_0169e159d93a5b" />
-                                                    </Badge>
-                                                  </TableCell>
-                                                  <TableCell>
-                                                    <GeneratedValue
-                                                      value={
-                                                        item.lastPreUseInspectionAt
-                                                          ? formatDate(
-                                                              new Date(item.lastPreUseInspectionAt),
-                                                              ctx.timezone,
-                                                              ctx.locale,
-                                                            )
-                                                          : '—'
-                                                      }
-                                                    />
-                                                  </TableCell>
-                                                  <TableCell>
-                                                    <GeneratedText id="m_00cf7da85bbbeb" />
-                                                  </TableCell>
-                                                  <TableCell className="text-right">
-                                                    <div className="flex items-center justify-end gap-3">
-                                                      <StartInspectionButton
-                                                        itemId={id}
-                                                        typeId={item.preUseInspectionTypeId}
-                                                        returnTo={inspectionReturnTo}
-                                                      />
-                                                      <GeneratedValue
-                                                        value={
-                                                          locked ? null : (
-                                                            <Link
-                                                              href={
-                                                                mergeHref(basePath, sp, {
-                                                                  tab: 'inspections',
-                                                                  drawer: 'preuse',
-                                                                }) as Route
-                                                              }
-                                                              className="text-xs text-slate-500 hover:underline dark:text-slate-400"
-                                                            >
-                                                              <GeneratedText id="m_03a66f9d34ac7b" />
-                                                            </Link>
-                                                          )
-                                                        }
-                                                      />
-                                                    </div>
-                                                  </TableCell>
-                                                </TableRow>
-                                              ) : null
-                                            }
-                                          />
-                                          <GeneratedValue
-                                            value={schedules.map(
-                                              ({ schedule, type: schedType }) => {
-                                                const overdue =
-                                                  schedule.isActive && schedule.nextDueOn < todayIso
-                                                const dueSoon =
-                                                  schedule.isActive &&
-                                                  !overdue &&
-                                                  schedule.nextDueOn <= dueSoonCutoffIso
-                                                return (
-                                                  <TableRow key={schedule.id}>
-                                                    <TableCell className="font-medium">
-                                                      <GeneratedValue
-                                                        value={
-                                                          schedType?.name ??
-                                                          schedule.label ?? (
-                                                            <GeneratedText id="m_0ef24e5f31b073" />
-                                                          )
-                                                        }
-                                                      />
-                                                      <GeneratedValue
-                                                        value={
-                                                          !schedule.isActive ? (
-                                                            <Badge
-                                                              variant="secondary"
-                                                              className="ml-2"
-                                                            >
-                                                              <GeneratedText id="m_07690e88572a6c" />
-                                                            </Badge>
-                                                          ) : null
-                                                        }
-                                                      />
-                                                      <GeneratedValue
-                                                        value={
-                                                          schedule.notes ? (
-                                                            <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                                                              {schedule.notes}
-                                                            </div>
-                                                          ) : null
-                                                        }
-                                                      />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                      <Badge variant="secondary">
-                                                        <GeneratedValue
-                                                          value={formatInterval(
-                                                            schedule.intervalValue,
-                                                            schedule.intervalUnit,
-                                                          )}
-                                                        />
-                                                      </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-slate-600 dark:text-slate-300">
-                                                      <GeneratedValue
-                                                        value={schedule.lastCompletedOn ?? '—'}
-                                                      />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                      <span className="flex items-center gap-2">
-                                                        <GeneratedValue
-                                                          value={schedule.nextDueOn}
-                                                        />
-                                                        <GeneratedValue
-                                                          value={
-                                                            overdue ? (
-                                                              <Badge variant="destructive">
-                                                                <GeneratedText id="m_06e3b632d95096" />
-                                                              </Badge>
-                                                            ) : dueSoon ? (
-                                                              <Badge variant="warning">
-                                                                <GeneratedText id="m_046f5560019a3a" />
-                                                              </Badge>
-                                                            ) : null
-                                                          }
-                                                        />
-                                                      </span>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                      <div className="flex items-center justify-end gap-3">
-                                                        {!schedule.inspectionTypeId && !locked ? (
-                                                          <CompleteSchedule id={schedule.id} />
-                                                        ) : null}
-                                                        <GeneratedValue
-                                                          value={
-                                                            schedule.inspectionTypeId ? (
-                                                              <StartInspectionButton
-                                                                itemId={id}
-                                                                typeId={schedule.inspectionTypeId}
-                                                                returnTo={inspectionReturnTo}
-                                                              />
-                                                            ) : null
-                                                          }
-                                                        />
-                                                        <GeneratedValue
-                                                          value={
-                                                            locked ? null : (
-                                                              <Link
-                                                                href={
-                                                                  mergeHref(basePath, sp, {
-                                                                    tab: 'inspections',
-                                                                    drawer: `schedule-${schedule.id}`,
-                                                                  }) as Route
-                                                                }
-                                                                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                                              >
-                                                                <GeneratedText id="m_03a66f9d34ac7b" />
-                                                              </Link>
-                                                            )
-                                                          }
-                                                        />
-                                                      </div>
-                                                    </TableCell>
-                                                  </TableRow>
-                                                )
-                                              },
-                                            )}
-                                          />
-                                        </TableBody>
-                                      </Table>
-                                    )
-                                  }
-                                />
-                                <SubPagination
-                                  basePath={basePath}
-                                  sp={sp}
-                                  prefix="sch"
-                                  total={schedulesTotal}
-                                  page={schP.page}
-                                />
-                              </CardContent>
-                            </Card>
-                          ) : null
-                        }
-                      />
-
-                      {/* Ad-hoc reminders — one-off (or repeating) to-dos for this unit. */}
-                      <GeneratedValue
-                        value={
-                          itab === 'reminders' ? (
-                            <Card>
-                              <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                                <CardTitle>
-                                  <GeneratedText id="m_072abecbb75c3a" />
-                                  <GeneratedValue value={openReminderCount} />)
-                                </CardTitle>
-                                <GeneratedValue
-                                  value={
-                                    locked ? null : (
-                                      <Link
-                                        href={
-                                          `${basePath}?tab=inspections&drawer=reminder-new` as Route
-                                        }
-                                      >
-                                        <Button size="sm" variant="outline">
-                                          <BellRing size={14} />{' '}
-                                          <GeneratedText id="m_04b0444a0259a5" />
-                                        </Button>
-                                      </Link>
-                                    )
-                                  }
-                                />
-                              </CardHeader>
-                              <CardContent className="space-y-3">
-                                <SearchInput
-                                  paramKey="rem_q"
-                                  pageParamKey="rem_p"
-                                  placeholder={tGenerated('m_1e87e6122b64af')}
-                                />
-                                <GeneratedValue
-                                  value={
-                                    openReminders.length === 0 ? (
-                                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    openCheckout ? (
+                                      <div className="text-slate-600 dark:text-slate-400">
+                                        <GeneratedText id="m_0e13fb7d29d9df" />
                                         <GeneratedValue
                                           value={
-                                            remP.q ? (
-                                              <GeneratedText id="m_1e368e26abc872" />
+                                            openCheckout.co.expectedReturnOn ? (
+                                              <GeneratedText
+                                                id="m_1f5072ac43774e"
+                                                values={{
+                                                  value0: openCheckout.co.expectedReturnOn,
+                                                }}
+                                              />
                                             ) : (
-                                              <GeneratedText id="m_10d46f2397b88e" />
+                                              ''
                                             )
                                           }
                                         />
-                                      </p>
-                                    ) : (
-                                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                                        <GeneratedValue
-                                          value={openReminders.map(({ reminder, assignee }) => {
-                                            const overdue = reminder.dueOn < todayIso
-                                            return (
-                                              <li
-                                                key={reminder.id}
-                                                className="flex items-center justify-between gap-3 py-2.5"
-                                              >
-                                                <div className="min-w-0">
-                                                  <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                                                    <GeneratedValue value={reminder.title} />
-                                                    <GeneratedValue
-                                                      value={
-                                                        reminder.repeatIntervalValue &&
-                                                        reminder.repeatIntervalUnit ? (
-                                                          <Badge variant="secondary">
-                                                            {formatInterval(
-                                                              reminder.repeatIntervalValue,
-                                                              reminder.repeatIntervalUnit,
-                                                            )}
-                                                          </Badge>
-                                                        ) : null
-                                                      }
-                                                    />
-                                                  </div>
-                                                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                                                    <GeneratedText id="m_0c2eb92551e08b" />
-                                                    <GeneratedValue value={' '} />
-                                                    <span
-                                                      className={
-                                                        overdue
-                                                          ? 'font-medium text-rose-600 dark:text-rose-400'
-                                                          : undefined
-                                                      }
-                                                    >
-                                                      <GeneratedValue value={reminder.dueOn} />
-                                                    </span>
-                                                    <GeneratedValue
-                                                      value={
-                                                        assignee
-                                                          ? ` · ${assignee.firstName} ${assignee.lastName}`
-                                                          : ''
-                                                      }
-                                                    />
-                                                    <GeneratedValue
-                                                      value={
-                                                        reminder.details
-                                                          ? ` · ${reminder.details}`
-                                                          : ''
-                                                      }
-                                                    />
-                                                  </div>
-                                                </div>
-                                                <GeneratedValue
-                                                  value={
-                                                    locked ? null : (
-                                                      <div className="flex shrink-0 items-center gap-2">
-                                                        <Link
-                                                          href={
-                                                            mergeHref(basePath, sp, {
-                                                              tab: 'inspections',
-                                                              drawer: `reminder-${reminder.id}`,
-                                                            }) as Route
-                                                          }
-                                                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                                        >
-                                                          <GeneratedText id="m_03a66f9d34ac7b" />
-                                                        </Link>
-                                                        <form action={completeEquipmentReminder}>
-                                                          <input
-                                                            type="hidden"
-                                                            name="id"
-                                                            value={reminder.id}
-                                                          />
-                                                          <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            type="submit"
-                                                          >
-                                                            <Check size={14} />{' '}
-                                                            <GeneratedText id="m_00609f822e0571" />
-                                                          </Button>
-                                                        </form>
-                                                      </div>
-                                                    )
-                                                  }
-                                                />
-                                              </li>
-                                            )
-                                          })}
-                                        />
-                                      </ul>
-                                    )
+                                        .
+                                      </div>
+                                    ) : null
                                   }
                                 />
-                                <SubPagination
-                                  basePath={basePath}
-                                  sp={sp}
-                                  prefix="rem"
-                                  total={remindersTotal}
-                                  page={remP.page}
-                                />
-                              </CardContent>
-                            </Card>
-                          ) : null
-                        }
-                      />
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ) : null}
 
-                      <GeneratedValue
-                        value={
-                          itab === 'history' ? (
-                            <Card>
-                              <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                                <CardTitle>
-                                  <GeneratedText id="m_01eff32b4963db" />
-                                  <GeneratedValue value={inspectionsTotal} />)
-                                </CardTitle>
-                                <Link
-                                  href={
-                                    mergeHref(basePath, sp, {
-                                      tab: 'inspections',
-                                      drawer: 'new-inspection',
-                                    }) as Route
-                                  }
-                                  scroll={false}
-                                >
-                                  <Button size="sm">
-                                    <ClipboardCheck size={14} />{' '}
-                                    <GeneratedText id="m_0f060bce7a52ef" />
-                                  </Button>
-                                </Link>
-                              </CardHeader>
-                              <CardContent className="space-y-3">
-                                <SearchInput
-                                  paramKey="ins_q"
-                                  pageParamKey="ins_p"
-                                  placeholder={tGenerated('m_18c4fceefc4fac')}
+                        {locationView === 'custody_history' ? (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle>
+                                <GeneratedValue value={'Custody history'} />
+                                <span className="ml-1 font-normal text-slate-500">
+                                  ({historyTotal})
+                                </span>
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <SearchInput
+                                    paramKey="lh_q"
+                                    pageParamKey="lh_p"
+                                    placeholder={tGenerated('m_0f68bc19b64344')}
+                                  />
+                                </div>
+                                <SearchFilter
+                                  basePath={basePath}
+                                  currentParams={sp}
+                                  paramKey="lh_kind"
+                                  pageParamKey="lh_p"
+                                  options={[
+                                    { value: 'check_in', label: 'In' },
+                                    { value: 'check_out', label: 'Out' },
+                                    { value: 'transfer', label: 'Moved' },
+                                  ]}
+                                  placeholder={tGenerated('m_00896a07ebfbd6')}
                                 />
-                                <GeneratedValue
-                                  value={
-                                    inspectionRecords.length === 0 ? (
-                                      <EmptyState
-                                        icon={<ClipboardCheck size={24} />}
-                                        title={tGeneratedValue(
-                                          insP.q
-                                            ? tGenerated('m_0150c11d3f0eb8')
-                                            : tGenerated('m_128fa3f1eca160'),
-                                        )}
-                                        description={tGenerated('m_11123c53db10bc')}
-                                        action={
-                                          <Link
-                                            href={
-                                              mergeHref(basePath, sp, {
-                                                tab: 'inspections',
-                                                drawer: 'new-inspection',
-                                              }) as Route
-                                            }
-                                          >
-                                            <Button variant="outline" size="sm">
-                                              <GeneratedText id="m_03a42f8671d199" />
-                                            </Button>
-                                          </Link>
+                              </div>
+                              <GeneratedValue
+                                value={
+                                  history.length === 0 ? (
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                      <GeneratedValue
+                                        value={
+                                          lhP.q || sp.lh_kind ? (
+                                            <GeneratedText id="m_0df9a3c13764d8" />
+                                          ) : (
+                                            <GeneratedText id="m_0700918f8ecf46" />
+                                          )
                                         }
                                       />
-                                    ) : (
-                                      <Table>
-                                        <TableHeader>
-                                          <TableRow>
-                                            <TableHead>
-                                              <GeneratedText id="m_17dc61a19b605c" />
-                                            </TableHead>
-                                            <TableHead>
-                                              <GeneratedText id="m_074ba2f160c506" />
-                                            </TableHead>
-                                            <TableHead>
-                                              <GeneratedText id="m_16b944034f43b6" />
-                                            </TableHead>
-                                            <TableHead>
-                                              <GeneratedText id="m_100e41041dbe51" />
-                                            </TableHead>
-                                            <TableHead>
-                                              <GeneratedText id="m_0b9da892d6faf0" />
-                                            </TableHead>
-                                            <TableHead></TableHead>
-                                          </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                          <GeneratedValue
-                                            value={inspectionRecords.map(({ record, type }) => (
-                                              <TableRow key={record.id}>
-                                                <TableCell className="font-medium">
-                                                  <Link
-                                                    href={`/equipment/inspections/${record.id}`}
-                                                    className="text-teal-700 hover:underline dark:text-teal-400"
-                                                  >
-                                                    <GeneratedValue value={record.reference} />
-                                                  </Link>
-                                                </TableCell>
-                                                <TableCell className="text-slate-600 dark:text-slate-300">
-                                                  <GeneratedValue value={type?.name ?? '—'} />
-                                                </TableCell>
-                                                <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
+                                    </p>
+                                  ) : (
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>
+                                            <GeneratedText id="m_102c6fce820610" />
+                                          </TableHead>
+                                          <TableHead>
+                                            <GeneratedText id="m_13cc128f69897c" />
+                                          </TableHead>
+                                          <TableHead>
+                                            <GeneratedText id="m_020146dd3d3d5a" />
+                                          </TableHead>
+                                          <TableHead>
+                                            <GeneratedText id="m_1dd437d2b4ab7f" />
+                                          </TableHead>
+                                          <TableHead>
+                                            <GeneratedText id="m_0c33471afd0f99" />
+                                          </TableHead>
+                                          <TableHead>
+                                            <GeneratedText id="m_16d241f76641bb" />
+                                          </TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        <GeneratedValue
+                                          value={history.map((row) => (
+                                            <TableRow key={row.history.id}>
+                                              <TableCell>
+                                                <Badge
+                                                  variant={
+                                                    row.history.movementKind === 'check_in'
+                                                      ? 'success'
+                                                      : row.history.movementKind === 'check_out'
+                                                        ? 'warning'
+                                                        : 'default'
+                                                  }
+                                                >
                                                   <GeneratedValue
                                                     value={
-                                                      record.occurredAt
-                                                        ? formatDate(
-                                                            new Date(record.occurredAt),
-                                                            ctx.timezone,
-                                                            ctx.locale,
-                                                          )
-                                                        : '—'
+                                                      row.history.movementKind === 'check_in'
+                                                        ? 'In'
+                                                        : row.history.movementKind === 'check_out'
+                                                          ? 'Out'
+                                                          : 'Moved'
                                                     }
                                                   />
-                                                </TableCell>
-                                                <TableCell>
-                                                  <GeneratedValue
-                                                    value={
-                                                      record.result ? (
-                                                        <Badge
-                                                          variant={
-                                                            record.result === 'pass'
-                                                              ? 'success'
-                                                              : record.result === 'fail'
-                                                                ? 'destructive'
-                                                                : 'secondary'
-                                                          }
-                                                        >
-                                                          {record.result}
-                                                        </Badge>
-                                                      ) : (
-                                                        <span className="text-slate-400">—</span>
-                                                      )
-                                                    }
-                                                  />
-                                                </TableCell>
-                                                <TableCell>
-                                                  <Badge
-                                                    variant={
-                                                      record.status === 'closed' ||
-                                                      record.status === 'submitted'
-                                                        ? 'success'
-                                                        : 'warning'
-                                                    }
-                                                  >
-                                                    <GeneratedValue
-                                                      value={record.status.replace('_', ' ')}
-                                                    />
-                                                  </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                  <Link
-                                                    href={`/equipment/inspections/${record.id}`}
-                                                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                                  >
-                                                    <GeneratedText id="m_1be345fc118df8" />
-                                                  </Link>
-                                                </TableCell>
-                                              </TableRow>
-                                            ))}
-                                          />
-                                        </TableBody>
-                                      </Table>
-                                    )
-                                  }
-                                />
-                                <SubPagination
-                                  basePath={basePath}
-                                  sp={sp}
-                                  prefix="ins"
-                                  total={inspectionsTotal}
-                                  page={insP.page}
-                                />
-                              </CardContent>
-                            </Card>
-                          ) : null
-                        }
-                      />
-                    </div>
-                  ) : null
-                }
-              />
+                                                </Badge>
+                                              </TableCell>
+                                              <TableCell>
+                                                <GeneratedValue
+                                                  value={formatDateTime(
+                                                    new Date(row.history.recordedAt),
+                                                    ctx.timezone,
+                                                    ctx.locale,
+                                                  )}
+                                                />
+                                              </TableCell>
+                                              <TableCell>
+                                                <GeneratedValue value={row.site?.name ?? '—'} />
+                                              </TableCell>
+                                              <TableCell>
+                                                <GeneratedValue
+                                                  value={
+                                                    row.holder
+                                                      ? `${row.holder.firstName} ${row.holder.lastName}`
+                                                      : '—'
+                                                  }
+                                                />
+                                              </TableCell>
+                                              <TableCell>
+                                                <GeneratedValue
+                                                  value={
+                                                    row.history.condition
+                                                      ? (
+                                                          {
+                                                            good: 'Good',
+                                                            fair: 'Fair',
+                                                            damaged: 'Damaged',
+                                                            unusable: 'Unusable',
+                                                          } as const
+                                                        )[row.history.condition]
+                                                      : '—'
+                                                  }
+                                                />
+                                              </TableCell>
+                                              <TableCell className="text-slate-600 dark:text-slate-300">
+                                                <GeneratedValue value={row.history.note ?? '—'} />
+                                              </TableCell>
+                                            </TableRow>
+                                          ))}
+                                        />
+                                      </TableBody>
+                                    </Table>
+                                  )
+                                }
+                              />
+                              <SubPagination
+                                basePath={basePath}
+                                sp={sp}
+                                prefix="lh"
+                                total={historyTotal}
+                                page={lhP.page}
+                              />
+                            </CardContent>
+                          </Card>
+                        ) : null}
+                      </div>
+                    ) : null
+                  }
+                />
 
-              <GeneratedValue
-                value={
-                  active === 'log' ? (
-                    <div className="space-y-4">
+                <GeneratedValue
+                  value={
+                    active === 'files' ? (
                       <Card>
                         <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                           <CardTitle>
-                            <GeneratedText id="m_1f439ae7c8b459" />
-                            <GeneratedValue value={logTotal} />)
+                            <GeneratedText id="m_09a3c98fe10087" />
+                            <GeneratedValue value={certTotal} />)
                           </CardTitle>
-                          {canManageEquipment ? (
-                            <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
-                              <Button size="sm">
-                                <Plus size={14} /> <GeneratedText id="m_0e31f658c2f794" />
-                              </Button>
-                            </Link>
-                          ) : null}
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="flex items-center gap-3">
-                            <div className="min-w-0 flex-1">
-                              <SearchInput
-                                paramKey="log_q"
-                                pageParamKey="log_p"
-                                placeholder={tGenerated('m_08b5ce52d99191')}
-                              />
-                            </div>
-                            <div className="min-w-0">
-                              <FilterChips
-                                basePath={basePath}
-                                currentParams={sp}
-                                paramKey="log_kind"
-                                pageParamKey="log_p"
-                                label={tGenerated('m_1e578efe1574cd')}
-                                options={EQUIPMENT_LOG_KINDS.map((value) => ({
-                                  value,
-                                  label: value[0]!.toUpperCase() + value.slice(1),
-                                }))}
-                              />
-                            </div>
-                          </div>
                           <GeneratedValue
                             value={
-                              logEntries.length === 0 ? (
+                              locked ? null : (
+                                <Link href={`${basePath}?tab=files&drawer=upload-file` as Route}>
+                                  <Button size="sm">
+                                    <Plus size={14} /> <GeneratedText id="m_06dc5804d9c769" />
+                                  </Button>
+                                </Link>
+                              )
+                            }
+                          />
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <SearchInput
+                            paramKey="f_q"
+                            pageParamKey="f_p"
+                            placeholder={tGenerated('m_14336d47f7a210')}
+                          />
+                          <GeneratedValue
+                            value={
+                              certAttachments.length === 0 ? (
                                 <EmptyState
+                                  icon={<FileText size={24} />}
                                   title={tGeneratedValue(
-                                    logP.q
-                                      ? tGenerated('m_11344a9736976e')
-                                      : tGenerated('m_0501b5bad54cf2'),
+                                    fP.q
+                                      ? tGenerated('m_1bc5136c243bd4')
+                                      : tGenerated('m_122d94d2e8b453'),
                                   )}
-                                  description={tGenerated('m_195d4afe8f01da')}
+                                  description={tGenerated('m_00a186628dba7e')}
                                   action={
-                                    canManageEquipment ? (
-                                      <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
+                                    locked ? undefined : (
+                                      <Link
+                                        href={`${basePath}?tab=files&drawer=upload-file` as Route}
+                                      >
                                         <Button size="sm" variant="outline">
-                                          <Plus size={14} /> <GeneratedText id="m_089b693b7f3e46" />
+                                          <Plus size={14} /> <GeneratedText id="m_06dc5804d9c769" />
                                         </Button>
                                       </Link>
-                                    ) : undefined
+                                    )
                                   }
                                 />
                               ) : (
@@ -3151,87 +2200,107 @@ export default async function EquipmentDetailPage({
                                   <TableHeader>
                                     <TableRow>
                                       <TableHead>
-                                        <GeneratedText id="m_0285c38761c540" />
+                                        <GeneratedText id="m_102a42d098d1d2" />
                                       </TableHead>
                                       <TableHead>
-                                        <GeneratedText id="m_1e578efe1574cd" />
+                                        <GeneratedText id="m_108b41637f364f" />
                                       </TableHead>
                                       <TableHead>
-                                        <GeneratedText id="m_0bb3c5fab55c31" />
+                                        <GeneratedText id="m_11ad4bbeced31b" />
                                       </TableHead>
                                       <TableHead>
-                                        <GeneratedText id="m_12e926c9216094" />
+                                        <GeneratedText id="m_028e286aa7b299" />
                                       </TableHead>
-                                      <TableHead className="text-right">
-                                        <GeneratedValue value="Amount" />
-                                      </TableHead>
+                                      <TableHead></TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
                                     <GeneratedValue
-                                      value={logEntries.map(({ log, person }) => (
-                                        <RecordTableRow
-                                          key={log.id}
-                                          href={
-                                            canManageEquipment
-                                              ? mergeHref(basePath, sp, {
-                                                  tab: 'log',
-                                                  drawer: 'edit-log',
-                                                  entryId: log.id,
-                                                })
-                                              : undefined
-                                          }
-                                        >
-                                          <TableCell className="font-mono text-xs">
-                                            {canManageEquipment ? (
-                                              <Link
-                                                href={
-                                                  mergeHref(basePath, sp, {
-                                                    tab: 'log',
-                                                    drawer: 'edit-log',
-                                                    entryId: log.id,
-                                                  }) as Route
+                                      value={certAttachments.map((a) => {
+                                        const exif = a.exif as Record<string, unknown> | null
+                                        const fileLabel = exif?.label
+                                        const fileKind =
+                                          typeof exif?.kind === 'string' ? exif.kind : null
+                                        return (
+                                          <TableRow key={a.id}>
+                                            <TableCell className="font-medium">
+                                              <GeneratedValue
+                                                value={
+                                                  typeof fileLabel === 'string' && fileLabel ? (
+                                                    <>
+                                                      <div>{fileLabel}</div>
+                                                      <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                                                        {a.filename}
+                                                      </div>
+                                                    </>
+                                                  ) : (
+                                                    a.filename
+                                                  )
                                                 }
-                                                className="underline decoration-dotted underline-offset-4"
-                                                aria-label={`${tGeneratedValue('Edit log entry')}: ${log.title ?? log.entryDate}`}
-                                              >
-                                                <GeneratedValue value={log.entryDate} />
-                                              </Link>
-                                            ) : (
-                                              <GeneratedValue value={log.entryDate} />
-                                            )}
-                                          </TableCell>
-                                          <TableCell>
-                                            <Badge variant="secondary">
-                                              <GeneratedValue value={log.kind} />
-                                            </Badge>
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                log.title ? (
-                                                  <div className="font-medium">{log.title}</div>
-                                                ) : null
-                                              }
-                                            />
-                                            <div className="text-xs whitespace-pre-wrap text-slate-600">
-                                              <GeneratedValue value={log.details} />
-                                            </div>
-                                          </TableCell>
-                                          <TableCell className="text-slate-600">
-                                            <GeneratedValue
-                                              value={
-                                                person
-                                                  ? `${person.firstName} ${person.lastName}`
-                                                  : '—'
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-right font-mono tabular-nums">
-                                            <GeneratedValue value={log.amount ?? '—'} />
-                                          </TableCell>
-                                        </RecordTableRow>
-                                      ))}
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <Badge variant="secondary">
+                                                <GeneratedValue
+                                                  value={(fileKind ?? 'document').replace('_', ' ')}
+                                                />
+                                              </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-slate-600 dark:text-slate-300">
+                                              <GeneratedValue value={humanSize(a.sizeBytes)} />
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue
+                                                value={formatDate(
+                                                  new Date(a.createdAt),
+                                                  ctx.timezone,
+                                                  ctx.locale,
+                                                )}
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <div className="flex items-center justify-end gap-3">
+                                                <a
+                                                  href={attachmentUrl(a.id)}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                >
+                                                  <GeneratedText id="m_0871fb8eeeedd0" />
+                                                </a>
+                                                <GeneratedValue
+                                                  value={
+                                                    locked ? null : (
+                                                      <form
+                                                        action={deleteEquipmentFile}
+                                                        className="inline"
+                                                      >
+                                                        <input
+                                                          type="hidden"
+                                                          name="itemId"
+                                                          value={id}
+                                                        />
+                                                        <input
+                                                          type="hidden"
+                                                          name="attachmentId"
+                                                          value={a.id}
+                                                        />
+                                                        <button
+                                                          type="submit"
+                                                          title={tGenerated('m_02038865a602d6')}
+                                                          className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                                                        >
+                                                          <Trash2 size={14} />
+                                                        </button>
+                                                      </form>
+                                                    )
+                                                  }
+                                                />
+                                              </div>
+                                            </TableCell>
+                                          </TableRow>
+                                        )
+                                      })}
                                     />
                                   </TableBody>
                                 </Table>
@@ -3241,515 +2310,1344 @@ export default async function EquipmentDetailPage({
                           <SubPagination
                             basePath={basePath}
                             sp={sp}
-                            prefix="log"
-                            total={logTotal}
-                            page={logP.page}
+                            prefix="f"
+                            total={certTotal}
+                            page={fP.page}
                           />
                         </CardContent>
                       </Card>
-                    </div>
-                  ) : null
-                }
-              />
+                    ) : null
+                  }
+                />
 
-              <GeneratedValue
-                value={
-                  active === 'activity' ? (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>
-                          <Activity size={14} className="mr-2 inline" />{' '}
-                          <GeneratedText id="m_14b78af1b2f95e" />
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <ActivityFeed
-                          entries={activity}
-                          timeZone={ctx.timezone}
-                          locale={ctx.locale}
+                <GeneratedValue
+                  value={
+                    active === 'inspections' ? (
+                      <div className="space-y-4">
+                        <TabNav
+                          variant="pills"
+                          paramKey="itab"
+                          basePath={basePath}
+                          currentParams={sp}
+                          active={itab}
+                          tabs={[
+                            {
+                              key: 'schedules',
+                              label: 'Schedules',
+                              count: scheduleStats.active + (item.preUseInspectionTypeId ? 1 : 0),
+                            },
+                            { key: 'oil', label: 'Oil changes' },
+                            { key: 'reminders', label: 'Reminders', count: openReminderCount },
+                            { key: 'history', label: 'History', count: inspectionsTotal },
+                          ]}
                         />
-                      </CardContent>
-                    </Card>
-                  ) : null
-                }
-              />
-            </TabContent>
+                        {itab === 'oil' ? (
+                          <OilChangeCard
+                            key={`${item.updatedAt}`}
+                            itemId={id}
+                            enabled={item.requiresOilChange}
+                            interval={item.oilChangeIntervalMonths}
+                            last={item.lastOilChangeOn}
+                            next={item.nextOilChangeDue}
+                            hours={
+                              typeof item.metadata.lastOilHours === 'number'
+                                ? item.metadata.lastOilHours
+                                : null
+                            }
+                            canEdit={canManageEquipment}
+                          />
+                        ) : null}
+                        {/*
+                         * Pre-use is the check a crew actually runs every shift,
+                         * so it leads the tab in its own section rather than
+                         * sitting under the schedules table's pagination.
+                         */}
+
+                        {/*
+                         * Recurring schedules — the per-unit cadences (any interval:
+                         * daily, monthly, every 3 months, annual, 5-year, …) that
+                         * drive the maintenance cockpit and overdue tracking.
+                         */}
+                        <GeneratedValue
+                          value={
+                            itab === 'schedules' ? (
+                              <Card>
+                                <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                                  <CardTitle>
+                                    <GeneratedText id="m_0fc16ae9bd180d" />
+                                    <GeneratedValue value={scheduleStats.active} />)
+                                  </CardTitle>
+                                  <GeneratedValue
+                                    value={
+                                      locked ? null : (
+                                        <Link
+                                          href={
+                                            `${basePath}?tab=inspections&drawer=schedule-new` as Route
+                                          }
+                                        >
+                                          <Button size="sm">
+                                            <CalendarClock size={14} />{' '}
+                                            <GeneratedText id="m_0009414f09bdd1" />
+                                          </Button>
+                                        </Link>
+                                      )
+                                    }
+                                  />
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                  <SearchInput
+                                    paramKey="sch_q"
+                                    pageParamKey="sch_p"
+                                    placeholder={tGenerated('m_193581bf81b594')}
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      schedules.length === 0 ? (
+                                        <EmptyState
+                                          icon={<CalendarClock size={24} />}
+                                          title={tGeneratedValue(
+                                            schP.q
+                                              ? tGenerated('m_0deb45ba5d4218')
+                                              : tGenerated('m_0867daf3f85e1e'),
+                                          )}
+                                          description={tGeneratedValue(
+                                            schP.q
+                                              ? tGenerated('m_1216539ec285b3')
+                                              : tGenerated('m_08a5da9cb43769'),
+                                          )}
+                                          action={
+                                            locked || schP.q ? undefined : (
+                                              <Link
+                                                href={
+                                                  `${basePath}?tab=inspections&drawer=schedule-new` as Route
+                                                }
+                                              >
+                                                <Button size="sm" variant="outline">
+                                                  <CalendarClock size={14} />{' '}
+                                                  <GeneratedText id="m_0009414f09bdd1" />
+                                                </Button>
+                                              </Link>
+                                            )
+                                          }
+                                        />
+                                      ) : (
+                                        <Table>
+                                          <TableHeader>
+                                            <TableRow>
+                                              <TableHead>
+                                                <GeneratedText id="m_0ef24e5f31b073" />
+                                              </TableHead>
+                                              <TableHead>
+                                                <GeneratedText id="m_0a847756f27f7f" />
+                                              </TableHead>
+                                              <TableHead>
+                                                <GeneratedText id="m_0db0ed865d584f" />
+                                              </TableHead>
+                                              <TableHead>
+                                                <GeneratedText id="m_11af411751990f" />
+                                              </TableHead>
+                                              <TableHead></TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            {/* Pre-use is a schedule too — the
+                                              one the crew runs every shift —
+                                              so it leads the same table
+                                              instead of hiding in its own tab. */}
+                                            <GeneratedValue
+                                              value={
+                                                item.preUseInspectionTypeId ? (
+                                                  <TableRow>
+                                                    <TableCell className="font-medium">
+                                                      <GeneratedValue
+                                                        value={
+                                                          preUseTypeName ?? 'Pre-use checklist'
+                                                        }
+                                                      />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <Badge variant="secondary">
+                                                        <GeneratedText id="m_0169e159d93a5b" />
+                                                      </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <GeneratedValue
+                                                        value={
+                                                          item.lastPreUseInspectionAt
+                                                            ? formatDate(
+                                                                new Date(
+                                                                  item.lastPreUseInspectionAt,
+                                                                ),
+                                                                ctx.timezone,
+                                                                ctx.locale,
+                                                              )
+                                                            : '—'
+                                                        }
+                                                      />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <GeneratedText id="m_00cf7da85bbbeb" />
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                      <div className="flex items-center justify-end gap-3">
+                                                        <StartInspectionButton
+                                                          itemId={id}
+                                                          typeId={item.preUseInspectionTypeId}
+                                                          returnTo={inspectionReturnTo}
+                                                        />
+                                                        <GeneratedValue
+                                                          value={
+                                                            locked ? null : (
+                                                              <Link
+                                                                href={
+                                                                  mergeHref(basePath, sp, {
+                                                                    tab: 'inspections',
+                                                                    drawer: 'preuse',
+                                                                  }) as Route
+                                                                }
+                                                                className="text-xs text-slate-500 hover:underline dark:text-slate-400"
+                                                              >
+                                                                <GeneratedText id="m_03a66f9d34ac7b" />
+                                                              </Link>
+                                                            )
+                                                          }
+                                                        />
+                                                      </div>
+                                                    </TableCell>
+                                                  </TableRow>
+                                                ) : null
+                                              }
+                                            />
+                                            <GeneratedValue
+                                              value={schedules.map(
+                                                ({ schedule, type: schedType }) => {
+                                                  const overdue =
+                                                    schedule.isActive &&
+                                                    schedule.nextDueOn < todayIso
+                                                  const dueSoon =
+                                                    schedule.isActive &&
+                                                    !overdue &&
+                                                    schedule.nextDueOn <= dueSoonCutoffIso
+                                                  return (
+                                                    <TableRow key={schedule.id}>
+                                                      <TableCell className="font-medium">
+                                                        <GeneratedValue
+                                                          value={
+                                                            schedType?.name ??
+                                                            schedule.label ?? (
+                                                              <GeneratedText id="m_0ef24e5f31b073" />
+                                                            )
+                                                          }
+                                                        />
+                                                        <GeneratedValue
+                                                          value={
+                                                            !schedule.isActive ? (
+                                                              <Badge
+                                                                variant="secondary"
+                                                                className="ml-2"
+                                                              >
+                                                                <GeneratedText id="m_07690e88572a6c" />
+                                                              </Badge>
+                                                            ) : null
+                                                          }
+                                                        />
+                                                        <GeneratedValue
+                                                          value={
+                                                            schedule.notes ? (
+                                                              <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                                                                {schedule.notes}
+                                                              </div>
+                                                            ) : null
+                                                          }
+                                                        />
+                                                      </TableCell>
+                                                      <TableCell>
+                                                        <Badge variant="secondary">
+                                                          <GeneratedValue
+                                                            value={formatInterval(
+                                                              schedule.intervalValue,
+                                                              schedule.intervalUnit,
+                                                            )}
+                                                          />
+                                                        </Badge>
+                                                      </TableCell>
+                                                      <TableCell className="text-slate-600 dark:text-slate-300">
+                                                        <GeneratedValue
+                                                          value={schedule.lastCompletedOn ?? '—'}
+                                                        />
+                                                      </TableCell>
+                                                      <TableCell>
+                                                        <span className="flex items-center gap-2">
+                                                          <GeneratedValue
+                                                            value={schedule.nextDueOn}
+                                                          />
+                                                          <GeneratedValue
+                                                            value={
+                                                              overdue ? (
+                                                                <Badge variant="destructive">
+                                                                  <GeneratedText id="m_06e3b632d95096" />
+                                                                </Badge>
+                                                              ) : dueSoon ? (
+                                                                <Badge variant="warning">
+                                                                  <GeneratedText id="m_046f5560019a3a" />
+                                                                </Badge>
+                                                              ) : null
+                                                            }
+                                                          />
+                                                        </span>
+                                                      </TableCell>
+                                                      <TableCell>
+                                                        <div className="flex items-center justify-end gap-3">
+                                                          {!schedule.inspectionTypeId && !locked ? (
+                                                            <CompleteSchedule id={schedule.id} />
+                                                          ) : null}
+                                                          <GeneratedValue
+                                                            value={
+                                                              schedule.inspectionTypeId ? (
+                                                                <StartInspectionButton
+                                                                  itemId={id}
+                                                                  typeId={schedule.inspectionTypeId}
+                                                                  returnTo={inspectionReturnTo}
+                                                                />
+                                                              ) : null
+                                                            }
+                                                          />
+                                                          <GeneratedValue
+                                                            value={
+                                                              locked ? null : (
+                                                                <Link
+                                                                  href={
+                                                                    mergeHref(basePath, sp, {
+                                                                      tab: 'inspections',
+                                                                      drawer: `schedule-${schedule.id}`,
+                                                                    }) as Route
+                                                                  }
+                                                                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                                >
+                                                                  <GeneratedText id="m_03a66f9d34ac7b" />
+                                                                </Link>
+                                                              )
+                                                            }
+                                                          />
+                                                        </div>
+                                                      </TableCell>
+                                                    </TableRow>
+                                                  )
+                                                },
+                                              )}
+                                            />
+                                          </TableBody>
+                                        </Table>
+                                      )
+                                    }
+                                  />
+                                  <SubPagination
+                                    basePath={basePath}
+                                    sp={sp}
+                                    prefix="sch"
+                                    total={schedulesTotal}
+                                    page={schP.page}
+                                  />
+                                </CardContent>
+                              </Card>
+                            ) : null
+                          }
+                        />
+
+                        {/* Ad-hoc reminders — one-off (or repeating) to-dos for this unit. */}
+                        <GeneratedValue
+                          value={
+                            itab === 'reminders' ? (
+                              <Card>
+                                <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                                  <CardTitle>
+                                    <GeneratedText id="m_072abecbb75c3a" />
+                                    <GeneratedValue value={openReminderCount} />)
+                                  </CardTitle>
+                                  <GeneratedValue
+                                    value={
+                                      locked ? null : (
+                                        <Link
+                                          href={
+                                            `${basePath}?tab=inspections&drawer=reminder-new` as Route
+                                          }
+                                        >
+                                          <Button size="sm" variant="outline">
+                                            <BellRing size={14} />{' '}
+                                            <GeneratedText id="m_04b0444a0259a5" />
+                                          </Button>
+                                        </Link>
+                                      )
+                                    }
+                                  />
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                  <SearchInput
+                                    paramKey="rem_q"
+                                    pageParamKey="rem_p"
+                                    placeholder={tGenerated('m_1e87e6122b64af')}
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      openReminders.length === 0 ? (
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                                          <GeneratedValue
+                                            value={
+                                              remP.q ? (
+                                                <GeneratedText id="m_1e368e26abc872" />
+                                              ) : (
+                                                <GeneratedText id="m_10d46f2397b88e" />
+                                              )
+                                            }
+                                          />
+                                        </p>
+                                      ) : (
+                                        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                                          <GeneratedValue
+                                            value={openReminders.map(({ reminder, assignee }) => {
+                                              const overdue = reminder.dueOn < todayIso
+                                              return (
+                                                <li
+                                                  key={reminder.id}
+                                                  className="flex items-center justify-between gap-3 py-2.5"
+                                                >
+                                                  <div className="min-w-0">
+                                                    <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                                      <GeneratedValue value={reminder.title} />
+                                                      <GeneratedValue
+                                                        value={
+                                                          reminder.repeatIntervalValue &&
+                                                          reminder.repeatIntervalUnit ? (
+                                                            <Badge variant="secondary">
+                                                              {formatInterval(
+                                                                reminder.repeatIntervalValue,
+                                                                reminder.repeatIntervalUnit,
+                                                              )}
+                                                            </Badge>
+                                                          ) : null
+                                                        }
+                                                      />
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                      <GeneratedText id="m_0c2eb92551e08b" />
+                                                      <GeneratedValue value={' '} />
+                                                      <span
+                                                        className={
+                                                          overdue
+                                                            ? 'font-medium text-rose-600 dark:text-rose-400'
+                                                            : undefined
+                                                        }
+                                                      >
+                                                        <GeneratedValue value={reminder.dueOn} />
+                                                      </span>
+                                                      <GeneratedValue
+                                                        value={
+                                                          assignee
+                                                            ? ` · ${assignee.firstName} ${assignee.lastName}`
+                                                            : ''
+                                                        }
+                                                      />
+                                                      <GeneratedValue
+                                                        value={
+                                                          reminder.details
+                                                            ? ` · ${reminder.details}`
+                                                            : ''
+                                                        }
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                  <GeneratedValue
+                                                    value={
+                                                      locked ? null : (
+                                                        <div className="flex shrink-0 items-center gap-2">
+                                                          <Link
+                                                            href={
+                                                              mergeHref(basePath, sp, {
+                                                                tab: 'inspections',
+                                                                drawer: `reminder-${reminder.id}`,
+                                                              }) as Route
+                                                            }
+                                                            className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                          >
+                                                            <GeneratedText id="m_03a66f9d34ac7b" />
+                                                          </Link>
+                                                          <form action={completeEquipmentReminder}>
+                                                            <input
+                                                              type="hidden"
+                                                              name="id"
+                                                              value={reminder.id}
+                                                            />
+                                                            <Button
+                                                              size="sm"
+                                                              variant="outline"
+                                                              type="submit"
+                                                            >
+                                                              <Check size={14} />{' '}
+                                                              <GeneratedText id="m_00609f822e0571" />
+                                                            </Button>
+                                                          </form>
+                                                        </div>
+                                                      )
+                                                    }
+                                                  />
+                                                </li>
+                                              )
+                                            })}
+                                          />
+                                        </ul>
+                                      )
+                                    }
+                                  />
+                                  <SubPagination
+                                    basePath={basePath}
+                                    sp={sp}
+                                    prefix="rem"
+                                    total={remindersTotal}
+                                    page={remP.page}
+                                  />
+                                </CardContent>
+                              </Card>
+                            ) : null
+                          }
+                        />
+
+                        <GeneratedValue
+                          value={
+                            itab === 'history' ? (
+                              <Card>
+                                <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                                  <CardTitle>
+                                    <GeneratedText id="m_01eff32b4963db" />
+                                    <GeneratedValue value={inspectionsTotal} />)
+                                  </CardTitle>
+                                  <Link
+                                    href={
+                                      mergeHref(basePath, sp, {
+                                        tab: 'inspections',
+                                        drawer: 'new-inspection',
+                                      }) as Route
+                                    }
+                                    scroll={false}
+                                  >
+                                    <Button size="sm">
+                                      <ClipboardCheck size={14} />{' '}
+                                      <GeneratedText id="m_0f060bce7a52ef" />
+                                    </Button>
+                                  </Link>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                  <SearchInput
+                                    paramKey="ins_q"
+                                    pageParamKey="ins_p"
+                                    placeholder={tGenerated('m_18c4fceefc4fac')}
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      inspectionRecords.length === 0 ? (
+                                        <EmptyState
+                                          icon={<ClipboardCheck size={24} />}
+                                          title={tGeneratedValue(
+                                            insP.q
+                                              ? tGenerated('m_0150c11d3f0eb8')
+                                              : tGenerated('m_128fa3f1eca160'),
+                                          )}
+                                          description={tGenerated('m_11123c53db10bc')}
+                                          action={
+                                            <Link
+                                              href={
+                                                mergeHref(basePath, sp, {
+                                                  tab: 'inspections',
+                                                  drawer: 'new-inspection',
+                                                }) as Route
+                                              }
+                                            >
+                                              <Button variant="outline" size="sm">
+                                                <GeneratedText id="m_03a42f8671d199" />
+                                              </Button>
+                                            </Link>
+                                          }
+                                        />
+                                      ) : (
+                                        <Table>
+                                          <TableHeader>
+                                            <TableRow>
+                                              <TableHead>
+                                                <GeneratedText id="m_17dc61a19b605c" />
+                                              </TableHead>
+                                              <TableHead>
+                                                <GeneratedText id="m_074ba2f160c506" />
+                                              </TableHead>
+                                              <TableHead>
+                                                <GeneratedText id="m_16b944034f43b6" />
+                                              </TableHead>
+                                              <TableHead>
+                                                <GeneratedText id="m_100e41041dbe51" />
+                                              </TableHead>
+                                              <TableHead>
+                                                <GeneratedText id="m_0b9da892d6faf0" />
+                                              </TableHead>
+                                              <TableHead></TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            <GeneratedValue
+                                              value={inspectionRecords.map(({ record, type }) => (
+                                                <TableRow key={record.id}>
+                                                  <TableCell className="font-medium">
+                                                    <Link
+                                                      href={`/equipment/inspections/${record.id}`}
+                                                      className="text-teal-700 hover:underline dark:text-teal-400"
+                                                    >
+                                                      <GeneratedValue value={record.reference} />
+                                                    </Link>
+                                                  </TableCell>
+                                                  <TableCell className="text-slate-600 dark:text-slate-300">
+                                                    <GeneratedValue value={type?.name ?? '—'} />
+                                                  </TableCell>
+                                                  <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
+                                                    <GeneratedValue
+                                                      value={
+                                                        record.occurredAt
+                                                          ? formatDate(
+                                                              new Date(record.occurredAt),
+                                                              ctx.timezone,
+                                                              ctx.locale,
+                                                            )
+                                                          : '—'
+                                                      }
+                                                    />
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <GeneratedValue
+                                                      value={
+                                                        record.result ? (
+                                                          <Badge
+                                                            variant={
+                                                              record.result === 'pass'
+                                                                ? 'success'
+                                                                : record.result === 'fail'
+                                                                  ? 'destructive'
+                                                                  : 'secondary'
+                                                            }
+                                                          >
+                                                            {record.result}
+                                                          </Badge>
+                                                        ) : (
+                                                          <span className="text-slate-400">—</span>
+                                                        )
+                                                      }
+                                                    />
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <Badge
+                                                      variant={
+                                                        record.status === 'closed' ||
+                                                        record.status === 'submitted'
+                                                          ? 'success'
+                                                          : 'warning'
+                                                      }
+                                                    >
+                                                      <GeneratedValue
+                                                        value={record.status.replace('_', ' ')}
+                                                      />
+                                                    </Badge>
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <Link
+                                                      href={`/equipment/inspections/${record.id}`}
+                                                      className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                    >
+                                                      <GeneratedText id="m_1be345fc118df8" />
+                                                    </Link>
+                                                  </TableCell>
+                                                </TableRow>
+                                              ))}
+                                            />
+                                          </TableBody>
+                                        </Table>
+                                      )
+                                    }
+                                  />
+                                  <SubPagination
+                                    basePath={basePath}
+                                    sp={sp}
+                                    prefix="ins"
+                                    total={inspectionsTotal}
+                                    page={insP.page}
+                                  />
+                                </CardContent>
+                              </Card>
+                            ) : null
+                          }
+                        />
+                      </div>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    active === 'log' ? (
+                      <div className="space-y-4">
+                        <Card>
+                          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                            <CardTitle>
+                              <GeneratedText id="m_1f439ae7c8b459" />
+                              <GeneratedValue value={logTotal} />)
+                            </CardTitle>
+                            {canManageEquipment ? (
+                              <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
+                                <Button size="sm">
+                                  <Plus size={14} /> <GeneratedText id="m_0e31f658c2f794" />
+                                </Button>
+                              </Link>
+                            ) : null}
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <div className="flex items-center gap-3">
+                              <div className="min-w-0 flex-1">
+                                <SearchInput
+                                  paramKey="log_q"
+                                  pageParamKey="log_p"
+                                  placeholder={tGenerated('m_08b5ce52d99191')}
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <FilterChips
+                                  basePath={basePath}
+                                  currentParams={sp}
+                                  paramKey="log_kind"
+                                  pageParamKey="log_p"
+                                  label={tGenerated('m_1e578efe1574cd')}
+                                  options={EQUIPMENT_LOG_KINDS.map((value) => ({
+                                    value,
+                                    label: value[0]!.toUpperCase() + value.slice(1),
+                                  }))}
+                                />
+                              </div>
+                            </div>
+                            <GeneratedValue
+                              value={
+                                logEntries.length === 0 ? (
+                                  <EmptyState
+                                    title={tGeneratedValue(
+                                      logP.q
+                                        ? tGenerated('m_11344a9736976e')
+                                        : tGenerated('m_0501b5bad54cf2'),
+                                    )}
+                                    description={tGenerated('m_195d4afe8f01da')}
+                                    action={
+                                      canManageEquipment ? (
+                                        <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
+                                          <Button size="sm" variant="outline">
+                                            <Plus size={14} />{' '}
+                                            <GeneratedText id="m_089b693b7f3e46" />
+                                          </Button>
+                                        </Link>
+                                      ) : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>
+                                          <GeneratedText id="m_0285c38761c540" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_1e578efe1574cd" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_0bb3c5fab55c31" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_12e926c9216094" />
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                          <GeneratedValue value="Amount" />
+                                        </TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      <GeneratedValue
+                                        value={logEntries.map(({ log, person }) => (
+                                          <RecordTableRow
+                                            key={log.id}
+                                            href={
+                                              canManageEquipment
+                                                ? mergeHref(basePath, sp, {
+                                                    tab: 'log',
+                                                    drawer: 'edit-log',
+                                                    entryId: log.id,
+                                                  })
+                                                : undefined
+                                            }
+                                          >
+                                            <TableCell className="font-mono text-xs">
+                                              {canManageEquipment ? (
+                                                <Link
+                                                  href={
+                                                    mergeHref(basePath, sp, {
+                                                      tab: 'log',
+                                                      drawer: 'edit-log',
+                                                      entryId: log.id,
+                                                    }) as Route
+                                                  }
+                                                  className="underline decoration-dotted underline-offset-4"
+                                                  aria-label={`${tGeneratedValue('Edit log entry')}: ${log.title ?? log.entryDate}`}
+                                                >
+                                                  <GeneratedValue value={log.entryDate} />
+                                                </Link>
+                                              ) : (
+                                                <GeneratedValue value={log.entryDate} />
+                                              )}
+                                            </TableCell>
+                                            <TableCell>
+                                              <Badge variant="secondary">
+                                                <GeneratedValue value={log.kind} />
+                                              </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue
+                                                value={
+                                                  log.title ? (
+                                                    <div className="font-medium">{log.title}</div>
+                                                  ) : null
+                                                }
+                                              />
+                                              <div className="text-xs whitespace-pre-wrap text-slate-600">
+                                                <GeneratedValue value={log.details} />
+                                              </div>
+                                            </TableCell>
+                                            <TableCell className="text-slate-600">
+                                              <GeneratedValue
+                                                value={
+                                                  person
+                                                    ? `${person.firstName} ${person.lastName}`
+                                                    : '—'
+                                                }
+                                              />
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono tabular-nums">
+                                              <GeneratedValue value={log.amount ?? '—'} />
+                                            </TableCell>
+                                          </RecordTableRow>
+                                        ))}
+                                      />
+                                    </TableBody>
+                                  </Table>
+                                )
+                              }
+                            />
+                            <SubPagination
+                              basePath={basePath}
+                              sp={sp}
+                              prefix="log"
+                              total={logTotal}
+                              page={logP.page}
+                            />
+                          </CardContent>
+                        </Card>
+                      </div>
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    active === 'activity' ? (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>
+                            <Activity size={14} className="mr-2 inline" />{' '}
+                            <GeneratedText id="m_14b78af1b2f95e" />
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ActivityFeed
+                            entries={activity}
+                            timeZone={ctx.timezone}
+                            locale={ctx.locale}
+                          />
+                        </CardContent>
+                      </Card>
+                    ) : null
+                  }
+                />
+              </TabContent>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/*
-       * Sub-entity drawers. Mounted once per page; only one renders open at
-       * a time based on `?drawer=…`. Each form has an id so the sticky
-       * footer's submit button can target it via the `form` attribute.
-       * Closing (X / backdrop / Esc) pops back to closeHref preserving the
-       * active tab.
-       */}
-      <UrlDrawer
-        open={(drawerKey === 'add-log' || Boolean(editingLog)) && canManageEquipment}
-        closeHref={closeHref}
-        title={editingLog ? tGeneratedValue('Edit log entry') : tGenerated('m_0e31f658c2f794')}
-        description={tGenerated('m_09f67f2ca76754')}
-        size="md"
-        footer={
-          <div className="flex w-full items-center justify-end gap-2">
-            {editingLog ? (
-              <ConfirmButton
-                type="submit"
-                form="equipment-add-log-form"
-                formAction={deleteLogEntry}
-                formNoValidate
-                variant="destructive"
-                className="mr-auto"
-                message={tGeneratedValue('Delete this log entry? This cannot be undone.')}
-              >
-                <Trash2 size={14} /> <GeneratedValue value="Delete entry" />
-              </ConfirmButton>
-            ) : null}
-            <Button type="submit" form="equipment-add-log-form">
+        {/*
+         * Sub-entity drawers. Mounted once per page; only one renders open at
+         * a time based on `?drawer=…`. Each form has an id so the sticky
+         * footer's submit button can target it via the `form` attribute.
+         * Closing (X / backdrop / Esc) pops back to closeHref preserving the
+         * active tab.
+         */}
+        <UrlDrawer
+          open={(drawerKey === 'add-log' || Boolean(editingLog)) && canManageEquipment}
+          closeHref={closeHref}
+          title={editingLog ? tGeneratedValue('Edit log entry') : tGenerated('m_0e31f658c2f794')}
+          description={tGenerated('m_09f67f2ca76754')}
+          size="md"
+          footer={
+            <div className="flex w-full items-center justify-end gap-2">
               {editingLog ? (
-                <>
-                  <Check size={14} /> <GeneratedValue value="Save changes" />
-                </>
-              ) : (
-                <>
-                  <Plus size={14} /> <GeneratedText id="m_1ea3a4ad13d4d7" />
-                </>
-              )}
-            </Button>
-          </div>
-        }
-      >
-        <form
-          id="equipment-add-log-form"
-          key={editingLog?.id ?? 'new-log'}
-          action={saveLogEntry}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        >
-          <input type="hidden" name="itemId" value={id} />
-          <input type="hidden" name="returnHref" value={closeHref} />
-          {editingLog ? (
-            <>
-              <input type="hidden" name="entryId" value={editingLog.id} />
-              <input
-                type="hidden"
-                name="expectedUpdatedAt"
-                value={editingLog.updatedAt.toISOString()}
-              />
-            </>
-          ) : null}
-          <Field label={tGenerated('m_0285c38761c540')} required>
-            <Input
-              name="entryDate"
-              type="date"
-              required
-              defaultValue={editingLog?.entryDate ?? new Date().toISOString().slice(0, 10)}
-            />
-          </Field>
-          <EquipmentLogKindFields
-            defaultKind={editingLog?.kind}
-            defaultAmount={editingLog?.amount}
-          />
-          <Field label={tGenerated('m_0decefd558c355')} className="sm:col-span-2">
-            <Input
-              name="title"
-              defaultValue={editingLog?.title ?? undefined}
-              maxLength={240}
-              placeholder={tGenerated('m_11393661c7db12')}
-            />
-          </Field>
-          <Field label={tGenerated('m_1560d4e2a09d09')} required className="sm:col-span-2">
-            <Textarea
-              name="details"
-              defaultValue={editingLog?.details}
-              rows={5}
-              maxLength={10000}
-              required
-            />
-          </Field>
-        </form>
-      </UrlDrawer>
-
-      <UrlDrawer
-        open={drawerKey === 'report-missing' && !item.isMissing}
-        closeHref={closeHref}
-        title={tGenerated('m_08cbe6945650bd')}
-        description={tGenerated('m_0baf65c8694ca8')}
-        size="md"
-        footer={
-          <Button type="submit" form="equipment-report-missing-form" variant="destructive">
-            <Search size={14} /> <GeneratedText id="m_08cbe6945650bd" />
-          </Button>
-        }
-      >
-        <form
-          id="equipment-report-missing-form"
-          action={reportMissing}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        >
-          <input type="hidden" name="id" value={id} />
-          <Field label={tGenerated('m_09030228796275')}>
-            <Input
-              name="lastSeenDate"
-              type="date"
-              defaultValue={new Date().toISOString().slice(0, 10)}
-            />
-          </Field>
-          <Field label={tGenerated('m_0c8ecbc807dca2')}>
-            <Input
-              name="lastSeenLocation"
-              maxLength={500}
-              placeholder={tGeneratedValue(site?.name ?? tGenerated('m_09a7b29fc61b54'))}
-            />
-          </Field>
-          <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
-            <Textarea
-              name="notes"
-              rows={3}
-              maxLength={5000}
-              placeholder={tGenerated('m_173f4d80a9d74c')}
-            />
-          </Field>
-        </form>
-      </UrlDrawer>
-
-      <UrlDrawer
-        open={drawerKey === 'report-found' && item.isMissing}
-        closeHref={closeHref}
-        title={tGenerated('m_1b925bd65abff0')}
-        description={tGenerated('m_084d4979dc9492')}
-        size="md"
-        footer={
-          <Button type="submit" form="equipment-report-found-form">
-            <Search size={14} /> <GeneratedText id="m_1b925bd65abff0" />
-          </Button>
-        }
-      >
-        <form
-          id="equipment-report-found-form"
-          action={reportFound}
-          className="grid grid-cols-1 gap-3"
-        >
-          <input type="hidden" name="id" value={id} />
-          <Field label={tGenerated('m_191f9b2549b0d1')}>
-            <Textarea
-              name="foundNotes"
-              rows={3}
-              maxLength={5000}
-              placeholder={tGenerated('m_02f19e418c962e')}
-            />
-          </Field>
-          <p className="text-xs text-slate-500">
-            <GeneratedText id="m_089aadeb62b13c" />
-          </p>
-        </form>
-      </UrlDrawer>
-
-      <UrlDrawer
-        open={drawerKey === 'check-out' && canCheckOut}
-        closeHref={closeHref}
-        title={tGenerated('m_0a8918b3f9c991')}
-        description={tGenerated('m_1f803d6126184c')}
-        size="md"
-        footer={
-          <Button type="submit" form="equipment-check-out-form">
-            <LogOut size={14} /> <GeneratedText id="m_0a8918b3f9c991" />
-          </Button>
-        }
-      >
-        <form
-          id="equipment-check-out-form"
-          action={checkOutFromItem}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        >
-          <input type="hidden" name="itemId" value={id} />
-          <Field label={tGenerated('m_028916575168d0')}>
-            <RemoteSelectField
-              name="holderPersonId"
-              defaultValue=""
-              lookup="equipment-custody-holders"
-              placeholder={tGenerated('m_0be39d3a196b5b')}
-              searchPlaceholder={tGenerated('m_06c2338b990aea')}
-              sheetTitle="Select holder"
-              clearable
-              emptyLabel={tGenerated('m_1edbadeea60fca')}
-            />
-          </Field>
-          <Field label={tGenerated('m_0dd23138b5c807')} required>
-            <RemoteSelectField
-              name="destinationOrgUnitId"
-              defaultValue=""
-              lookup="equipment-station-locations"
-              placeholder={tGenerated('m_015c668f21e7b9')}
-              searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
-              sheetTitle="Select destination"
-              clearable={false}
-            />
-          </Field>
-          <Field label={tGenerated('m_141f9dc55f5052')}>
-            <Input name="expectedReturnOn" type="date" />
-          </Field>
-          <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
-            <Textarea
-              name="notes"
-              rows={3}
-              maxLength={2000}
-              placeholder={tGenerated('m_1b922a2d2bd506')}
-            />
-          </Field>
-        </form>
-      </UrlDrawer>
-
-      <UrlDrawer
-        open={drawerKey === 'transfer' && canTransferCustody}
-        closeHref={closeHref}
-        title={tGenerated('m_164016b2b73317')}
-        description={tGenerated('m_0042d36ee69b03')}
-        size="md"
-        footer={
-          <Button type="submit" form="equipment-transfer-form">
-            <ArrowLeftRight size={14} /> <GeneratedText id="m_1a01e506c443c6" />
-          </Button>
-        }
-      >
-        <form
-          id="equipment-transfer-form"
-          action={transferLocation}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        >
-          <input type="hidden" name="id" value={id} />
-          <Field label={tGenerated('m_0290ddd55d8e8a')}>
-            <RemoteSelectField
-              name="siteOrgUnitId"
-              defaultValue={item.currentSiteOrgUnitId ?? ''}
-              lookup="equipment-station-locations"
-              initialOption={
-                site
-                  ? { value: site.id, label: site.name, hint: site.code ?? undefined }
-                  : undefined
-              }
-              placeholder={tGenerated('m_015c668f21e7b9')}
-              searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
-              sheetTitle="Select location"
-              clearable
-              emptyLabel={tGenerated('m_1ba9b3d94af564')}
-            />
-          </Field>
-          <Field label={tGenerated('m_02121b506c0c3a')}>
-            <RemoteSelectField
-              name="holderPersonId"
-              defaultValue={item.currentHolderPersonId ?? ''}
-              lookup="equipment-custody-holders"
-              initialOption={
-                holder
-                  ? {
-                      value: holder.id,
-                      label: `${holder.lastName}, ${holder.firstName}`,
-                      hint: holder.employeeNo ?? undefined,
-                    }
-                  : undefined
-              }
-              placeholder={tGenerated('m_0be39d3a196b5b')}
-              searchPlaceholder={tGenerated('m_06c2338b990aea')}
-              sheetTitle="Select holder"
-              clearable
-              emptyLabel={tGenerated('m_11c7385abc4192')}
-            />
-          </Field>
-          <Field label={tGenerated('m_16d241f76641bb')} className="sm:col-span-2">
-            <Input name="note" maxLength={2000} placeholder={tGenerated('m_0782a5fee0d972')} />
-          </Field>
-        </form>
-      </UrlDrawer>
-
-      <NewWorkOrderDrawer
-        open={drawerKey === 'new-work-order' && canCreateWorkOrder}
-        closeHref={closeHref}
-        itemId={id}
-        action={createWorkOrderAction}
-      />
-
-      <NewTruckLogEntryDrawer
-        open={drawerKey === 'new-truck-log-entry' && canManageEquipment}
-        closeHref={closeHref}
-        itemId={id}
-        defaultDate={new Date().toISOString().slice(0, 10)}
-        action={createTruckLogEntryAction}
-      />
-
-      <EquipmentFileDrawer
-        open={drawerKey === 'upload-file' && !locked}
-        closeHref={closeHref}
-        itemId={id}
-        attachAction={attachEquipmentFile}
-      />
-
-      <ScheduleDrawer
-        open={!locked && (drawerKey === 'schedule-new' || scheduleEditing != null)}
-        closeHref={`${basePath}?tab=inspections`}
-        itemId={id}
-        itemTypeId={item.typeId}
-        editing={scheduleEditing}
-      />
-
-      <ReminderDrawer
-        open={!locked && (drawerKey === 'reminder-new' || reminderEditing != null)}
-        closeHref={`${basePath}?tab=inspections`}
-        itemId={id}
-        editing={reminderEditing}
-        peopleLookup="equipment-reminder-assignees"
-      />
-
-      <UrlDrawer
-        open={drawerKey === 'check-in' && canCheckIn}
-        closeHref={closeHref}
-        title={tGenerated('m_009fb952fb6dea')}
-        description={tGeneratedValue(
-          openCheckout
-            ? tGenerated('m_0065b019ed7ed3', {
-                value0: openCheckout.holder
-                  ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
-                  : 'the current holder',
-              })
-            : 'Return this equipment to the default check-in location.',
-        )}
-        size="md"
-        footer={
-          canCheckIn ? (
-            <Button type="submit" form="equipment-check-in-form">
-              <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
-            </Button>
-          ) : null
-        }
-      >
-        <GeneratedValue
-          value={
-            canCheckIn ? (
-              <form
-                id="equipment-check-in-form"
-                action={checkInFromItem}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-              >
-                <input type="hidden" name="itemId" value={id} />
-                <input type="hidden" name="checkoutId" value={openCheckout?.co.id ?? ''} />
-                <Field label={tGenerated('m_0299a9c737cc7e')}>
-                  <Select name="returnedCondition" defaultValue="good">
-                    <option value="good">{'Good'}</option>
-                    <option value="fair">{'Fair'}</option>
-                    <option value="damaged">{'Damaged'}</option>
-                    <option value="unusable">{'Unusable'}</option>
-                  </Select>
-                </Field>
-                <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
-                  <Textarea
-                    name="returnedNotes"
-                    rows={3}
-                    maxLength={2000}
-                    placeholder={tGenerated('m_1db55aa66a1762')}
-                  />
-                </Field>
-              </form>
-            ) : (
-              <p className="text-sm text-slate-500">
-                <GeneratedText id="m_02651fee97eae9" />
-              </p>
-            )
+                <ConfirmButton
+                  type="submit"
+                  form="equipment-add-log-form"
+                  formAction={deleteLogEntry}
+                  formNoValidate
+                  variant="destructive"
+                  className="mr-auto"
+                  message={tGeneratedValue('Delete this log entry? This cannot be undone.')}
+                >
+                  <Trash2 size={14} /> <GeneratedValue value="Delete entry" />
+                </ConfirmButton>
+              ) : null}
+              <Button type="submit" form="equipment-add-log-form">
+                {editingLog ? (
+                  <>
+                    <Check size={14} /> <GeneratedValue value="Save changes" />
+                  </>
+                ) : (
+                  <>
+                    <Plus size={14} /> <GeneratedText id="m_1ea3a4ad13d4d7" />
+                  </>
+                )}
+              </Button>
+            </div>
           }
-        />
-      </UrlDrawer>
-
-      {/* An inspection started from this unit is filled right here, over the
-          unit's own page — same flyout the register uses. */}
-      <EquipmentInspectionDrawer
-        open={drawerKey === 'inspection'}
-        closeHref={inspectionReturnTo}
-        inspectionId={pickString(sp.inspectionId) ?? null}
-        sp={sp}
-        returnTo={inspectionReturnTo}
-      />
-
-      {/* Only reached from the "New inspection" button — the schedule rows
-          already know their check and start it in one tap. */}
-      <UrlDrawer
-        open={drawerKey === 'new-inspection'}
-        closeHref={inspectionReturnTo}
-        title={tGenerated('m_1edf2b8e0e3013')}
-        size="md"
-      >
-        <GeneratedValue
-          value={
-            drawerKey === 'new-inspection' ? (
-              <NewEquipmentInspectionDrawer
-                initialItem={{ value: id, label: item.name }}
-                lockedItem
-                returnTo={inspectionReturnTo}
+        >
+          <form
+            id="equipment-add-log-form"
+            key={editingLog?.id ?? 'new-log'}
+            action={saveLogEntry}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
+            <input type="hidden" name="itemId" value={id} />
+            <input type="hidden" name="returnHref" value={closeHref} />
+            {editingLog ? (
+              <>
+                <input type="hidden" name="entryId" value={editingLog.id} />
+                <input
+                  type="hidden"
+                  name="expectedUpdatedAt"
+                  value={editingLog.updatedAt.toISOString()}
+                />
+              </>
+            ) : null}
+            <Field label={tGenerated('m_0285c38761c540')} required>
+              <Input
+                name="entryDate"
+                type="date"
+                required
+                defaultValue={editingLog?.entryDate ?? new Date().toISOString().slice(0, 10)}
               />
+            </Field>
+            <EquipmentLogKindFields
+              defaultKind={editingLog?.kind}
+              defaultAmount={editingLog?.amount}
+            />
+            <Field label={tGenerated('m_0decefd558c355')} className="sm:col-span-2">
+              <Input
+                name="title"
+                defaultValue={editingLog?.title ?? undefined}
+                maxLength={240}
+                placeholder={tGenerated('m_11393661c7db12')}
+              />
+            </Field>
+            <Field label={tGenerated('m_1560d4e2a09d09')} required className="sm:col-span-2">
+              <Textarea
+                name="details"
+                defaultValue={editingLog?.details}
+                rows={5}
+                maxLength={10000}
+                required
+              />
+            </Field>
+          </form>
+        </UrlDrawer>
+
+        <UrlDrawer
+          open={drawerKey === 'report-missing' && !item.isMissing}
+          closeHref={closeHref}
+          title={tGenerated('m_08cbe6945650bd')}
+          description={tGenerated('m_0baf65c8694ca8')}
+          size="md"
+          footer={
+            <Button type="submit" form="equipment-report-missing-form" variant="destructive">
+              <Search size={14} /> <GeneratedText id="m_08cbe6945650bd" />
+            </Button>
+          }
+        >
+          <form
+            id="equipment-report-missing-form"
+            action={reportMissing}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
+            <input type="hidden" name="id" value={id} />
+            <Field label={tGenerated('m_09030228796275')}>
+              <Input
+                name="lastSeenDate"
+                type="date"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+            </Field>
+            <Field label={tGenerated('m_0c8ecbc807dca2')}>
+              <Input
+                name="lastSeenLocation"
+                maxLength={500}
+                placeholder={tGeneratedValue(site?.name ?? tGenerated('m_09a7b29fc61b54'))}
+              />
+            </Field>
+            <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
+              <Textarea
+                name="notes"
+                rows={3}
+                maxLength={5000}
+                placeholder={tGenerated('m_173f4d80a9d74c')}
+              />
+            </Field>
+          </form>
+        </UrlDrawer>
+
+        <UrlDrawer
+          open={drawerKey === 'report-found' && item.isMissing}
+          closeHref={closeHref}
+          title={tGenerated('m_1b925bd65abff0')}
+          description={tGenerated('m_084d4979dc9492')}
+          size="md"
+          footer={
+            <Button type="submit" form="equipment-report-found-form">
+              <Search size={14} /> <GeneratedText id="m_1b925bd65abff0" />
+            </Button>
+          }
+        >
+          <form
+            id="equipment-report-found-form"
+            action={reportFound}
+            className="grid grid-cols-1 gap-3"
+          >
+            <input type="hidden" name="id" value={id} />
+            <Field label={tGenerated('m_191f9b2549b0d1')}>
+              <Textarea
+                name="foundNotes"
+                rows={3}
+                maxLength={5000}
+                placeholder={tGenerated('m_02f19e418c962e')}
+              />
+            </Field>
+            <p className="text-xs text-slate-500">
+              <GeneratedText id="m_089aadeb62b13c" />
+            </p>
+          </form>
+        </UrlDrawer>
+
+        <UrlDrawer
+          open={drawerKey === 'check-out' && canCheckOut}
+          closeHref={closeHref}
+          title={tGenerated('m_0a8918b3f9c991')}
+          description={tGenerated('m_1f803d6126184c')}
+          size="md"
+          footer={
+            <Button type="submit" form="equipment-check-out-form">
+              <LogOut size={14} /> <GeneratedText id="m_0a8918b3f9c991" />
+            </Button>
+          }
+        >
+          <form
+            id="equipment-check-out-form"
+            action={checkOutFromItem}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
+            <input type="hidden" name="itemId" value={id} />
+            <Field label={tGenerated('m_028916575168d0')}>
+              <RemoteSelectField
+                name="holderPersonId"
+                defaultValue=""
+                lookup="equipment-custody-holders"
+                placeholder={tGenerated('m_0be39d3a196b5b')}
+                searchPlaceholder={tGenerated('m_06c2338b990aea')}
+                sheetTitle="Select holder"
+                clearable
+                emptyLabel={tGenerated('m_1edbadeea60fca')}
+              />
+            </Field>
+            <Field label={tGenerated('m_0dd23138b5c807')} required>
+              <RemoteSelectField
+                name="destinationOrgUnitId"
+                defaultValue=""
+                lookup="equipment-station-locations"
+                placeholder={tGenerated('m_015c668f21e7b9')}
+                searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
+                sheetTitle="Select destination"
+                clearable={false}
+              />
+            </Field>
+            <Field label={tGenerated('m_141f9dc55f5052')}>
+              <Input name="expectedReturnOn" type="date" />
+            </Field>
+            <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
+              <Textarea
+                name="notes"
+                rows={3}
+                maxLength={2000}
+                placeholder={tGenerated('m_1b922a2d2bd506')}
+              />
+            </Field>
+          </form>
+        </UrlDrawer>
+
+        <UrlDrawer
+          open={drawerKey === 'transfer' && canTransferCustody}
+          closeHref={closeHref}
+          title={tGenerated('m_164016b2b73317')}
+          description={tGenerated('m_0042d36ee69b03')}
+          size="md"
+          footer={
+            <Button type="submit" form="equipment-transfer-form">
+              <ArrowLeftRight size={14} /> <GeneratedText id="m_1a01e506c443c6" />
+            </Button>
+          }
+        >
+          <form
+            id="equipment-transfer-form"
+            action={transferLocation}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
+            <input type="hidden" name="id" value={id} />
+            <Field label={tGenerated('m_0290ddd55d8e8a')}>
+              <RemoteSelectField
+                name="siteOrgUnitId"
+                defaultValue={item.currentSiteOrgUnitId ?? ''}
+                lookup="equipment-station-locations"
+                initialOption={
+                  site
+                    ? { value: site.id, label: site.name, hint: site.code ?? undefined }
+                    : undefined
+                }
+                placeholder={tGenerated('m_015c668f21e7b9')}
+                searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
+                sheetTitle="Select location"
+                clearable
+                emptyLabel={tGenerated('m_1ba9b3d94af564')}
+              />
+            </Field>
+            <Field label={tGenerated('m_02121b506c0c3a')}>
+              <RemoteSelectField
+                name="holderPersonId"
+                defaultValue={item.currentHolderPersonId ?? ''}
+                lookup="equipment-custody-holders"
+                initialOption={
+                  holder
+                    ? {
+                        value: holder.id,
+                        label: `${holder.lastName}, ${holder.firstName}`,
+                        hint: holder.employeeNo ?? undefined,
+                      }
+                    : undefined
+                }
+                placeholder={tGenerated('m_0be39d3a196b5b')}
+                searchPlaceholder={tGenerated('m_06c2338b990aea')}
+                sheetTitle="Select holder"
+                clearable
+                emptyLabel={tGenerated('m_11c7385abc4192')}
+              />
+            </Field>
+            <Field label={tGenerated('m_16d241f76641bb')} className="sm:col-span-2">
+              <Input name="note" maxLength={2000} placeholder={tGenerated('m_0782a5fee0d972')} />
+            </Field>
+          </form>
+        </UrlDrawer>
+
+        <NewWorkOrderDrawer
+          open={drawerKey === 'new-work-order' && canCreateWorkOrder}
+          closeHref={closeHref}
+          itemId={id}
+          action={createWorkOrderAction}
+        />
+
+        <NewTruckLogEntryDrawer
+          open={drawerKey === 'new-truck-log-entry' && canManageEquipment}
+          closeHref={closeHref}
+          itemId={id}
+          defaultDate={new Date().toISOString().slice(0, 10)}
+          action={createTruckLogEntryAction}
+        />
+
+        <EquipmentFileDrawer
+          open={drawerKey === 'upload-file' && !locked}
+          closeHref={closeHref}
+          itemId={id}
+          attachAction={attachEquipmentFile}
+        />
+
+        <ScheduleDrawer
+          open={!locked && (drawerKey === 'schedule-new' || scheduleEditing != null)}
+          closeHref={`${basePath}?tab=inspections`}
+          itemId={id}
+          itemTypeId={item.typeId}
+          editing={scheduleEditing}
+        />
+
+        <ReminderDrawer
+          open={!locked && (drawerKey === 'reminder-new' || reminderEditing != null)}
+          closeHref={`${basePath}?tab=inspections`}
+          itemId={id}
+          editing={reminderEditing}
+          peopleLookup="equipment-reminder-assignees"
+        />
+
+        <UrlDrawer
+          open={drawerKey === 'check-in' && canCheckIn}
+          closeHref={closeHref}
+          title={tGenerated('m_009fb952fb6dea')}
+          description={tGeneratedValue(
+            openCheckout
+              ? tGenerated('m_0065b019ed7ed3', {
+                  value0: openCheckout.holder
+                    ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
+                    : 'the current holder',
+                })
+              : 'Return this equipment to the default check-in location.',
+          )}
+          size="md"
+          footer={
+            canCheckIn ? (
+              <Button type="submit" form="equipment-check-in-form">
+                <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
+              </Button>
             ) : null
           }
-        />
-      </UrlDrawer>
-
-      {/* Pre-use is a schedule row like any other, so it is edited the same
-          way: from the row, in a flyout. */}
-      <UrlDrawer
-        open={!locked && drawerKey === 'preuse'}
-        closeHref={inspectionReturnTo}
-        title={tGenerated('m_054ca9b2975cac')}
-        size="md"
-      >
-        <div className="grid grid-cols-1 gap-4">
-          <LiveToggle
-            id={id}
-            field="requiresPreUseInspection"
-            label={tGenerated('m_0001f9d2929552')}
-            initialValue={item.requiresPreUseInspection}
-            disabled={locked}
-            updateAction={updateEquipmentField}
-          />
-          <LiveRemoteSelect
-            id={id}
-            field="preUseInspectionTypeId"
-            label={tGenerated('m_054ca9b2975cac')}
-            initialValue={item.preUseInspectionTypeId}
-            initialOption={
-              selectedPreUseType
-                ? {
-                    value: selectedPreUseType.id,
-                    label: selectedPreUseType.name,
-                  }
-                : undefined
-            }
-            lookup="equipment-item-pre-use-inspection-types"
-            contextId={item.typeId ?? undefined}
-            emptyLabel={tGenerated('m_045c03d42f2f53')}
-            disabled={locked}
-            updateAction={updateEquipmentField}
-          />
+        >
           <GeneratedValue
             value={
-              preUseFormMismatch ? (
-                <Alert variant="warning">
-                  <AlertTitle>
-                    <GeneratedText id="m_0cf35d8d5e4746" />
-                  </AlertTitle>
-                  <AlertDescription>
-                    <GeneratedText id="m_02949f4908dcd0" />
-                  </AlertDescription>
-                </Alert>
+              canCheckIn ? (
+                <form
+                  id="equipment-check-in-form"
+                  action={checkInFromItem}
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                >
+                  <input type="hidden" name="itemId" value={id} />
+                  <input type="hidden" name="checkoutId" value={openCheckout?.co.id ?? ''} />
+                  <Field label={tGenerated('m_0299a9c737cc7e')}>
+                    <Select name="returnedCondition" defaultValue="good">
+                      <option value="good">{'Good'}</option>
+                      <option value="fair">{'Fair'}</option>
+                      <option value="damaged">{'Damaged'}</option>
+                      <option value="unusable">{'Unusable'}</option>
+                    </Select>
+                  </Field>
+                  <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
+                    <Textarea
+                      name="returnedNotes"
+                      rows={3}
+                      maxLength={2000}
+                      placeholder={tGenerated('m_1db55aa66a1762')}
+                    />
+                  </Field>
+                </form>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  <GeneratedText id="m_02651fee97eae9" />
+                </p>
+              )
+            }
+          />
+        </UrlDrawer>
+
+        {/* An inspection started from this unit is filled right here, over the
+          unit's own page — same flyout the register uses. */}
+        <EquipmentInspectionDrawer
+          open={drawerKey === 'inspection'}
+          closeHref={inspectionReturnTo}
+          inspectionId={pickString(sp.inspectionId) ?? null}
+          sp={sp}
+          returnTo={inspectionReturnTo}
+        />
+
+        {/* Only reached from the "New inspection" button — the schedule rows
+          already know their check and start it in one tap. */}
+        <UrlDrawer
+          open={drawerKey === 'new-inspection'}
+          closeHref={inspectionReturnTo}
+          title={tGenerated('m_1edf2b8e0e3013')}
+          size="md"
+        >
+          <GeneratedValue
+            value={
+              drawerKey === 'new-inspection' ? (
+                <NewEquipmentInspectionDrawer
+                  initialItem={{ value: id, label: item.name }}
+                  lockedItem
+                  returnTo={inspectionReturnTo}
+                />
               ) : null
             }
           />
-          <ReadOnlyStat
-            label={tGenerated('m_066ea9befbd59e')}
-            value={
-              item.lastPreUseInspectionAt
-                ? formatDateTime(new Date(item.lastPreUseInspectionAt), ctx.timezone, ctx.locale)
-                : '—'
-            }
-          />
-        </div>
-      </UrlDrawer>
-    </PageContainer>
+        </UrlDrawer>
+
+        {/* Pre-use is a schedule row like any other, so it is edited the same
+          way: from the row, in a flyout. */}
+        <UrlDrawer
+          open={!locked && drawerKey === 'preuse'}
+          closeHref={inspectionReturnTo}
+          title={tGenerated('m_054ca9b2975cac')}
+          size="md"
+        >
+          <div className="grid grid-cols-1 gap-4">
+            <LiveToggle
+              field="requiresPreUseInspection"
+              label={tGenerated('m_0001f9d2929552')}
+              initialValue={item.requiresPreUseInspection}
+              disabled={locked}
+            />
+            <LiveRemoteSelect
+              field="preUseInspectionTypeId"
+              label={tGenerated('m_054ca9b2975cac')}
+              initialValue={item.preUseInspectionTypeId}
+              initialOption={
+                selectedPreUseType
+                  ? {
+                      value: selectedPreUseType.id,
+                      label: selectedPreUseType.name,
+                    }
+                  : undefined
+              }
+              lookup="equipment-item-pre-use-inspection-types"
+              contextId={item.typeId ?? undefined}
+              emptyLabel={tGenerated('m_045c03d42f2f53')}
+              disabled={locked}
+            />
+            <GeneratedValue
+              value={
+                preUseFormMismatch ? (
+                  <Alert variant="warning">
+                    <AlertTitle>
+                      <GeneratedText id="m_0cf35d8d5e4746" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_02949f4908dcd0" />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+            <ReadOnlyStat
+              label={tGenerated('m_066ea9befbd59e')}
+              value={
+                item.lastPreUseInspectionAt
+                  ? formatDateTime(new Date(item.lastPreUseInspectionAt), ctx.timezone, ctx.locale)
+                  : '—'
+              }
+            />
+          </div>
+        </UrlDrawer>
+      </PageContainer>
+    </OfflineRecordProvider>
   )
 }
 

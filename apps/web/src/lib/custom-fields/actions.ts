@@ -1,19 +1,19 @@
 'use server'
 
-// Server actions for the custom-field system: value writes on record pages, and
-// definition CRUD in the designer. Both gate on the host entity's permission so
-// the custom-field layer is never looser than the module it decorates.
+// Server actions for the custom-field system's definition CRUD in the
+// designer. Value edits on record pages are queued on the device and applied
+// by the host module's record saver (see record-op.ts). Both gate on the host
+// entity's permission so the custom-field layer is never looser than the
+// module it decorates.
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, eq, isNull, sql, type AnyColumn, type SQL } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
-  CUSTOM_FIELD_ENTITY_KINDS,
   CUSTOM_FIELD_LIMITS,
   CUSTOM_FIELD_TYPE_META,
   CUSTOM_FIELD_TYPES,
-  coerceCustomFieldValue,
   isValidCustomFieldKey,
   normalizeCustomFieldConfig,
   slugifyCustomFieldKey,
@@ -38,87 +38,7 @@ import { isUuid } from '@/lib/list-params'
 import { findCustomFieldAnalyticsDependencies } from './analytics-dependencies'
 import { customFieldDependencyMessage } from './analytics-dependency-policy'
 import { entityConfig } from './config'
-
-const AUDIT_ENTITY: Record<CustomFieldEntityKind, string> = {
-  equipment: 'equipment',
-  ppe: 'ppe_item',
-  person: 'person',
-  location: 'org_unit',
-}
-
-function isEntityKind(v: string): v is CustomFieldEntityKind {
-  return (CUSTOM_FIELD_ENTITY_KINDS as readonly string[]).includes(v)
-}
-
-// The metadata column for each kind, plus the table-typed updater. Switching
-// here (rather than a generic PgTable ref) keeps the drizzle update type-safe.
-function metadataValueExpr(
-  col: AnyColumn,
-  key: string,
-  value: string | number | boolean | string[] | null,
-): SQL {
-  // Keep the path parameterized even though definition keys are validated.
-  // This also fails safely if an older/imported row ever contains a bad key.
-  const path = sql`ARRAY['custom', ${key}]::text[]`
-  if (value === null) return sql`coalesce(${col}, '{}'::jsonb) #- ${path}`
-  return sql`jsonb_set(coalesce(${col}, '{}'::jsonb), ${path}, ${JSON.stringify(value)}::jsonb, true)`
-}
-
-async function writeMetadataInTransaction(
-  tx: Database,
-  kind: CustomFieldEntityKind,
-  id: string,
-  key: string,
-  value: string | number | boolean | string[] | null,
-  subtypeId: string | null,
-): Promise<boolean> {
-  switch (kind) {
-    case 'equipment': {
-      const [updated] = await tx
-        .update(equipmentItems)
-        .set({ metadata: metadataValueExpr(equipmentItems.metadata, key, value) })
-        .where(
-          and(
-            eq(equipmentItems.id, id),
-            isNull(equipmentItems.deletedAt),
-            subtypeId ? eq(equipmentItems.typeId, subtypeId) : undefined,
-          ),
-        )
-        .returning({ id: equipmentItems.id })
-      return Boolean(updated)
-    }
-    case 'ppe': {
-      const [updated] = await tx
-        .update(ppeItems)
-        .set({ metadata: metadataValueExpr(ppeItems.metadata, key, value) })
-        .where(
-          and(
-            eq(ppeItems.id, id),
-            isNull(ppeItems.deletedAt),
-            subtypeId ? eq(ppeItems.typeId, subtypeId) : undefined,
-          ),
-        )
-        .returning({ id: ppeItems.id })
-      return Boolean(updated)
-    }
-    case 'person': {
-      const [updated] = await tx
-        .update(people)
-        .set({ metadata: metadataValueExpr(people.metadata, key, value) })
-        .where(and(eq(people.id, id), isNull(people.deletedAt)))
-        .returning({ id: people.id })
-      return Boolean(updated)
-    }
-    case 'location': {
-      const [updated] = await tx
-        .update(orgUnits)
-        .set({ metadata: metadataValueExpr(orgUnits.metadata, key, value) })
-        .where(and(eq(orgUnits.id, id), isNull(orgUnits.deletedAt)))
-        .returning({ id: orgUnits.id })
-      return Boolean(updated)
-    }
-  }
-}
+import { isEntityKind, metadataValueExpr } from './values'
 
 function metadataContainsKey(col: AnyColumn, key: string): SQL {
   return sql`coalesce(${col}->'custom', '{}'::jsonb) ? ${key}`
@@ -367,80 +287,6 @@ async function assertValidSubtype(
     return
   }
   throw new Error('INVALID_SUBTYPE')
-}
-
-/**
- * Autosave a single custom-field value onto a record's `metadata.custom`.
- * Mirrors the per-module inline-edit actions (validate → write → audit →
- * revalidate). FormData: `entityKind`, `id`, `key`, `value`.
- */
-export async function updateCustomFieldValueAction(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  const kindRaw = String(formData.get('entityKind') ?? '')
-  if (!isEntityKind(kindRaw)) throw new Error('Unknown entity kind')
-  const kind = kindRaw
-  const cfg = entityConfig(kind)
-  assertCan(ctx, cfg.permission)
-
-  const id = String(formData.get('id') ?? '').trim()
-  const key = String(formData.get('key') ?? '').trim()
-  const raw = formData.get('value')
-  const value = typeof raw === 'string' ? raw : ''
-  if (!isUuid(id) || !isValidCustomFieldKey(key)) throw new Error('Invalid id/key')
-  if (kind === 'equipment' && key === 'condition' && value !== '' && !/^[1-5]$/.test(value))
-    throw new Error('Choose a condition from 1 to 5 stars.')
-
-  await ctx.db(async (tx) => {
-    // The definition is the contract. A shared row lock allows concurrent
-    // record edits while serializing them against definition changes/deletion.
-    const [row] = await tx
-      .select()
-      .from(customFieldDefinitions)
-      .where(
-        and(
-          eq(customFieldDefinitions.entityKind, kind),
-          eq(customFieldDefinitions.key, key),
-          eq(customFieldDefinitions.isActive, true),
-          isNull(customFieldDefinitions.deletedAt),
-        ),
-      )
-      .limit(1)
-      .for('share')
-    if (!row) throw new Error('Unknown custom field')
-
-    const coerced = coerceCustomFieldValue(
-      {
-        key: row.key,
-        label: row.label,
-        fieldType: row.fieldType as CustomFieldType,
-        required: row.required,
-        config: (row.config ?? null) as CustomFieldConfig | null,
-      },
-      value,
-    )
-    if (!coerced.ok) throw new Error(coerced.error)
-
-    const updated = await writeMetadataInTransaction(
-      tx,
-      kind,
-      id,
-      key,
-      coerced.value,
-      row.subtypeId,
-    )
-    if (!updated)
-      throw new Error(`This custom field does not apply to the selected ${cfg.singular}.`)
-
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: AUDIT_ENTITY[kind],
-      entityId: id,
-      action: 'update',
-      summary: `Updated custom field "${row.label}"`,
-      after: { [`custom.${key}`]: coerced.value },
-    })
-  })
-  revalidatePath(cfg.detail(id))
-  revalidatePath(cfg.list)
 }
 
 export type SaveCustomFieldInput = {

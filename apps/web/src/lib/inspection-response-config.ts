@@ -109,6 +109,48 @@ export function normalizeInspectionNumberAnswer(raw: unknown): string | null {
   return value
 }
 
+/** Exponents beyond this are refused: PostgreSQL `numeric` would overflow. */
+const MAX_INSPECTION_NUMBER_EXPONENT = 1000
+
+/**
+ * Validate a typed number answer into the string stored in a `numeric`
+ * column, refusing exponents PostgreSQL cannot store.
+ */
+export function parseInspectionNumberAnswer(raw: unknown): string | null {
+  const value = normalizeInspectionNumberAnswer(raw)
+  if (value === null) return null
+  const exponent = /[eE]([+-]?\d+)$/.exec(value)?.[1]
+  if (exponent && Math.abs(Number(exponent)) > MAX_INSPECTION_NUMBER_EXPONENT) {
+    throw new Error('Enter a valid number')
+  }
+  return value
+}
+
+/**
+ * One canonical spelling of a number answer ('' for none): PostgreSQL stores
+ * `1e3` as `1000` and keeps typed trailing zeros, so the saved value and the
+ * typed value are compared in this form. Decimal-exact (never via Number).
+ */
+export function inspectionNumberAnswerWire(value: string | null): string {
+  if (value === null) return ''
+  const match = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(value.trim())
+  if (!match || (!match[2] && !match[3])) return value
+  const exponent = Number(match[4] ?? 0)
+  if (Math.abs(exponent) > MAX_INSPECTION_NUMBER_EXPONENT) return value
+  const integer = match[2] ?? ''
+  let digits = integer + (match[3] ?? '')
+  let point = integer.length + exponent
+  if (point < 0) {
+    digits = '0'.repeat(-point) + digits
+    point = 0
+  }
+  if (point > digits.length) digits += '0'.repeat(point - digits.length)
+  const whole = digits.slice(0, point).replace(/^0+/, '') || '0'
+  const fraction = digits.slice(point).replace(/0+$/, '')
+  const magnitude = fraction ? `${whole}.${fraction}` : whole
+  return match[1] === '-' && magnitude !== '0' ? `-${magnitude}` : magnitude
+}
+
 export function isInspectionOutcomeResponseType(
   type: InspectionResponseType,
 ): type is 'pass_fail_na' | 'rating' | 'yes_no' {

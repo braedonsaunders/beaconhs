@@ -4,13 +4,13 @@ import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Server component: renders a record's tenant-defined custom fields, grouped by
 // their optional section heading. Returns null when no fields are defined for
 // the kind/subtype, so detail pages can mount it unconditionally without
-// introducing an empty card. Reuses the autosave <CustomFieldInput>.
+// introducing an empty card. Reuses the local-first <CustomFieldInput>, so the
+// page must render it inside the record's <OfflineRecordProvider>.
 
 import { readCustomFieldValues, type CustomFieldEntityKind } from '@beaconhs/forms-core'
 import { Section } from '@/components/section'
 import { requireRequestContext } from '@/lib/auth'
 import { loadVisibleCustomFieldDefs, type CustomFieldDefRow } from '@/lib/custom-fields/queries'
-import { updateCustomFieldValueAction } from '@/lib/custom-fields/actions'
 import { CustomFieldInput } from './custom-field-input'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
@@ -18,7 +18,6 @@ type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 export async function CustomFieldsSection({
   ctx,
   entityKind,
-  recordId,
   subtypeId,
   metadata,
   locked,
@@ -26,7 +25,6 @@ export async function CustomFieldsSection({
 }: {
   ctx: Ctx
   entityKind: CustomFieldEntityKind
-  recordId: string
   subtypeId: string | null
   metadata: Record<string, unknown> | null | undefined
   locked: boolean
@@ -67,7 +65,6 @@ export async function CustomFieldsSection({
                   <CustomFieldInput
                     key={def.id}
                     entityKind={entityKind}
-                    recordId={recordId}
                     def={{
                       key: def.key,
                       label: def.label,
@@ -78,7 +75,6 @@ export async function CustomFieldsSection({
                     }}
                     initialValue={values[def.key] ?? null}
                     disabled={locked}
-                    updateAction={updateCustomFieldValueAction}
                   />
                 ))}
               />

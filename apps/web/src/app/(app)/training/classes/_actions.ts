@@ -1,13 +1,11 @@
 'use server'
 
-import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
+import { activePeopleWhere } from '@beaconhs/db'
 
-// Server actions for the training-class record page.
+// Server actions for the training-class record page. Inline field edits are
+// local-first and go through the record saver (./_record-edits.ts); these are
+// the steps that need a live connection.
 //
-//   updateClassField  per-field auto-save ({id, field, value}) for the shared
-//                     LiveField primitives — the single-page unified create/edit/
-//                     view surface (mirrors the incident / hazard-assessment
-//                     detail pages). Completed classes are locked.
 //   cancelClass /     soft lifecycle: cancel keeps the record (audit) but marks
 //   reopenClass       it off the schedule; reopen clears it. Header actions,
 //                     mirroring locations archive/restore.
@@ -18,9 +16,7 @@ import { randomUUID } from 'node:crypto'
 import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm'
 import {
   departments,
-  orgUnits,
   people,
-  tenantUsers,
   trainingClassAttendees,
   trainingClasses,
   trainingCourses,
@@ -39,11 +35,8 @@ import { requireUuidInput } from '@/lib/mutation-input'
 import {
   MAX_TRAINING_CLASS_ATTENDEES,
   assertTrainingClassCapacity,
-  assertTrainingClassSchedule,
   parseTrainingClassCompletionPage,
-  parseTrainingClassField,
   requireTrainingClassId,
-  type ParsedTrainingClassField,
 } from '@/lib/training-class-policy'
 import { addMonthsIso } from '../_lib/dates'
 
@@ -536,129 +529,6 @@ export async function markClassComplete(formData: FormData): Promise<void> {
   revalidatePath(`/training/classes/${classId}`)
   revalidatePath('/training/classes')
   revalidatePath('/training')
-}
-
-function classFieldUpdate(
-  parsed: ParsedTrainingClassField,
-): Partial<typeof trainingClasses.$inferInsert> {
-  switch (parsed.field) {
-    case 'courseId':
-      return { courseId: parsed.value }
-    case 'title':
-      return { title: parsed.value }
-    case 'schedule':
-      return parsed.value
-    case 'location':
-      return { location: parsed.value }
-    case 'siteOrgUnitId':
-      return { siteOrgUnitId: parsed.value }
-    case 'instructorTenantUserId':
-      return { instructorTenantUserId: parsed.value }
-    case 'capacity':
-      return { capacity: parsed.value }
-    case 'notes':
-      return { notes: parsed.value }
-    case 'reminderHours':
-      return { reminderHours: parsed.value }
-  }
-}
-
-function classFieldAuditValue(
-  parsed: ParsedTrainingClassField,
-): string | number | null | Record<string, string> {
-  return parsed.field === 'schedule'
-    ? { startsAt: parsed.value.startsAt.toISOString(), endsAt: parsed.value.endsAt.toISOString() }
-    : parsed.value
-}
-
-export async function updateClassField(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'training.class.manage')
-  const id = requireTrainingClassId(formData.get('id'))
-  const parsed = parseTrainingClassField(formData.get('field'), formData.get('value'), ctx.timezone)
-
-  if (parsed.field === 'reminderHours' && parsed.value !== null) {
-    await assertClassEmailConfigured(ctx, id, 'class_reminder')
-  }
-
-  await ctx.db(async (tx) => {
-    const [cls] = await tx
-      .select({
-        courseId: trainingClasses.courseId,
-        startsAt: trainingClasses.startsAt,
-        endsAt: trainingClasses.endsAt,
-        completedAt: trainingClasses.completedAt,
-        cancelledAt: trainingClasses.cancelledAt,
-      })
-      .from(trainingClasses)
-      .where(eq(trainingClasses.id, id))
-      .limit(1)
-      .for('update')
-    if (!cls) throw new Error('Class not found.')
-    if (cls.completedAt) throw new Error('Class is complete.')
-    if (cls.cancelledAt) throw new Error('Reopen the class before changing its details.')
-
-    if (parsed.field === 'courseId' && parsed.value !== cls.courseId) {
-      const [course] = await tx
-        .select({ id: trainingCourses.id })
-        .from(trainingCourses)
-        .where(and(eq(trainingCourses.id, parsed.value), isNull(trainingCourses.deletedAt)))
-        .limit(1)
-      if (!course) throw new Error('Course not found.')
-    }
-    if (parsed.field === 'siteOrgUnitId' && parsed.value) {
-      const [site] = await tx
-        .select({ id: orgUnits.id })
-        .from(orgUnits)
-        .where(
-          and(
-            eq(orgUnits.id, parsed.value),
-            eq(orgUnits.level, 'site'),
-            isNull(orgUnits.deletedAt),
-          ),
-        )
-        .limit(1)
-      if (!site) throw new Error('Site not found.')
-    }
-    if (parsed.field === 'instructorTenantUserId' && parsed.value) {
-      const [instructor] = await tx
-        .select({ id: tenantUsers.id })
-        .from(tenantUsers)
-        .where(and(eq(tenantUsers.id, parsed.value), activeTenantUsersWhere()))
-        .limit(1)
-      if (!instructor) throw new Error('Instructor not found.')
-    }
-
-    const startsAt = parsed.field === 'schedule' ? parsed.value.startsAt : cls.startsAt
-    const endsAt = parsed.field === 'schedule' ? parsed.value.endsAt : cls.endsAt
-    assertTrainingClassSchedule(startsAt, endsAt)
-
-    if (parsed.field === 'capacity' && parsed.value != null) {
-      const [roster] = await tx
-        .select({ total: count() })
-        .from(trainingClassAttendees)
-        .where(eq(trainingClassAttendees.classId, id))
-      if (Number(roster?.total ?? 0) > parsed.value) {
-        throw new Error('Maximum attendees cannot be lower than the current roster size.')
-      }
-    }
-
-    const [updated] = await tx
-      .update(trainingClasses)
-      .set(classFieldUpdate(parsed))
-      .where(and(eq(trainingClasses.id, id), isNull(trainingClasses.completedAt)))
-      .returning({ id: trainingClasses.id })
-    if (!updated) throw new Error('Class is complete.')
-  })
-  await recordAudit(ctx, {
-    entityType: 'training_class',
-    entityId: id,
-    action: 'update',
-    summary: `Updated ${parsed.field}`,
-    after: { [parsed.field]: classFieldAuditValue(parsed) },
-  })
-  revalidatePath(`/training/classes/${id}`)
-  revalidatePath('/training/classes')
 }
 
 export async function cancelClass(id: string, _formData: FormData): Promise<void> {

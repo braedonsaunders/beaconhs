@@ -65,9 +65,9 @@ export async function GET(req: NextRequest) {
   const siteFilter = pickString(sp.site)
   const inspectorFilter = pickString(sp.inspector)
   const signedFilter = pickString(sp.signed) // 'yes' | 'no'
-  const dateFrom = parseDateFilter(pickString(sp.dateFrom), 'start')
-  const dateTo = parseDateFilter(pickString(sp.dateTo), 'end')
   const ctx = await requireExportContext()
+  const dateFrom = parseDateFilter(pickString(sp.dateFrom), 'start', ctx.timezone)
+  const dateTo = parseDateFilter(pickString(sp.dateTo), 'end', ctx.timezone)
   // Read-tier gate: must hold at least the self read tier, and the export is
   // bounded to the caller's tier (read.self/site can't dump the whole tenant).
   assertCan(ctx, 'inspections.read.self')

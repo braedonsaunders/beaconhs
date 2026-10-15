@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { DownloadLink } from '@/components/download-link'
 import { Button, Select, cn } from '@beaconhs/ui'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { CheckCircle2, FileText, Lock, Mail, MoreHorizontal, Unlock } from 'lucide-react'
 
 export function CaHeaderActions({
@@ -40,13 +41,17 @@ export function CaHeaderActions({
   const tGenerated = useGeneratedTranslations()
   const [open, setOpen] = useState(false)
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
 
+  // A status change runs flows: it needs signal and the latest field edits.
   function onStatusChange(next: string) {
     if (next === status) return
     const fd = new FormData()
     fd.set('id', id)
     fd.set('status', next)
-    start(() => updateStatusAction(fd))
+    start(async () => {
+      await runOnline('finish', () => updateStatusAction(fd))
+    })
   }
 
   const statusSelect = locked ? null : (

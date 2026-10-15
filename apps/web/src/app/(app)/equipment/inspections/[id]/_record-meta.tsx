@@ -1,11 +1,13 @@
 'use client'
 
+// When, where, and the hour-meter reading of an equipment inspection. Each
+// field is written to the device first and synced by the flyout's
+// <OfflineRecordProvider> (applied by ../_record-edits.ts).
+
 import { useGeneratedTranslations } from '@/i18n/generated'
-import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
-import { updateEquipmentInspectionMeta } from '../_actions'
+import { LiveDateTime, LiveField, LiveRemoteSelect, ReadOnlyField } from '@/components/live-field'
 
 export function RecordMeta({
-  recordId,
   occurredAt,
   occurredAtDisplay,
   hours,
@@ -13,7 +15,7 @@ export function RecordMeta({
   locked,
   site,
 }: {
-  recordId: string
+  /** `YYYY-MM-DDTHH:mm` in the worker's timezone. */
   occurredAt: string
   occurredAtDisplay: string
   hours: string
@@ -26,52 +28,37 @@ export function RecordMeta({
   return (
     <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-3 dark:border-slate-800">
       {locked ? (
-        <LiveField
-          id={recordId}
-          field="occurredAt"
-          label={tGenerated('m_16b944034f43b6')}
-          initialValue={occurredAtDisplay}
-          disabled
-          updateAction={updateEquipmentInspectionMeta}
-        />
+        <ReadOnlyField label={tGenerated('m_16b944034f43b6')} value={occurredAtDisplay} />
       ) : (
         <LiveDateTime
-          id={recordId}
           field="occurredAt"
           label={tGenerated('m_16b944034f43b6')}
           initialValue={occurredAt}
-          updateAction={updateEquipmentInspectionMeta}
         />
       )}
       <LiveRemoteSelect
-        id={recordId}
         field="siteOrgUnitId"
         label={tGenerated('m_096619f6fb1aae')}
         initialValue={site?.value ?? ''}
         initialOption={site}
         lookup="equipment-inspection-sites"
         disabled={locked}
-        updateAction={updateEquipmentInspectionMeta}
       />
       <LiveField
-        id={recordId}
         field="hours"
         label={tGenerated('m_08a3b41b1849a6')}
         type="number"
         initialValue={hours}
         disabled={locked}
-        updateAction={updateEquipmentInspectionMeta}
       />
       <div className="sm:col-span-3">
         <LiveField
-          id={recordId}
           field="notes"
           label={tGenerated('m_0b8dadcb78cd08')}
           multiline
           rows={2}
           initialValue={notes}
           disabled={locked}
-          updateAction={updateEquipmentInspectionMeta}
         />
       </div>
     </div>

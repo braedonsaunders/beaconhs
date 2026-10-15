@@ -14,6 +14,7 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { Loader2, Wrench } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
@@ -52,6 +53,7 @@ export function NewWorkOrderDrawer({
   const [reportedBy, setReportedBy] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -60,20 +62,22 @@ export function NewWorkOrderDrawer({
       return
     }
     startTransition(async () => {
-      const res = await action({
-        itemId,
-        summary: summary.trim(),
-        description: description.trim() || null,
-        priority,
-        assignedToTenantUserId: assignedTo || null,
-        reportedByPersonId: reportedBy || null,
+      await runOnline('start', async () => {
+        const res = await action({
+          itemId,
+          summary: summary.trim(),
+          description: description.trim() || null,
+          priority,
+          assignedToTenantUserId: assignedTo || null,
+          reportedByPersonId: reportedBy || null,
+        })
+        if (res.ok) {
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error ?? tGenerated('m_0b4cd4a6e2f2cc')))
+        }
       })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error ?? tGenerated('m_0b4cd4a6e2f2cc')))
-      }
     })
   }
 

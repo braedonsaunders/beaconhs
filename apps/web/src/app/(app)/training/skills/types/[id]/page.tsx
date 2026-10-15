@@ -53,6 +53,11 @@ import {
 } from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
 import { SkillTypeFields } from './_fields'
+import {
+  OfflineRecordProvider,
+  RecordSyncBanner,
+  RecordSyncStatus,
+} from '@/lib/offline-drafts/offline-record'
 import { deleteSkillType } from '../_actions'
 import { ConfirmButton } from '@/components/confirm-button'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
@@ -263,217 +268,227 @@ export default async function SkillTypeDetailPage({
   })
 
   return (
-    <DetailPageLayout
-      header={
-        <DetailHeader
-          back={{ href: '/training/skills/types', label: 'Back to skills' }}
-          title={tGeneratedValue(type.name)}
-          subtitle={tGeneratedValue(`${authority.name}${type.code ? ` · ${type.code}` : ''}`)}
-          badge={
-            type.validForMonths ? (
-              <Badge variant="secondary">
-                <GeneratedValue value={type.validForMonths} />{' '}
-                <GeneratedText id="m_1dcd4db85ef759" />
-              </Badge>
-            ) : (
-              <Badge variant="secondary">
-                <GeneratedText id="m_1bbc44c1ce26a7" />
-              </Badge>
-            )
-          }
-        />
-      }
-      subtabs={
-        <TabNav
-          basePath={basePath}
-          currentParams={sp}
-          active={active}
-          tabs={[
-            { key: 'overview', label: 'Overview' },
-            { key: 'holders', label: 'Holders', count: holderCount },
-            { key: 'extras', label: 'Additional fields', count: extras.total },
-          ]}
-        />
-      }
-    >
-      <GeneratedValue
-        value={
-          active === 'overview' ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <GeneratedText id="m_0726401650a205" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SkillTypeFields type={type} outputs={data.outputs} />
-                <form action={deleteSkillType} className="mt-6">
-                  <input type="hidden" name="id" value={id} />
-                  <ConfirmButton variant="destructive" message={tGenerated('m_14c2bcbba0cca1')}>
-                    <GeneratedText id="m_17f7f669e3ac1d" />
-                  </ConfirmButton>
-                </form>
-              </CardContent>
-            </Card>
-          ) : null
-        }
-      />
-
-      <GeneratedValue
-        value={
-          active === 'extras' ? (
-            <ExtraFieldsSection
-              ownerType="skill_type"
-              ownerId={id}
-              rows={extras.rows}
-              list={{
-                basePath,
-                currentParams: sp,
-                total: extras.total,
-                filteredTotal: extras.filteredTotal,
-                query: extraListParams.q,
-                page: extraListParams.page,
-                perPage: extraListParams.perPage,
-                queryParamKey: 'extraQ',
-                pageParamKey: 'extraPage',
-              }}
-              drawerOpen={drawer === 'add-extra-field'}
-              drawerCloseHref={closeHref}
-              addHref={mergeHref(basePath, sp, { tab: 'extras', drawer: 'add-extra-field' })}
-              addAction={addExtraField}
-              deleteAction={deleteExtraField}
-            />
-          ) : null
-        }
-      />
-
-      <GeneratedValue
-        value={
-          active === 'holders' ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <GeneratedText id="m_01c5d8b420ab26" />
-                  <GeneratedValue value={holderCount} />)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TableToolbar className="mb-3">
-                  <SearchInput placeholder={tGenerated('m_0d62e60074ccc5')} />
-                  <FilterChips
-                    basePath={basePath}
-                    currentParams={sp}
-                    paramKey="status"
-                    label={tGenerated('m_0b9da892d6faf0')}
-                    options={[
-                      { value: 'valid', label: 'Valid' },
-                      { value: 'expiring', label: 'Expiring' },
-                      { value: 'expired', label: 'Expired' },
-                      { value: 'no_expiry', label: 'No expiry' },
-                    ]}
-                  />
-                </TableToolbar>
+    <OfflineRecordProvider module="training-skill-types" recordId={id} editable>
+      <DetailPageLayout
+        header={
+          <DetailHeader
+            back={{ href: '/training/skills/types', label: 'Back to skills' }}
+            title={tGeneratedValue(type.name)}
+            subtitle={tGeneratedValue(`${authority.name}${type.code ? ` · ${type.code}` : ''}`)}
+            badge={
+              <div className="flex flex-wrap items-center gap-2">
                 <GeneratedValue
                   value={
-                    holdersWithStatus.length === 0 ? (
-                      <EmptyState
-                        icon={<Users size={24} />}
-                        title={tGeneratedValue(
-                          listParams.q || statusFilter
-                            ? tGenerated('m_01608e35e0187e')
-                            : tGenerated('m_0a489925873a79'),
-                        )}
-                        description={tGeneratedValue(
-                          listParams.q || statusFilter
-                            ? tGenerated('m_10d3a4d20620cd')
-                            : tGenerated('m_0bd00e130fe9bf'),
-                        )}
-                      />
+                    type.validForMonths ? (
+                      <Badge variant="secondary">
+                        <GeneratedValue value={type.validForMonths} />{' '}
+                        <GeneratedText id="m_1dcd4db85ef759" />
+                      </Badge>
                     ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>
-                              <GeneratedText id="m_12e926c9216094" />
-                            </TableHead>
-                            <TableHead>
-                              <GeneratedText id="m_10633978809d91" />
-                            </TableHead>
-                            <TableHead>
-                              <GeneratedText id="m_14f3858b0a9ad6" />
-                            </TableHead>
-                            <TableHead>
-                              <GeneratedText id="m_0b9da892d6faf0" />
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <GeneratedValue
-                            value={holdersWithStatus.map((h) => (
-                              <TableRow key={h.assignment.id}>
-                                <TableCell>
-                                  <Link
-                                    href={`/people/${h.person.id}`}
-                                    className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                                  >
-                                    <GeneratedValue value={h.person.lastName} />,{' '}
-                                    <GeneratedValue value={h.person.firstName} />
-                                  </Link>
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-400">
-                                  <GeneratedValue value={h.assignment.grantedOn} />
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-400">
-                                  <GeneratedValue value={h.assignment.expiresOn ?? '—'} />
-                                </TableCell>
-                                <TableCell>
-                                  <GeneratedValue
-                                    value={
-                                      h.status === 'missing' ? (
-                                        <Badge variant="secondary">{h.assignment.status}</Badge>
-                                      ) : h.status === 'expired' ? (
-                                        <Badge variant="destructive">
-                                          <GeneratedText id="m_13f7150c94b182" />{' '}
-                                          {Math.abs(h.daysLeft!)}
-                                          <GeneratedText id="m_0ced4968a01894" />
-                                        </Badge>
-                                      ) : h.status === 'expiring' ? (
-                                        <Badge variant="warning">
-                                          {h.daysLeft}
-                                          <GeneratedText id="m_0a3d63460246cf" />
-                                        </Badge>
-                                      ) : h.status === 'valid' ? (
-                                        <Badge variant="success">
-                                          <GeneratedText id="m_1e418d0475450c" />
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="secondary">
-                                          <GeneratedText id="m_1bbc44c1ce26a7" />
-                                        </Badge>
-                                      )
-                                    }
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          />
-                        </TableBody>
-                      </Table>
+                      <Badge variant="secondary">
+                        <GeneratedText id="m_1bbc44c1ce26a7" />
+                      </Badge>
                     )
                   }
                 />
-                <Pagination
-                  basePath={basePath}
-                  currentParams={sp}
-                  total={filteredHolderCount}
-                  page={listParams.page}
-                  perPage={listParams.perPage}
-                />
-              </CardContent>
-            </Card>
-          ) : null
+                <RecordSyncStatus />
+              </div>
+            }
+          />
         }
-      />
-    </DetailPageLayout>
+        alerts={<RecordSyncBanner />}
+        subtabs={
+          <TabNav
+            basePath={basePath}
+            currentParams={sp}
+            active={active}
+            tabs={[
+              { key: 'overview', label: 'Overview' },
+              { key: 'holders', label: 'Holders', count: holderCount },
+              { key: 'extras', label: 'Additional fields', count: extras.total },
+            ]}
+          />
+        }
+      >
+        <GeneratedValue
+          value={
+            active === 'overview' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <GeneratedText id="m_0726401650a205" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <SkillTypeFields type={type} outputs={data.outputs} />
+                  <form action={deleteSkillType} className="mt-6">
+                    <input type="hidden" name="id" value={id} />
+                    <ConfirmButton variant="destructive" message={tGenerated('m_14c2bcbba0cca1')}>
+                      <GeneratedText id="m_17f7f669e3ac1d" />
+                    </ConfirmButton>
+                  </form>
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'extras' ? (
+              <ExtraFieldsSection
+                ownerType="skill_type"
+                ownerId={id}
+                rows={extras.rows}
+                list={{
+                  basePath,
+                  currentParams: sp,
+                  total: extras.total,
+                  filteredTotal: extras.filteredTotal,
+                  query: extraListParams.q,
+                  page: extraListParams.page,
+                  perPage: extraListParams.perPage,
+                  queryParamKey: 'extraQ',
+                  pageParamKey: 'extraPage',
+                }}
+                drawerOpen={drawer === 'add-extra-field'}
+                drawerCloseHref={closeHref}
+                addHref={mergeHref(basePath, sp, { tab: 'extras', drawer: 'add-extra-field' })}
+                addAction={addExtraField}
+                deleteAction={deleteExtraField}
+              />
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'holders' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <GeneratedText id="m_01c5d8b420ab26" />
+                    <GeneratedValue value={holderCount} />)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <TableToolbar className="mb-3">
+                    <SearchInput placeholder={tGenerated('m_0d62e60074ccc5')} />
+                    <FilterChips
+                      basePath={basePath}
+                      currentParams={sp}
+                      paramKey="status"
+                      label={tGenerated('m_0b9da892d6faf0')}
+                      options={[
+                        { value: 'valid', label: 'Valid' },
+                        { value: 'expiring', label: 'Expiring' },
+                        { value: 'expired', label: 'Expired' },
+                        { value: 'no_expiry', label: 'No expiry' },
+                      ]}
+                    />
+                  </TableToolbar>
+                  <GeneratedValue
+                    value={
+                      holdersWithStatus.length === 0 ? (
+                        <EmptyState
+                          icon={<Users size={24} />}
+                          title={tGeneratedValue(
+                            listParams.q || statusFilter
+                              ? tGenerated('m_01608e35e0187e')
+                              : tGenerated('m_0a489925873a79'),
+                          )}
+                          description={tGeneratedValue(
+                            listParams.q || statusFilter
+                              ? tGenerated('m_10d3a4d20620cd')
+                              : tGenerated('m_0bd00e130fe9bf'),
+                          )}
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>
+                                <GeneratedText id="m_12e926c9216094" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_10633978809d91" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_14f3858b0a9ad6" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_0b9da892d6faf0" />
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            <GeneratedValue
+                              value={holdersWithStatus.map((h) => (
+                                <TableRow key={h.assignment.id}>
+                                  <TableCell>
+                                    <Link
+                                      href={`/people/${h.person.id}`}
+                                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                                    >
+                                      <GeneratedValue value={h.person.lastName} />,{' '}
+                                      <GeneratedValue value={h.person.firstName} />
+                                    </Link>
+                                  </TableCell>
+                                  <TableCell className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue value={h.assignment.grantedOn} />
+                                  </TableCell>
+                                  <TableCell className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue value={h.assignment.expiresOn ?? '—'} />
+                                  </TableCell>
+                                  <TableCell>
+                                    <GeneratedValue
+                                      value={
+                                        h.status === 'missing' ? (
+                                          <Badge variant="secondary">{h.assignment.status}</Badge>
+                                        ) : h.status === 'expired' ? (
+                                          <Badge variant="destructive">
+                                            <GeneratedText id="m_13f7150c94b182" />{' '}
+                                            {Math.abs(h.daysLeft!)}
+                                            <GeneratedText id="m_0ced4968a01894" />
+                                          </Badge>
+                                        ) : h.status === 'expiring' ? (
+                                          <Badge variant="warning">
+                                            {h.daysLeft}
+                                            <GeneratedText id="m_0a3d63460246cf" />
+                                          </Badge>
+                                        ) : h.status === 'valid' ? (
+                                          <Badge variant="success">
+                                            <GeneratedText id="m_1e418d0475450c" />
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="secondary">
+                                            <GeneratedText id="m_1bbc44c1ce26a7" />
+                                          </Badge>
+                                        )
+                                      }
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            />
+                          </TableBody>
+                        </Table>
+                      )
+                    }
+                  />
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={sp}
+                    total={filteredHolderCount}
+                    page={listParams.page}
+                    perPage={listParams.perPage}
+                  />
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
+      </DetailPageLayout>
+    </OfflineRecordProvider>
   )
 }

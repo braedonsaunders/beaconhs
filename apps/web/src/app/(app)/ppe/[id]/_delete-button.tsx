@@ -8,6 +8,7 @@ import {
 
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
@@ -33,6 +34,7 @@ export function DeletePpeButton({
   const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
 
   async function onDelete() {
     const confirmed = await confirmDialog({
@@ -43,13 +45,15 @@ export function DeletePpeButton({
     })
     if (!confirmed) return
     start(async () => {
-      const result = await deleteAction({ ppeItemId: itemId })
-      if (result.ok) {
-        router.push('/ppe')
-        router.refresh()
-      } else {
-        toast.error(tGeneratedValue(result.error))
-      }
+      await runOnline('finish', async () => {
+        const result = await deleteAction({ ppeItemId: itemId })
+        if (result.ok) {
+          router.push('/ppe')
+          router.refresh()
+        } else {
+          toast.error(tGeneratedValue(result.error))
+        }
+      })
     })
   }
 

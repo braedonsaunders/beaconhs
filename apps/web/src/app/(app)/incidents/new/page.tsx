@@ -25,22 +25,12 @@ import { nextReference } from '@/lib/reference'
 import { PageContainer } from '@/components/page-layout'
 import { RemoteSelectField } from '@/components/remote-search-select'
 import { OccurredAtField } from './_occurred-at-field'
+import { INCIDENT_SEVERITIES as SEVERITIES, INCIDENT_TYPES as TYPES } from '../_options'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
   return { title: tGenerated('m_0f2b150c1cc651') }
 }
-
-const TYPES = [
-  'injury',
-  'illness',
-  'near_miss',
-  'property_damage',
-  'environmental',
-  'security',
-  'other',
-] as const
-const SEVERITIES = ['first_aid_only', 'medical_aid', 'lost_time', 'fatality', 'no_injury'] as const
 
 async function reportIncident(formData: FormData) {
   'use server'

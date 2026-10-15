@@ -1,16 +1,16 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { unstable_rethrow } from 'next/navigation'
 import { Mail } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import { confirmDialog } from '@/lib/confirm'
-import { flushRecordSaves } from '@/lib/pending-record-saves'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { emailClass } from '../_actions'
 
 export function EmailClassButton({ id }: { id: string }) {
   const t = useGeneratedValueTranslations()
+  const runOnline = useOnlineAction()
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [queued, setQueued] = useState(false)
@@ -28,19 +28,15 @@ export function EmailClassButton({ id }: { id: string }) {
         return
       setError(null)
       setQueued(false)
-      try {
-        await flushRecordSaves()
+      // Needs signal, and sends only once every queued class edit is on the
+      // server (the email reads the saved details).
+      await runOnline('finish', async () => {
         const form = new FormData()
         form.set('id', id)
         const result = await emailClass(form)
         if (result.error) setError(result.error)
         else setQueued(true)
-      } catch (error) {
-        unstable_rethrow(error)
-        setError(
-          t('The class email could not be queued. Check that your changes saved and try again.'),
-        )
-      }
+      })
     })
   }
   return (

@@ -73,6 +73,12 @@ import { isUuid, pickString } from '@/lib/list-params'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendHazidEmail } from './_send-email'
 import { RecordActivity } from '@/components/record-activity'
+import {
+  OfflineRecordProvider,
+  RecordSyncBanner,
+  RecordSyncStatus,
+} from '@/lib/offline-drafts/offline-record'
+import { OnlineActionForm } from '@/components/online-action-form'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import {
@@ -92,8 +98,6 @@ import {
   addPPE,
   addQuestion,
   addTask,
-  answerPPE,
-  answerQuestion,
   attachPhotos,
   copyAssessment,
   deleteAssessment,
@@ -116,7 +120,6 @@ import {
   updateQuestion,
   updatePhoto,
   updateTask,
-  updateTextField,
 } from '../_actions'
 import {
   AddHazardDrawerBody,
@@ -809,1097 +812,1105 @@ export default async function HazidAssessmentDetailPage({
     />
   )
   return (
-    <DetailPageLayout
-      mobileHeader={
-        <div className="flex min-h-11 items-center gap-2" data-mobile-record-header>
-          <UiBackLink
-            href="/hazard-assessments"
-            label={tGeneratedValue('Back to assessments')}
-            iconOnly
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl text-teal-700 hover:bg-slate-100 dark:text-teal-300 dark:hover:bg-slate-800"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold" title={a.reference}>
-              <GeneratedValue value={a.reference} />
+    <OfflineRecordProvider
+      module="hazard-assessments"
+      recordId={id}
+      editable={!a.locked && canUpdate}
+    >
+      <DetailPageLayout
+        mobileHeader={
+          <div className="flex min-h-11 items-center gap-2" data-mobile-record-header>
+            <UiBackLink
+              href="/hazard-assessments"
+              label={tGeneratedValue('Back to assessments')}
+              iconOnly
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl text-teal-700 hover:bg-slate-100 dark:text-teal-300 dark:hover:bg-slate-800"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold" title={a.reference}>
+                <GeneratedValue value={a.reference} />
+              </p>
+              <p
+                className={
+                  a.locked
+                    ? 'flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300'
+                    : 'flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400'
+                }
+              >
+                {a.locked ? <Lock size={11} className="shrink-0" /> : null}
+                <span className="truncate">
+                  <GeneratedText id={a.locked ? 'm_0e259fa0babc2d' : 'm_1a03b06872ffd9'} />
+                </span>
+              </p>
+            </div>
+            <div className="shrink-0 [&_button]:min-h-11">{assessmentActions}</div>
+          </div>
+        }
+        mobileDetails={
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h1 className="text-lg font-semibold">
+                <GeneratedValue value={type?.name ?? tGenerated('m_171ca9d60eef14')} />
+              </h1>
+              <RecordSyncStatus />
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedValue
+                value={`${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone, ctx.locale)}`}
+              />
             </p>
-            <p
-              className={
-                a.locked
-                  ? 'flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300'
-                  : 'flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400'
-              }
-            >
-              {a.locked ? <Lock size={11} className="shrink-0" /> : null}
-              <span className="truncate">
-                <GeneratedText id={a.locked ? 'm_0e259fa0babc2d' : 'm_1a03b06872ffd9'} />
-              </span>
+            {a.locked ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_110a9e28d94199" />{' '}
+                <GeneratedValue
+                  value={a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'}
+                />
+              </p>
+            ) : null}
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_09dfacfcb5fc80" /> <GeneratedValue value={a.reviewStatus} />
             </p>
           </div>
-          <div className="shrink-0 [&_button]:min-h-11">{assessmentActions}</div>
-        </div>
-      }
-      mobileDetails={
-        <div className="space-y-1">
-          <h1 className="text-lg font-semibold">
-            <GeneratedValue value={type?.name ?? tGenerated('m_171ca9d60eef14')} />
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            <GeneratedValue
-              value={`${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone, ctx.locale)}`}
-            />
-          </p>
-          {a.locked ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              <GeneratedText id="m_110a9e28d94199" />{' '}
-              <GeneratedValue
-                value={a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'}
-              />
-            </p>
-          ) : null}
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            <GeneratedText id="m_09dfacfcb5fc80" /> <GeneratedValue value={a.reviewStatus} />
-          </p>
-        </div>
-      }
-      header={
-        <>
-          <DetailHeader
-            back={{ href: '/hazard-assessments', label: 'Back to assessments' }}
-            title={tGeneratedValue(type?.name ?? tGenerated('m_171ca9d60eef14'))}
-            subtitle={tGeneratedValue(
-              `${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone, ctx.locale)}`,
-            )}
-            badge={
-              <div className="flex items-center gap-2">
-                <GeneratedValue
-                  value={
-                    a.locked ? (
-                      <Badge variant="success">
-                        <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">
-                        <GeneratedText id="m_1a03b06872ffd9" />
-                      </Badge>
-                    )
-                  }
-                />
-                <Badge
-                  variant={
-                    a.reviewStatus === 'approved'
-                      ? 'success'
-                      : a.reviewStatus === 'rejected'
-                        ? 'destructive'
-                        : 'outline'
-                  }
-                >
-                  <GeneratedText id="m_09dfacfcb5fc80" /> <GeneratedValue value={a.reviewStatus} />
-                </Badge>
-              </div>
-            }
-            actions={assessmentActions}
-          />
-        </>
-      }
-      alerts={
-        <>
-          <GeneratedValue
-            value={
-              a.locked ? (
-                <Alert variant="warning" className="hidden sm:block">
-                  <AlertTitle>
-                    <GeneratedText id="m_17b55a364cc0d2" />
-                  </AlertTitle>
-                  <AlertDescription>
-                    <GeneratedText id="m_110a9e28d94199" />{' '}
-                    <GeneratedValue
-                      value={
-                        a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'
-                      }
-                    />{' '}
-                    <GeneratedValue value="Job content is locked. Crew can still be added and signed. Unlock to change the job; signatures clear only when content changes." />
-                  </AlertDescription>
-                </Alert>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              requiresYesViolations.length > 0 ? (
-                <Alert variant="destructive">
-                  <AlertTitle>
-                    <GeneratedValue value={requiresYesViolations.length} />{' '}
-                    <GeneratedText id="m_115a5b98c7fe99" />
-                    <GeneratedValue
-                      value={
-                        requiresYesViolations.length === 1 ? (
-                          ''
-                        ) : (
-                          <GeneratedText id="m_00ded356f0f424" />
-                        )
-                      }
-                    />{' '}
-                    <GeneratedText id="m_1b243221c321ad" />
-                  </AlertTitle>
-                  <AlertDescription>
-                    <GeneratedValue
-                      value={requiresYesViolations
-                        .map((q) => q.question)
-                        .slice(0, 3)
-                        .join(' · ')}
-                    />
-                    <GeneratedValue value={requiresYesViolations.length > 3 ? ' · …' : ''} />{' '}
-                    <GeneratedText id="m_0950f40d4e262e" />
-                  </AlertDescription>
-                </Alert>
-              ) : null
-            }
-          />
-        </>
-      }
-      subtabs={<SectionNav sections={sectionItems} />}
-    >
-      <div className="ff-surface space-y-5">
-        <GeneratedValue
-          value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
-        />
-        <section id="section-overview" className="scroll-mt-2 space-y-5">
-          <>
-            {/* Readiness strip — at-a-glance completeness + worst residual risk */}
-            {/* Overview hero — overall completion ring + worst residual risk */}
-            <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center gap-4">
-                <div className="relative h-16 w-16 shrink-0">
-                  <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
-                    <circle
-                      cx="32"
-                      cy="32"
-                      r="26"
-                      fill="none"
-                      strokeWidth="6"
-                      className="stroke-slate-200 dark:stroke-slate-700"
-                    />
-                    <circle
-                      cx="32"
-                      cy="32"
-                      r="26"
-                      fill="none"
-                      strokeWidth="6"
-                      strokeLinecap="round"
-                      strokeDasharray={ringCirc}
-                      strokeDashoffset={ringCirc * (1 - overallPct / 100)}
-                      className={overallPct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
-                    />
-                  </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    <GeneratedValue value={overallPct} />%
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    <GeneratedValue value={overallDone} /> <GeneratedText id="m_00e704d1194796" />{' '}
-                    <GeneratedValue value={overallTotal} /> <GeneratedText id="m_0562433d6260c9" />
-                  </div>
-                  <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                    <GeneratedValue value={type?.name ?? <GeneratedText id="m_171ca9d60eef14" />} />
-                    <GeneratedValue value={site ? ` · ${site.name}` : ''} />
-                  </div>
-                </div>
-              </div>
-              <GeneratedValue
-                value={
-                  showRiskRatings ? (
-                    <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
-                      <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
-                        <GeneratedText id="m_11db8e60406ba7" />
-                      </div>
-                      <div className="mt-1.5">
-                        <RiskScoreBadge
-                          likelihood={highestResidual?.l ?? null}
-                          severity={highestResidual?.s ?? null}
-                        />
-                      </div>
-                    </div>
-                  ) : null
-                }
-              />
-            </div>
-
-            {/* Readiness tiles */}
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <GeneratedValue
-                value={readiness.map((r) => {
-                  const complete = r.total > 0 && r.done >= r.total
-                  const pct = r.total > 0 ? Math.round((r.done / r.total) * 100) : 0
-                  return (
-                    <div
-                      key={r.label}
-                      className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-                    >
-                      <div className="flex items-baseline justify-between">
-                        <span
-                          className={`text-2xl font-semibold ${complete ? 'text-emerald-600' : 'text-slate-900 dark:text-slate-100'}`}
-                        >
-                          <GeneratedValue value={r.done} />
-                          <span className="text-sm font-normal text-slate-400">
-                            /<GeneratedValue value={r.total} />
-                          </span>
-                        </span>
-                        <GeneratedValue
-                          value={
-                            complete ? (
-                              <CheckCircle2 size={18} className="text-emerald-500" />
-                            ) : (
-                              <span className="text-xs font-medium text-slate-400">
-                                <GeneratedValue value={pct} />%
-                              </span>
-                            )
-                          }
-                        />
-                      </div>
-                      <div className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        <GeneratedValue value={r.label} />
-                      </div>
-                      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div
-                          className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-teal-500'}`}
-                          style={{ width: `${Math.min(100, pct)}%` }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              />
-            </div>
-
-            <Section
-              title={tGenerated('m_062cdc4673a07a')}
-              subtitle={tGenerated('m_1cf9885ac52ebd')}
-              icon={<Building2 size={20} />}
-              tone="slate"
-            >
-              {/* Live fields — the input on the page IS the field; everything
-                  auto-saves, nothing hides behind an edit step. */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <LiveSelect
-                  id={a.id}
-                  field="assessmentTypeId"
-                  label={tGenerated('m_169ce2294296b8')}
-                  initialValue={a.assessmentTypeId}
-                  options={typeOptions.map((t) => ({ value: t.id, label: t.name }))}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <LiveDateTime
-                  id={a.id}
-                  field="occurredAt"
-                  label={tGenerated('m_0abeba5c660f3f')}
-                  initialValue={datetimeLocalValue(a.occurredAt, ctx.timezone)}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <LivePersonSelect
-                  id={a.id}
-                  field="supervisorPersonId"
-                  label={tGenerated('m_0ccb8e5b917b17')}
-                  initialValue={a.supervisorPersonId}
-                  initialOption={data.supervisorOption}
-                  options={peopleList.map((p) => ({
-                    value: p.id,
-                    label: `${p.lastName}, ${p.firstName}`,
-                    hint: [p.firstName, p.lastName].filter(Boolean).join(' '),
-                  }))}
-                  sheetTitle="Select supervisor"
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <ReadOnlyField label={tGenerated('m_1550d0ce582f98')} value={completedByName} />
-                <LiveRemoteSelect
-                  id={a.id}
-                  field="siteOrgUnitId"
-                  label={tGenerated('m_055f11420b2da4')}
-                  initialValue={a.siteOrgUnitId}
-                  initialOption={site ? { value: site.id, label: site.name } : undefined}
-                  lookup="hazard-assessment-locations"
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <LiveSelect
-                  id={a.id}
-                  field="projectOrgUnitId"
-                  label={tGenerated('m_05069b4b587da8')}
-                  initialValue={a.projectOrgUnitId}
-                  options={projectOptions.map((p) => ({ value: p.id, label: p.name }))}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-                <LiveField
-                  id={a.id}
-                  field="locationOnSite"
-                  label={tGenerated('m_0352b4ecd48a3a')}
-                  initialValue={a.locationOnSite}
-                  placeholder={tGenerated('m_051443bf0b9acf')}
-                  disabled={locked}
-                  updateAction={updateTextField}
-                />
-              </div>
-              <GeneratedValue
-                value={
-                  showJobScope ? (
-                    <div className="mt-4">
-                      <LiveRichText
-                        id={a.id}
-                        field="jobScope"
-                        initialValue={a.jobScope}
-                        label={tGenerated('m_153980520c3722')}
-                        disabled={locked}
-                        updateAction={updateTextField}
-                        placeholder={tGenerated('m_0cb8e069603f1e')}
-                      />
-                    </div>
-                  ) : null
-                }
-              />
-            </Section>
-          </>
-        </section>
-
-        <GeneratedValue
-          value={
-            showPPE ? (
-              <section id="section-ppe" className="scroll-mt-2">
-                <Section
-                  title={tGenerated('m_021b549e1aeb20', { value0: ppe.length })}
-                  defaultOpen
-                  icon={<Shield size={20} />}
-                  tone="blue"
-                >
-                  <div className="space-y-3">
-                    <GeneratedValue
-                      value={
-                        locked ? null : (
-                          <div className="flex items-center justify-end">
-                            <Link href={drawerHref('add-ppe') as any}>
-                              <Button type="button" size="sm">
-                                <Plus size={12} /> <GeneratedText id="m_0068c6e22ca766" />
-                              </Button>
-                            </Link>
-                          </div>
-                        )
-                      }
-                    />
-                    <GeneratedValue
-                      value={
-                        ppe.length === 0 ? (
-                          <p className="text-sm text-slate-500">
-                            <GeneratedText id="m_1e34d5e60a3c81" />
-                          </p>
-                        ) : (
-                          <ul className="space-y-2">
-                            <GeneratedValue
-                              value={ppe.map((row, idx) => (
-                                <PPERow
-                                  key={row.id}
-                                  row={row}
-                                  assessmentId={id}
-                                  index={idx}
-                                  totalCount={ppe.length}
-                                  basePath={basePath}
-                                  disabled={locked}
-                                  answerAction={answerPPE}
-                                  moveAction={movePPE}
-                                  deleteAction={deletePPE}
-                                />
-                              ))}
-                            />
-                          </ul>
-                        )
-                      }
-                    />
-                  </div>
-                </Section>
-              </section>
-            ) : null
-          }
-        />
-
-        <GeneratedValue
-          value={
-            showQ ? (
-              <section id="section-questions" className="scroll-mt-2">
-                <Section
-                  title={tGenerated('m_07068dcbcbac3b', { value0: questions.length })}
-                  defaultOpen
-                  icon={<HelpCircle size={20} />}
-                  tone="purple"
-                >
-                  <div className="space-y-3">
-                    <GeneratedValue
-                      value={
-                        locked ? null : (
-                          <div className="flex items-center justify-end">
-                            <Link href={drawerHref('add-question') as any}>
-                              <Button type="button" size="sm">
-                                <Plus size={12} /> <GeneratedText id="m_029dffafbff34b" />
-                              </Button>
-                            </Link>
-                          </div>
-                        )
-                      }
-                    />
-                    <GeneratedValue
-                      value={
-                        questions.length === 0 ? (
-                          <p className="text-sm text-slate-500">
-                            <GeneratedText id="m_18125ac5182332" />
-                          </p>
-                        ) : (
-                          <ul className="space-y-2">
-                            <GeneratedValue
-                              value={questions.map((row, idx) => (
-                                <QuestionRow
-                                  key={row.id}
-                                  row={{
-                                    ...row,
-                                    questionType: row.questionType as
-                                      'yes_no' | 'text' | 'multi_select',
-                                  }}
-                                  assessmentId={id}
-                                  index={idx}
-                                  totalCount={questions.length}
-                                  basePath={basePath}
-                                  disabled={locked}
-                                  answerAction={answerQuestion}
-                                  moveAction={moveQuestion}
-                                  deleteAction={deleteQuestion}
-                                />
-                              ))}
-                            />
-                          </ul>
-                        )
-                      }
-                    />
-                  </div>
-                </Section>
-              </section>
-            ) : null
-          }
-        />
-
-        <GeneratedValue
-          value={
-            showTasks ? (
-              <section id="section-tasks" className="scroll-mt-2">
-                <Section
-                  title={tGenerated('m_07a60b8f0641f7', { value0: tasks.length })}
-                  defaultOpen
-                  icon={<ListChecks size={20} />}
-                  tone="teal"
-                >
-                  <div className="space-y-3">
-                    <GeneratedValue
-                      value={
-                        locked ? null : (
-                          <div className="flex items-center justify-end">
-                            <Link href={drawerHref('add-task') as any}>
-                              <Button type="button" size="sm">
-                                <Plus size={12} /> <GeneratedText id="m_02ac1cf154a4f9" />
-                              </Button>
-                            </Link>
-                          </div>
-                        )
-                      }
-                    />
-                    <GeneratedValue
-                      value={
-                        tasks.length === 0 ? (
-                          <p className="text-sm text-slate-500">
-                            <GeneratedText id="m_10d9a3e5d18bcf" />
-                          </p>
-                        ) : (
-                          <ul className="space-y-2">
-                            <GeneratedValue
-                              value={tasks.map((row, idx) => (
-                                <TaskRow
-                                  key={row.row.id}
-                                  row={row.row}
-                                  assessmentId={id}
-                                  totalCount={tasks.length}
-                                  index={idx}
-                                  taskName={row.task?.name ?? null}
-                                  hazardLookup={hazardNameLookup}
-                                  basePath={basePath}
-                                  disabled={locked}
-                                  moveAction={moveTask}
-                                  deleteAction={deleteTask}
-                                />
-                              ))}
-                            />
-                          </ul>
-                        )
-                      }
-                    />
-                  </div>
-                </Section>
-              </section>
-            ) : null
-          }
-        />
-
-        <GeneratedValue
-          value={
-            showHazards ? (
-              <section id="section-hazards" className="scroll-mt-2">
-                <Section
-                  title={tGenerated('m_134189340d1c67', { value0: hazards.length })}
-                  defaultOpen
-                  icon={<AlertTriangle size={20} />}
-                  tone="amber"
-                >
-                  <div className="space-y-3">
-                    <GeneratedValue
-                      value={
-                        locked ? null : (
-                          <div className="flex flex-wrap items-center justify-end gap-2">
-                            <Link href={drawerHref('add-hazard-library') as any}>
-                              <Button type="button" size="sm" variant="outline">
-                                <Plus size={12} /> <GeneratedText id="m_1ea86ac5ad7afa" />
-                              </Button>
-                            </Link>
-                            <Link href={drawerHref('add-hazard-set') as any}>
-                              <Button type="button" size="sm" variant="outline">
-                                <Plus size={12} /> <GeneratedText id="m_130c47677645f8" />
-                              </Button>
-                            </Link>
-                            <Link href={drawerHref('add-hazard') as any}>
-                              <Button type="button" size="sm">
-                                <Plus size={12} /> <GeneratedText id="m_1d0d917ac33140" />
-                              </Button>
-                            </Link>
-                          </div>
-                        )
-                      }
-                    />
-                    <GeneratedValue
-                      value={
-                        hazards.length === 0 ? (
-                          <p className="text-sm text-slate-500">
-                            <GeneratedText id="m_018662f2277816" />
-                          </p>
-                        ) : (
-                          <ul className="space-y-2">
-                            <GeneratedValue
-                              value={hazards.map((row, idx) => (
-                                <HazardRow
-                                  key={row.row.id}
-                                  row={row.row}
-                                  assessmentId={id}
-                                  index={idx}
-                                  totalCount={hazards.length}
-                                  libraryName={row.library?.name ?? null}
-                                  basePath={basePath}
-                                  disabled={locked}
-                                  showRiskRatings={showRiskRatings}
-                                  moveAction={moveHazard}
-                                  deleteAction={deleteHazard}
-                                  updateAction={updateHazard}
-                                />
-                              ))}
-                            />
-                          </ul>
-                        )
-                      }
-                    />
-                  </div>
-                </Section>
-              </section>
-            ) : null
-          }
-        />
-
-        <GeneratedValue
-          value={
-            embeddedApps.length > 0 ? (
-              <section id="section-apps" className="scroll-mt-2">
-                <Section
-                  title={tGenerated('m_0b9766d7cea491', { value0: embeddedApps.length })}
-                  subtitle={tGenerated('m_01c24f55302970')}
-                  defaultOpen
-                  icon={<LayoutGrid size={20} />}
-                  tone="indigo"
-                >
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    <GeneratedValue
-                      value={embeddedApps.map((item) => {
-                        const status = item.status ?? 'not_started'
-                        const statusVariant =
-                          status === 'submitted' || status === 'closed'
-                            ? ('success' as const)
-                            : status === 'non_compliant' || status === 'rejected'
-                              ? ('destructive' as const)
-                              : status === 'draft' || status === 'in_progress'
-                                ? ('warning' as const)
-                                : ('secondary' as const)
-                        const buttonLabel = !item.canEdit
-                          ? 'View response'
-                          : item.done
-                            ? 'View response'
-                            : item.started
-                              ? 'Continue'
-                              : 'Start'
-                        return (
-                          <div
-                            key={item.app.id}
-                            className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <FileText
-                                    size={16}
-                                    className="text-teal-700 dark:text-teal-400"
-                                  />
-                                  <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-                                    <GeneratedValue value={item.app.label} />
-                                  </h3>
-                                  <GeneratedValue
-                                    value={
-                                      item.app.required ? (
-                                        <Badge variant="outline">
-                                          <GeneratedText id="m_12fe2fe7a9ddad" />
-                                        </Badge>
-                                      ) : null
-                                    }
-                                  />
-                                </div>
-                                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                                  <GeneratedValue
-                                    value={
-                                      item.app.description ??
-                                      item.template.description ??
-                                      item.template.name
-                                    }
-                                  />
-                                </p>
-                                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                                  <Badge variant={statusVariant}>
-                                    <GeneratedValue value={status.replace('_', ' ')} />
-                                  </Badge>
-                                  <span>
-                                    <GeneratedValue value={item.template.name} />
-                                  </span>
-                                  <GeneratedValue
-                                    value={
-                                      item.response?.updatedAt ? (
-                                        <span>
-                                          <GeneratedText id="m_014ca61c68ab13" />
-                                          <GeneratedValue value={' '} />
-                                          <GeneratedValue
-                                            value={formatDateTime(
-                                              item.response.updatedAt,
-                                              ctx.timezone,
-                                              ctx.locale,
-                                            )}
-                                          />
-                                        </span>
-                                      ) : null
-                                    }
-                                  />
-                                </div>
-                              </div>
-                              <GeneratedValue
-                                value={
-                                  item.done ? (
-                                    <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
-                                  ) : (
-                                    <PlayCircle size={18} className="shrink-0 text-slate-400" />
-                                  )
-                                }
-                              />
-                            </div>
-                            <form action={openAssessmentApp} className="mt-4">
-                              <input type="hidden" name="assessmentId" value={id} />
-                              <input type="hidden" name="typeAppId" value={item.app.id} />
-                              <Button
-                                type="submit"
-                                // Locked assessments are read-only: submitted responses
-                                // stay viewable, drafts cannot be continued or started.
-                                disabled={!item.done && (locked || !item.canEdit)}
-                                className="ff-chip w-full sm:w-auto sm:min-w-32"
-                              >
-                                <GeneratedValue
-                                  value={
-                                    item.done ? (
-                                      <CheckCircle2 size={16} />
-                                    ) : (
-                                      <PlayCircle size={16} />
-                                    )
-                                  }
-                                />
-                                <GeneratedValue value={buttonLabel} />
-                              </Button>
-                            </form>
-                          </div>
-                        )
-                      })}
-                    />
-                  </div>
-                </Section>
-              </section>
-            ) : null
-          }
-        />
-
-        <section id="section-photos" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_11939da4a6a866', { value0: photos.length })}
-            defaultOpen={photos.length > 0}
-            icon={<Camera size={20} />}
-            tone="slate"
-          >
-            <div className="space-y-3">
-              <PhotoGallery
-                photos={galleryPhotos}
-                editable={!locked}
-                onUpdate={updatePhotoAction}
-                onRemove={removePhotoAction}
-                onReorder={reorderPhotosAction}
-              />
-              <GeneratedValue
-                value={
-                  !locked ? (
-                    <HazidPhotoUploader assessmentId={id} attachAction={attachPhotos} />
-                  ) : null
-                }
-              />
-            </div>
-          </Section>
-        </section>
-
-        <section id="section-signatures" className="scroll-mt-2">
-          <Section
-            title={tGenerated('m_0a21ba9b825206', { value0: signatures.length })}
-            defaultOpen
-            icon={<PenLine size={20} />}
-            tone="emerald"
-          >
-            <SigningRoster assessmentId={id} initial={signingRoster} canUpdate={canUpdate} />
-          </Section>
-        </section>
-
-        <section id="section-activity" className="scroll-mt-2">
-          <Section
-            title={tGeneratedValue('Activity')}
-            defaultOpen={false}
-            icon={<History size={20} />}
-            tone="slate"
-          >
-            <RecordActivity
-              ctx={ctx}
-              entityType="hazid_assessment"
-              entityId={id}
-              basePath={`/hazard-assessments/${id}`}
-              searchParams={sp}
-            />
-          </Section>
-        </section>
-      </div>
-
-      {/* Inline embedded-app fill — full-screen sheet over the assessment. */}
-      <GeneratedValue
-        value={
-          appFill ? (
-            <div className="fixed inset-0 z-40 overflow-y-auto bg-white dark:bg-slate-950">
-              <FormRenderer
-                templateId={appFill.templateId}
-                templateName={appFill.templateName}
-                version={appFill.version}
-                schema={appFill.schema}
-                initialLocation={appFill.initialLocation}
-                locationReadOnly
-                people={appFill.people}
-                entitiesByField={appFill.entitiesByField}
-                currentUser={appFill.currentUser}
-                initialResponseId={appFill.responseId}
-                initialValues={appFill.initialValues}
-                initialRows={appFill.initialRows}
-                initialStepIndex={appFill.initialStepIndex}
-                initialDraftCursor={appFill.initialDraftCursor}
-                isResumed={appFill.resumeOk}
-                returnTo={`/hazard-assessments/${id}#section-apps`}
-              />
-            </div>
-          ) : null
         }
-      />
-
-      {/* ============================================================== */}
-      {/* Drawers — one per drawer key. Each is `open` only when the URL */}
-      {/* `?drawer=` matches AND the row lookup (if any) succeeded.      */}
-      {/* ============================================================== */}
-
-      {/* Tasks */}
-      <UrlDrawer
-        open={drawerKey === 'add-task'}
-        closeHref={tabHref}
-        title={tGenerated('m_02ac1cf154a4f9')}
-        description={tGenerated('m_1c7529d48ef5db')}
-        size="md"
-      >
-        <AddTaskDrawerBody
-          assessmentId={id}
-          taskLibrary={taskLibrary}
-          closeHref={tabHref}
-          addAction={addTask}
-        />
-      </UrlDrawer>
-      <UrlDrawer
-        open={drawerKey === 'edit-task' && !!editTaskRow}
-        closeHref={tabHref}
-        title={tGenerated('m_106407c29478a2')}
-        size="md"
-      >
-        <GeneratedValue
-          value={
-            editTaskRow ? (
-              <EditTaskDrawerBody
-                assessmentId={id}
-                closeHref={tabHref}
-                row={editTaskRow.row}
-                taskName={editTaskRow.task?.name ?? null}
-                hazardLookup={hazardNameLookup}
-                updateAction={updateTask}
-              />
-            ) : null
-          }
-        />
-      </UrlDrawer>
-
-      {/* Hazards */}
-      <UrlDrawer
-        open={drawerKey === 'add-hazard-library'}
-        closeHref={tabHref}
-        title={tGenerated('m_19272e778b78be')}
-        size="md"
-      >
-        <AddHazardLibraryDrawerBody
-          assessmentId={id}
-          hazardLibrary={hazardLibrary}
-          closeHref={tabHref}
-          addAction={addHazard}
-        />
-      </UrlDrawer>
-      <UrlDrawer
-        open={drawerKey === 'add-hazard-set'}
-        closeHref={tabHref}
-        title={tGenerated('m_1ab7f9d61bbc3c')}
-        description={tGenerated('m_01b23816efeafe')}
-        size="md"
-      >
-        <AddHazardSetDrawerBody
-          assessmentId={id}
-          hazardSets={hazardSetWithCount}
-          closeHref={tabHref}
-          addSetAction={addHazardSet}
-        />
-      </UrlDrawer>
-      <UrlDrawer
-        open={drawerKey === 'add-hazard'}
-        closeHref={tabHref}
-        title={tGenerated('m_1524c1cf6ac205')}
-        size="md"
-      >
-        <AddHazardDrawerBody assessmentId={id} closeHref={tabHref} addAction={addHazard} />
-      </UrlDrawer>
-      <UrlDrawer
-        open={drawerKey === 'edit-hazard' && !!editHazardRow}
-        closeHref={tabHref}
-        title={tGenerated('m_1e7cc4ca81f651')}
-        size="md"
-      >
-        <GeneratedValue
-          value={
-            editHazardRow ? (
-              <EditHazardDrawerBody
-                assessmentId={id}
-                closeHref={tabHref}
-                row={editHazardRow.row}
-                libraryName={editHazardRow.library?.name ?? null}
-                showRiskRatings={showRiskRatings}
-                updateAction={updateHazard}
-              />
-            ) : null
-          }
-        />
-      </UrlDrawer>
-
-      {/* PPE */}
-      <UrlDrawer
-        open={drawerKey === 'add-ppe'}
-        closeHref={tabHref}
-        title={tGenerated('m_0068c6e22ca766')}
-        size="md"
-      >
-        <AddPPEDrawerBody assessmentId={id} closeHref={tabHref} addAction={addPPE} />
-      </UrlDrawer>
-      <UrlDrawer
-        open={drawerKey === 'edit-ppe' && !!editPPERow}
-        closeHref={tabHref}
-        title={tGenerated('m_17041530e210ee')}
-        size="md"
-      >
-        <GeneratedValue
-          value={
-            editPPERow ? (
-              <EditPPEDrawerBody
-                assessmentId={id}
-                closeHref={tabHref}
-                row={editPPERow}
-                updateAction={updatePPE}
-              />
-            ) : null
-          }
-        />
-      </UrlDrawer>
-
-      {/* Questions */}
-      <UrlDrawer
-        open={drawerKey === 'add-question'}
-        closeHref={tabHref}
-        title={tGenerated('m_029dffafbff34b')}
-        size="md"
-      >
-        <AddQuestionDrawerBody assessmentId={id} closeHref={tabHref} addAction={addQuestion} />
-      </UrlDrawer>
-      <UrlDrawer
-        open={drawerKey === 'edit-question' && !!editQuestionRow}
-        closeHref={tabHref}
-        title={tGenerated('m_06b6a61fd2d8b0')}
-        size="md"
-      >
-        <GeneratedValue
-          value={
-            editQuestionRow ? (
-              <EditQuestionDrawerBody
-                assessmentId={id}
-                closeHref={tabHref}
-                row={{
-                  ...editQuestionRow,
-                  questionType: editQuestionRow.questionType as 'yes_no' | 'text' | 'multi_select',
-                }}
-                updateAction={updateQuestion}
-              />
-            ) : null
-          }
-        />
-      </UrlDrawer>
-
-      {/* Safety review — visible and actionable only with the dedicated review permission. */}
-      <UrlDrawer
-        open={drawerKey === 'safety-review' && canReview}
-        closeHref={tabHref}
-        title={tGenerated('m_039fc01243fb46')}
-        description={tGenerated('m_1dcf53db730123')}
-        size="md"
-      >
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Badge
-              variant={
-                a.reviewStatus === 'approved'
-                  ? 'success'
-                  : a.reviewStatus === 'rejected'
-                    ? 'destructive'
-                    : 'outline'
+        header={
+          <>
+            <DetailHeader
+              back={{ href: '/hazard-assessments', label: 'Back to assessments' }}
+              title={tGeneratedValue(type?.name ?? tGenerated('m_171ca9d60eef14'))}
+              subtitle={tGeneratedValue(
+                `${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone, ctx.locale)}`,
+              )}
+              badge={
+                <div className="flex flex-wrap items-center gap-2">
+                  <GeneratedValue
+                    value={
+                      a.locked ? (
+                        <Badge variant="success">
+                          <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <GeneratedText id="m_1a03b06872ffd9" />
+                        </Badge>
+                      )
+                    }
+                  />
+                  <Badge
+                    variant={
+                      a.reviewStatus === 'approved'
+                        ? 'success'
+                        : a.reviewStatus === 'rejected'
+                          ? 'destructive'
+                          : 'outline'
+                    }
+                  >
+                    <GeneratedText id="m_09dfacfcb5fc80" />{' '}
+                    <GeneratedValue value={a.reviewStatus} />
+                  </Badge>
+                  <RecordSyncStatus />
+                </div>
               }
-            >
-              <GeneratedValue value={a.reviewStatus} />
-            </Badge>
+              actions={assessmentActions}
+            />
+          </>
+        }
+        alerts={
+          <>
+            <RecordSyncBanner />
             <GeneratedValue
               value={
-                a.reviewedAt ? (
-                  <span className="text-slate-500 dark:text-slate-400">
-                    <GeneratedText id="m_08791cd0d5daff" />{' '}
-                    <GeneratedValue
-                      value={formatDateTime(a.reviewedAt, ctx.timezone, ctx.locale)}
-                    />
-                  </span>
+                a.locked ? (
+                  <Alert variant="warning" className="hidden sm:block">
+                    <AlertTitle>
+                      <GeneratedText id="m_17b55a364cc0d2" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_110a9e28d94199" />{' '}
+                      <GeneratedValue
+                        value={
+                          a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'
+                        }
+                      />{' '}
+                      <GeneratedValue value="Job content is locked. Crew can still be added and signed. Unlock to change the job; signatures clear only when content changes." />
+                    </AlertDescription>
+                  </Alert>
                 ) : null
               }
             />
-          </div>
+            <GeneratedValue
+              value={
+                requiresYesViolations.length > 0 ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>
+                      <GeneratedValue value={requiresYesViolations.length} />{' '}
+                      <GeneratedText id="m_115a5b98c7fe99" />
+                      <GeneratedValue
+                        value={
+                          requiresYesViolations.length === 1 ? (
+                            ''
+                          ) : (
+                            <GeneratedText id="m_00ded356f0f424" />
+                          )
+                        }
+                      />{' '}
+                      <GeneratedText id="m_1b243221c321ad" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedValue
+                        value={requiresYesViolations
+                          .map((q) => q.question)
+                          .slice(0, 3)
+                          .join(' · ')}
+                      />
+                      <GeneratedValue value={requiresYesViolations.length > 3 ? ' · …' : ''} />{' '}
+                      <GeneratedText id="m_0950f40d4e262e" />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+          </>
+        }
+        subtabs={<SectionNav sections={sectionItems} />}
+      >
+        <div className="ff-surface space-y-5">
+          <GeneratedValue
+            value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
+          />
+          <section id="section-overview" className="scroll-mt-2 space-y-5">
+            <>
+              {/* Readiness strip — at-a-glance completeness + worst residual risk */}
+              {/* Overview hero — overall completion ring + worst residual risk */}
+              <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-center gap-4">
+                  <div className="relative h-16 w-16 shrink-0">
+                    <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r="26"
+                        fill="none"
+                        strokeWidth="6"
+                        className="stroke-slate-200 dark:stroke-slate-700"
+                      />
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r="26"
+                        fill="none"
+                        strokeWidth="6"
+                        strokeLinecap="round"
+                        strokeDasharray={ringCirc}
+                        strokeDashoffset={ringCirc * (1 - overallPct / 100)}
+                        className={overallPct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
+                      />
+                    </svg>
+                    <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value={overallPct} />%
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value={overallDone} /> <GeneratedText id="m_00e704d1194796" />{' '}
+                      <GeneratedValue value={overallTotal} />{' '}
+                      <GeneratedText id="m_0562433d6260c9" />
+                    </div>
+                    <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
+                      <GeneratedValue
+                        value={type?.name ?? <GeneratedText id="m_171ca9d60eef14" />}
+                      />
+                      <GeneratedValue value={site ? ` · ${site.name}` : ''} />
+                    </div>
+                  </div>
+                </div>
+                <GeneratedValue
+                  value={
+                    showRiskRatings ? (
+                      <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+                        <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+                          <GeneratedText id="m_11db8e60406ba7" />
+                        </div>
+                        <div className="mt-1.5">
+                          <RiskScoreBadge
+                            likelihood={highestResidual?.l ?? null}
+                            severity={highestResidual?.s ?? null}
+                          />
+                        </div>
+                      </div>
+                    ) : null
+                  }
+                />
+              </div>
+
+              {/* Readiness tiles */}
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <GeneratedValue
+                  value={readiness.map((r) => {
+                    const complete = r.total > 0 && r.done >= r.total
+                    const pct = r.total > 0 ? Math.round((r.done / r.total) * 100) : 0
+                    return (
+                      <div
+                        key={r.label}
+                        className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                      >
+                        <div className="flex items-baseline justify-between">
+                          <span
+                            className={`text-2xl font-semibold ${complete ? 'text-emerald-600' : 'text-slate-900 dark:text-slate-100'}`}
+                          >
+                            <GeneratedValue value={r.done} />
+                            <span className="text-sm font-normal text-slate-400">
+                              /<GeneratedValue value={r.total} />
+                            </span>
+                          </span>
+                          <GeneratedValue
+                            value={
+                              complete ? (
+                                <CheckCircle2 size={18} className="text-emerald-500" />
+                              ) : (
+                                <span className="text-xs font-medium text-slate-400">
+                                  <GeneratedValue value={pct} />%
+                                </span>
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                          <GeneratedValue value={r.label} />
+                        </div>
+                        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div
+                            className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-teal-500'}`}
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                />
+              </div>
+
+              <Section
+                title={tGenerated('m_062cdc4673a07a')}
+                subtitle={tGenerated('m_1cf9885ac52ebd')}
+                icon={<Building2 size={20} />}
+                tone="slate"
+              >
+                {/* Live fields — the input on the page IS the field; everything
+                  auto-saves, nothing hides behind an edit step. */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <LiveSelect
+                    field="assessmentTypeId"
+                    label={tGenerated('m_169ce2294296b8')}
+                    initialValue={a.assessmentTypeId}
+                    options={typeOptions.map((t) => ({ value: t.id, label: t.name }))}
+                    disabled={locked}
+                  />
+                  <LiveDateTime
+                    field="occurredAt"
+                    label={tGenerated('m_0abeba5c660f3f')}
+                    initialValue={datetimeLocalValue(a.occurredAt, ctx.timezone)}
+                    disabled={locked}
+                  />
+                  <LivePersonSelect
+                    field="supervisorPersonId"
+                    label={tGenerated('m_0ccb8e5b917b17')}
+                    initialValue={a.supervisorPersonId}
+                    initialOption={data.supervisorOption}
+                    options={peopleList.map((p) => ({
+                      value: p.id,
+                      label: `${p.lastName}, ${p.firstName}`,
+                      hint: [p.firstName, p.lastName].filter(Boolean).join(' '),
+                    }))}
+                    sheetTitle="Select supervisor"
+                    disabled={locked}
+                  />
+                  <ReadOnlyField label={tGenerated('m_1550d0ce582f98')} value={completedByName} />
+                  <LiveRemoteSelect
+                    field="siteOrgUnitId"
+                    label={tGenerated('m_055f11420b2da4')}
+                    initialValue={a.siteOrgUnitId}
+                    initialOption={site ? { value: site.id, label: site.name } : undefined}
+                    lookup="hazard-assessment-locations"
+                    disabled={locked}
+                  />
+                  <LiveSelect
+                    field="projectOrgUnitId"
+                    label={tGenerated('m_05069b4b587da8')}
+                    initialValue={a.projectOrgUnitId}
+                    options={projectOptions.map((p) => ({ value: p.id, label: p.name }))}
+                    disabled={locked}
+                  />
+                  <LiveField
+                    field="locationOnSite"
+                    label={tGenerated('m_0352b4ecd48a3a')}
+                    initialValue={a.locationOnSite}
+                    placeholder={tGenerated('m_051443bf0b9acf')}
+                    disabled={locked}
+                  />
+                </div>
+                <GeneratedValue
+                  value={
+                    showJobScope ? (
+                      <div className="mt-4">
+                        <LiveRichText
+                          field="jobScope"
+                          initialValue={a.jobScope}
+                          label={tGenerated('m_153980520c3722')}
+                          disabled={locked}
+                          placeholder={tGenerated('m_0cb8e069603f1e')}
+                        />
+                      </div>
+                    ) : null
+                  }
+                />
+              </Section>
+            </>
+          </section>
+
           <GeneratedValue
             value={
-              a.reviewNote ? (
-                <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
-                  <GeneratedValue value={a.reviewNote} />
-                </p>
+              showPPE ? (
+                <section id="section-ppe" className="scroll-mt-2">
+                  <Section
+                    title={tGenerated('m_021b549e1aeb20', { value0: ppe.length })}
+                    defaultOpen
+                    icon={<Shield size={20} />}
+                    tone="blue"
+                  >
+                    <div className="space-y-3">
+                      <GeneratedValue
+                        value={
+                          locked ? null : (
+                            <div className="flex items-center justify-end">
+                              <Link href={drawerHref('add-ppe') as any}>
+                                <Button type="button" size="sm">
+                                  <Plus size={12} /> <GeneratedText id="m_0068c6e22ca766" />
+                                </Button>
+                              </Link>
+                            </div>
+                          )
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          ppe.length === 0 ? (
+                            <p className="text-sm text-slate-500">
+                              <GeneratedText id="m_1e34d5e60a3c81" />
+                            </p>
+                          ) : (
+                            <ul className="space-y-2">
+                              <GeneratedValue
+                                value={ppe.map((row, idx) => (
+                                  <PPERow
+                                    key={row.id}
+                                    row={row}
+                                    assessmentId={id}
+                                    index={idx}
+                                    totalCount={ppe.length}
+                                    basePath={basePath}
+                                    disabled={locked}
+                                    moveAction={movePPE}
+                                    deleteAction={deletePPE}
+                                  />
+                                ))}
+                              />
+                            </ul>
+                          )
+                        }
+                      />
+                    </div>
+                  </Section>
+                </section>
               ) : null
             }
           />
-          <form action={reviewAssessment} className="space-y-3">
-            <input type="hidden" name="id" value={id} />
-            <Textarea
-              name="note"
-              rows={3}
-              defaultValue={a.reviewNote ?? ''}
-              placeholder={tGenerated('m_0f5bae5cd10511')}
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" name="decision" value="approved">
-                <GeneratedText id="m_05194a49d7f46e" />
-              </Button>
-              <Button type="submit" name="decision" value="rejected" variant="destructive">
-                <GeneratedText id="m_0f51548c04b27f" />
-              </Button>
+
+          <GeneratedValue
+            value={
+              showQ ? (
+                <section id="section-questions" className="scroll-mt-2">
+                  <Section
+                    title={tGenerated('m_07068dcbcbac3b', { value0: questions.length })}
+                    defaultOpen
+                    icon={<HelpCircle size={20} />}
+                    tone="purple"
+                  >
+                    <div className="space-y-3">
+                      <GeneratedValue
+                        value={
+                          locked ? null : (
+                            <div className="flex items-center justify-end">
+                              <Link href={drawerHref('add-question') as any}>
+                                <Button type="button" size="sm">
+                                  <Plus size={12} /> <GeneratedText id="m_029dffafbff34b" />
+                                </Button>
+                              </Link>
+                            </div>
+                          )
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          questions.length === 0 ? (
+                            <p className="text-sm text-slate-500">
+                              <GeneratedText id="m_18125ac5182332" />
+                            </p>
+                          ) : (
+                            <ul className="space-y-2">
+                              <GeneratedValue
+                                value={questions.map((row, idx) => (
+                                  <QuestionRow
+                                    key={row.id}
+                                    row={{
+                                      ...row,
+                                      questionType: row.questionType as
+                                        'yes_no' | 'text' | 'multi_select',
+                                    }}
+                                    assessmentId={id}
+                                    index={idx}
+                                    totalCount={questions.length}
+                                    basePath={basePath}
+                                    disabled={locked}
+                                    moveAction={moveQuestion}
+                                    deleteAction={deleteQuestion}
+                                  />
+                                ))}
+                              />
+                            </ul>
+                          )
+                        }
+                      />
+                    </div>
+                  </Section>
+                </section>
+              ) : null
+            }
+          />
+
+          <GeneratedValue
+            value={
+              showTasks ? (
+                <section id="section-tasks" className="scroll-mt-2">
+                  <Section
+                    title={tGenerated('m_07a60b8f0641f7', { value0: tasks.length })}
+                    defaultOpen
+                    icon={<ListChecks size={20} />}
+                    tone="teal"
+                  >
+                    <div className="space-y-3">
+                      <GeneratedValue
+                        value={
+                          locked ? null : (
+                            <div className="flex items-center justify-end">
+                              <Link href={drawerHref('add-task') as any}>
+                                <Button type="button" size="sm">
+                                  <Plus size={12} /> <GeneratedText id="m_02ac1cf154a4f9" />
+                                </Button>
+                              </Link>
+                            </div>
+                          )
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          tasks.length === 0 ? (
+                            <p className="text-sm text-slate-500">
+                              <GeneratedText id="m_10d9a3e5d18bcf" />
+                            </p>
+                          ) : (
+                            <ul className="space-y-2">
+                              <GeneratedValue
+                                value={tasks.map((row, idx) => (
+                                  <TaskRow
+                                    key={row.row.id}
+                                    row={row.row}
+                                    assessmentId={id}
+                                    totalCount={tasks.length}
+                                    index={idx}
+                                    taskName={row.task?.name ?? null}
+                                    hazardLookup={hazardNameLookup}
+                                    basePath={basePath}
+                                    disabled={locked}
+                                    moveAction={moveTask}
+                                    deleteAction={deleteTask}
+                                  />
+                                ))}
+                              />
+                            </ul>
+                          )
+                        }
+                      />
+                    </div>
+                  </Section>
+                </section>
+              ) : null
+            }
+          />
+
+          <GeneratedValue
+            value={
+              showHazards ? (
+                <section id="section-hazards" className="scroll-mt-2">
+                  <Section
+                    title={tGenerated('m_134189340d1c67', { value0: hazards.length })}
+                    defaultOpen
+                    icon={<AlertTriangle size={20} />}
+                    tone="amber"
+                  >
+                    <div className="space-y-3">
+                      <GeneratedValue
+                        value={
+                          locked ? null : (
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <Link href={drawerHref('add-hazard-library') as any}>
+                                <Button type="button" size="sm" variant="outline">
+                                  <Plus size={12} /> <GeneratedText id="m_1ea86ac5ad7afa" />
+                                </Button>
+                              </Link>
+                              <Link href={drawerHref('add-hazard-set') as any}>
+                                <Button type="button" size="sm" variant="outline">
+                                  <Plus size={12} /> <GeneratedText id="m_130c47677645f8" />
+                                </Button>
+                              </Link>
+                              <Link href={drawerHref('add-hazard') as any}>
+                                <Button type="button" size="sm">
+                                  <Plus size={12} /> <GeneratedText id="m_1d0d917ac33140" />
+                                </Button>
+                              </Link>
+                            </div>
+                          )
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          hazards.length === 0 ? (
+                            <p className="text-sm text-slate-500">
+                              <GeneratedText id="m_018662f2277816" />
+                            </p>
+                          ) : (
+                            <ul className="space-y-2">
+                              <GeneratedValue
+                                value={hazards.map((row, idx) => (
+                                  <HazardRow
+                                    key={row.row.id}
+                                    row={row.row}
+                                    assessmentId={id}
+                                    index={idx}
+                                    totalCount={hazards.length}
+                                    libraryName={row.library?.name ?? null}
+                                    basePath={basePath}
+                                    disabled={locked}
+                                    showRiskRatings={showRiskRatings}
+                                    moveAction={moveHazard}
+                                    deleteAction={deleteHazard}
+                                  />
+                                ))}
+                              />
+                            </ul>
+                          )
+                        }
+                      />
+                    </div>
+                  </Section>
+                </section>
+              ) : null
+            }
+          />
+
+          <GeneratedValue
+            value={
+              embeddedApps.length > 0 ? (
+                <section id="section-apps" className="scroll-mt-2">
+                  <Section
+                    title={tGenerated('m_0b9766d7cea491', { value0: embeddedApps.length })}
+                    subtitle={tGenerated('m_01c24f55302970')}
+                    defaultOpen
+                    icon={<LayoutGrid size={20} />}
+                    tone="indigo"
+                  >
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                      <GeneratedValue
+                        value={embeddedApps.map((item) => {
+                          const status = item.status ?? 'not_started'
+                          const statusVariant =
+                            status === 'submitted' || status === 'closed'
+                              ? ('success' as const)
+                              : status === 'non_compliant' || status === 'rejected'
+                                ? ('destructive' as const)
+                                : status === 'draft' || status === 'in_progress'
+                                  ? ('warning' as const)
+                                  : ('secondary' as const)
+                          const buttonLabel = !item.canEdit
+                            ? 'View response'
+                            : item.done
+                              ? 'View response'
+                              : item.started
+                                ? 'Continue'
+                                : 'Start'
+                          return (
+                            <div
+                              key={item.app.id}
+                              className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <FileText
+                                      size={16}
+                                      className="text-teal-700 dark:text-teal-400"
+                                    />
+                                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">
+                                      <GeneratedValue value={item.app.label} />
+                                    </h3>
+                                    <GeneratedValue
+                                      value={
+                                        item.app.required ? (
+                                          <Badge variant="outline">
+                                            <GeneratedText id="m_12fe2fe7a9ddad" />
+                                          </Badge>
+                                        ) : null
+                                      }
+                                    />
+                                  </div>
+                                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue
+                                      value={
+                                        item.app.description ??
+                                        item.template.description ??
+                                        item.template.name
+                                      }
+                                    />
+                                  </p>
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                    <Badge variant={statusVariant}>
+                                      <GeneratedValue value={status.replace('_', ' ')} />
+                                    </Badge>
+                                    <span>
+                                      <GeneratedValue value={item.template.name} />
+                                    </span>
+                                    <GeneratedValue
+                                      value={
+                                        item.response?.updatedAt ? (
+                                          <span>
+                                            <GeneratedText id="m_014ca61c68ab13" />
+                                            <GeneratedValue value={' '} />
+                                            <GeneratedValue
+                                              value={formatDateTime(
+                                                item.response.updatedAt,
+                                                ctx.timezone,
+                                                ctx.locale,
+                                              )}
+                                            />
+                                          </span>
+                                        ) : null
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                                <GeneratedValue
+                                  value={
+                                    item.done ? (
+                                      <CheckCircle2
+                                        size={18}
+                                        className="shrink-0 text-emerald-600"
+                                      />
+                                    ) : (
+                                      <PlayCircle size={18} className="shrink-0 text-slate-400" />
+                                    )
+                                  }
+                                />
+                              </div>
+                              <OnlineActionForm
+                                action={openAssessmentApp}
+                                // Starting an app creates its response; opening
+                                // one acts on it. Both need signal.
+                                purpose={item.started ? 'finish' : 'start'}
+                                className="mt-4"
+                              >
+                                <input type="hidden" name="assessmentId" value={id} />
+                                <input type="hidden" name="typeAppId" value={item.app.id} />
+                                <Button
+                                  type="submit"
+                                  // Locked assessments are read-only: submitted responses
+                                  // stay viewable, drafts cannot be continued or started.
+                                  disabled={!item.done && (locked || !item.canEdit)}
+                                  className="ff-chip w-full sm:w-auto sm:min-w-32"
+                                >
+                                  <GeneratedValue
+                                    value={
+                                      item.done ? (
+                                        <CheckCircle2 size={16} />
+                                      ) : (
+                                        <PlayCircle size={16} />
+                                      )
+                                    }
+                                  />
+                                  <GeneratedValue value={buttonLabel} />
+                                </Button>
+                              </OnlineActionForm>
+                            </div>
+                          )
+                        })}
+                      />
+                    </div>
+                  </Section>
+                </section>
+              ) : null
+            }
+          />
+
+          <section id="section-photos" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_11939da4a6a866', { value0: photos.length })}
+              defaultOpen={photos.length > 0}
+              icon={<Camera size={20} />}
+              tone="slate"
+            >
+              <div className="space-y-3">
+                <PhotoGallery
+                  photos={galleryPhotos}
+                  editable={!locked}
+                  onUpdate={updatePhotoAction}
+                  onRemove={removePhotoAction}
+                  onReorder={reorderPhotosAction}
+                />
+                <GeneratedValue
+                  value={
+                    !locked ? (
+                      <HazidPhotoUploader assessmentId={id} attachAction={attachPhotos} />
+                    ) : null
+                  }
+                />
+              </div>
+            </Section>
+          </section>
+
+          <section id="section-signatures" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_0a21ba9b825206', { value0: signatures.length })}
+              defaultOpen
+              icon={<PenLine size={20} />}
+              tone="emerald"
+            >
+              <SigningRoster assessmentId={id} initial={signingRoster} canUpdate={canUpdate} />
+            </Section>
+          </section>
+
+          <section id="section-activity" className="scroll-mt-2">
+            <Section
+              title={tGeneratedValue('Activity')}
+              defaultOpen={false}
+              icon={<History size={20} />}
+              tone="slate"
+            >
+              <RecordActivity
+                ctx={ctx}
+                entityType="hazid_assessment"
+                entityId={id}
+                basePath={`/hazard-assessments/${id}`}
+                searchParams={sp}
+              />
+            </Section>
+          </section>
+        </div>
+
+        {/* Inline embedded-app fill — full-screen sheet over the assessment. */}
+        <GeneratedValue
+          value={
+            appFill ? (
+              <div className="fixed inset-0 z-40 overflow-y-auto bg-white dark:bg-slate-950">
+                <FormRenderer
+                  templateId={appFill.templateId}
+                  templateName={appFill.templateName}
+                  version={appFill.version}
+                  schema={appFill.schema}
+                  initialLocation={appFill.initialLocation}
+                  locationReadOnly
+                  people={appFill.people}
+                  entitiesByField={appFill.entitiesByField}
+                  currentUser={appFill.currentUser}
+                  initialResponseId={appFill.responseId}
+                  initialValues={appFill.initialValues}
+                  initialRows={appFill.initialRows}
+                  initialStepIndex={appFill.initialStepIndex}
+                  initialDraftCursor={appFill.initialDraftCursor}
+                  isResumed={appFill.resumeOk}
+                  returnTo={`/hazard-assessments/${id}#section-apps`}
+                />
+              </div>
+            ) : null
+          }
+        />
+
+        {/* ============================================================== */}
+        {/* Drawers — one per drawer key. Each is `open` only when the URL */}
+        {/* `?drawer=` matches AND the row lookup (if any) succeeded.      */}
+        {/* ============================================================== */}
+
+        {/* Tasks */}
+        <UrlDrawer
+          open={drawerKey === 'add-task'}
+          closeHref={tabHref}
+          title={tGenerated('m_02ac1cf154a4f9')}
+          description={tGenerated('m_1c7529d48ef5db')}
+          size="md"
+        >
+          <AddTaskDrawerBody
+            assessmentId={id}
+            taskLibrary={taskLibrary}
+            closeHref={tabHref}
+            addAction={addTask}
+          />
+        </UrlDrawer>
+        <UrlDrawer
+          open={drawerKey === 'edit-task' && !!editTaskRow}
+          closeHref={tabHref}
+          title={tGenerated('m_106407c29478a2')}
+          size="md"
+        >
+          <GeneratedValue
+            value={
+              editTaskRow ? (
+                <EditTaskDrawerBody
+                  assessmentId={id}
+                  closeHref={tabHref}
+                  row={editTaskRow.row}
+                  taskName={editTaskRow.task?.name ?? null}
+                  hazardLookup={hazardNameLookup}
+                  updateAction={updateTask}
+                />
+              ) : null
+            }
+          />
+        </UrlDrawer>
+
+        {/* Hazards */}
+        <UrlDrawer
+          open={drawerKey === 'add-hazard-library'}
+          closeHref={tabHref}
+          title={tGenerated('m_19272e778b78be')}
+          size="md"
+        >
+          <AddHazardLibraryDrawerBody
+            assessmentId={id}
+            hazardLibrary={hazardLibrary}
+            closeHref={tabHref}
+            addAction={addHazard}
+          />
+        </UrlDrawer>
+        <UrlDrawer
+          open={drawerKey === 'add-hazard-set'}
+          closeHref={tabHref}
+          title={tGenerated('m_1ab7f9d61bbc3c')}
+          description={tGenerated('m_01b23816efeafe')}
+          size="md"
+        >
+          <AddHazardSetDrawerBody
+            assessmentId={id}
+            hazardSets={hazardSetWithCount}
+            closeHref={tabHref}
+            addSetAction={addHazardSet}
+          />
+        </UrlDrawer>
+        <UrlDrawer
+          open={drawerKey === 'add-hazard'}
+          closeHref={tabHref}
+          title={tGenerated('m_1524c1cf6ac205')}
+          size="md"
+        >
+          <AddHazardDrawerBody assessmentId={id} closeHref={tabHref} addAction={addHazard} />
+        </UrlDrawer>
+        <UrlDrawer
+          open={drawerKey === 'edit-hazard' && !!editHazardRow}
+          closeHref={tabHref}
+          title={tGenerated('m_1e7cc4ca81f651')}
+          size="md"
+        >
+          <GeneratedValue
+            value={
+              editHazardRow ? (
+                <EditHazardDrawerBody
+                  assessmentId={id}
+                  closeHref={tabHref}
+                  row={editHazardRow.row}
+                  libraryName={editHazardRow.library?.name ?? null}
+                  showRiskRatings={showRiskRatings}
+                  updateAction={updateHazard}
+                />
+              ) : null
+            }
+          />
+        </UrlDrawer>
+
+        {/* PPE */}
+        <UrlDrawer
+          open={drawerKey === 'add-ppe'}
+          closeHref={tabHref}
+          title={tGenerated('m_0068c6e22ca766')}
+          size="md"
+        >
+          <AddPPEDrawerBody assessmentId={id} closeHref={tabHref} addAction={addPPE} />
+        </UrlDrawer>
+        <UrlDrawer
+          open={drawerKey === 'edit-ppe' && !!editPPERow}
+          closeHref={tabHref}
+          title={tGenerated('m_17041530e210ee')}
+          size="md"
+        >
+          <GeneratedValue
+            value={
+              editPPERow ? (
+                <EditPPEDrawerBody
+                  assessmentId={id}
+                  closeHref={tabHref}
+                  row={editPPERow}
+                  updateAction={updatePPE}
+                />
+              ) : null
+            }
+          />
+        </UrlDrawer>
+
+        {/* Questions */}
+        <UrlDrawer
+          open={drawerKey === 'add-question'}
+          closeHref={tabHref}
+          title={tGenerated('m_029dffafbff34b')}
+          size="md"
+        >
+          <AddQuestionDrawerBody assessmentId={id} closeHref={tabHref} addAction={addQuestion} />
+        </UrlDrawer>
+        <UrlDrawer
+          open={drawerKey === 'edit-question' && !!editQuestionRow}
+          closeHref={tabHref}
+          title={tGenerated('m_06b6a61fd2d8b0')}
+          size="md"
+        >
+          <GeneratedValue
+            value={
+              editQuestionRow ? (
+                <EditQuestionDrawerBody
+                  assessmentId={id}
+                  closeHref={tabHref}
+                  row={{
+                    ...editQuestionRow,
+                    questionType: editQuestionRow.questionType as
+                      'yes_no' | 'text' | 'multi_select',
+                  }}
+                  updateAction={updateQuestion}
+                />
+              ) : null
+            }
+          />
+        </UrlDrawer>
+
+        {/* Safety review — visible and actionable only with the dedicated review permission. */}
+        <UrlDrawer
+          open={drawerKey === 'safety-review' && canReview}
+          closeHref={tabHref}
+          title={tGenerated('m_039fc01243fb46')}
+          description={tGenerated('m_1dcf53db730123')}
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge
+                variant={
+                  a.reviewStatus === 'approved'
+                    ? 'success'
+                    : a.reviewStatus === 'rejected'
+                      ? 'destructive'
+                      : 'outline'
+                }
+              >
+                <GeneratedValue value={a.reviewStatus} />
+              </Badge>
+              <GeneratedValue
+                value={
+                  a.reviewedAt ? (
+                    <span className="text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_08791cd0d5daff" />{' '}
+                      <GeneratedValue
+                        value={formatDateTime(a.reviewedAt, ctx.timezone, ctx.locale)}
+                      />
+                    </span>
+                  ) : null
+                }
+              />
             </div>
-          </form>
-        </div>
-      </UrlDrawer>
-
-      {/* Delete confirmation — module managers only, matching deleteAssessment */}
-      <UrlDrawer
-        open={drawerKey === 'confirm-delete' && canManage}
-        closeHref={tabHref}
-        title={tGenerated('m_0203e50a2675bb')}
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
-              <GeneratedValue value={a.reference} />
-            </span>
-            <GeneratedValue value={' '} />
-            <GeneratedText id="m_1a4a84621ce774" />
-          </p>
-          <div className="flex items-center justify-end gap-2">
-            <Link href={tabHref as any}>
-              <Button type="button" variant="outline">
-                <GeneratedText id="m_112e2e8ecda428" />
-              </Button>
-            </Link>
-            <form action={deleteAssessment}>
+            <GeneratedValue
+              value={
+                a.reviewNote ? (
+                  <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                    <GeneratedValue value={a.reviewNote} />
+                  </p>
+                ) : null
+              }
+            />
+            <OnlineActionForm purpose="finish" action={reviewAssessment} className="space-y-3">
               <input type="hidden" name="id" value={id} />
-              <Button type="submit" className="bg-red-600 text-white hover:bg-red-700">
-                <Trash2 size={14} /> <GeneratedText id="m_0045f44b1d8771" />
-              </Button>
-            </form>
+              <Textarea
+                name="note"
+                rows={3}
+                defaultValue={a.reviewNote ?? ''}
+                placeholder={tGenerated('m_0f5bae5cd10511')}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" name="decision" value="approved">
+                  <GeneratedText id="m_05194a49d7f46e" />
+                </Button>
+                <Button type="submit" name="decision" value="rejected" variant="destructive">
+                  <GeneratedText id="m_0f51548c04b27f" />
+                </Button>
+              </div>
+            </OnlineActionForm>
           </div>
-        </div>
-      </UrlDrawer>
+        </UrlDrawer>
 
-      <GenericSendEmailDialog
-        open={pickString(sp.send) === '1'}
-        title={tGenerated('m_1798459ce7b554')}
-        description={tGenerated('m_1347794b396886')}
-        reference={a.reference}
-        defaultSubjectPrefix="Update"
-        sendAction={async (fd) => {
-          'use server'
-          fd.set('id', id)
-          await sendEmailAction(fd)
-        }}
-      />
-    </DetailPageLayout>
+        {/* Delete confirmation — module managers only, matching deleteAssessment */}
+        <UrlDrawer
+          open={drawerKey === 'confirm-delete' && canManage}
+          closeHref={tabHref}
+          title={tGenerated('m_0203e50a2675bb')}
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
+                <GeneratedValue value={a.reference} />
+              </span>
+              <GeneratedValue value={' '} />
+              <GeneratedText id="m_1a4a84621ce774" />
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <Link href={tabHref as any}>
+                <Button type="button" variant="outline">
+                  <GeneratedText id="m_112e2e8ecda428" />
+                </Button>
+              </Link>
+              <form action={deleteAssessment}>
+                <input type="hidden" name="id" value={id} />
+                <Button type="submit" className="bg-red-600 text-white hover:bg-red-700">
+                  <Trash2 size={14} /> <GeneratedText id="m_0045f44b1d8771" />
+                </Button>
+              </form>
+            </div>
+          </div>
+        </UrlDrawer>
+
+        <GenericSendEmailDialog
+          open={pickString(sp.send) === '1'}
+          title={tGenerated('m_1798459ce7b554')}
+          description={tGenerated('m_1347794b396886')}
+          reference={a.reference}
+          defaultSubjectPrefix="Update"
+          sendAction={async (fd) => {
+            'use server'
+            fd.set('id', id)
+            await sendEmailAction(fd)
+          }}
+        />
+      </DetailPageLayout>
+    </OfflineRecordProvider>
   )
 }

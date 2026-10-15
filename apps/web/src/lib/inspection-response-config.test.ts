@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest'
 import {
   inspectionCriterionIsAnswered,
   inspectionCriterionDisplayAnswer,
+  inspectionNumberAnswerWire,
   normalizeInspectionChoiceOptions,
   normalizeInspectionNumberAnswer,
   normalizeInspectionTextAnswer,
+  parseInspectionNumberAnswer,
   parseInspectionResponseConfig,
 } from './inspection-response-config'
 
@@ -130,5 +132,34 @@ describe('inspection compliance percentage', () => {
     expect(inspectionCompliancePercent(22, 4)).toBe(85)
     expect(inspectionCompliancePercent(3, 0)).toBe(100)
     expect(inspectionCompliancePercent(0, 0)).toBe(0)
+  })
+})
+
+describe('inspection number answer wire form', () => {
+  it('spells every equal number one way, as PostgreSQL numeric would store it', () => {
+    expect(inspectionNumberAnswerWire(null)).toBe('')
+    expect(inspectionNumberAnswerWire('12.50')).toBe('12.5')
+    expect(inspectionNumberAnswerWire('12.5')).toBe('12.5')
+    expect(inspectionNumberAnswerWire('+012')).toBe('12')
+    expect(inspectionNumberAnswerWire('.5')).toBe('0.5')
+    expect(inspectionNumberAnswerWire('5.')).toBe('5')
+    expect(inspectionNumberAnswerWire('1e3')).toBe('1000')
+    expect(inspectionNumberAnswerWire('1.50e1')).toBe('15')
+    expect(inspectionNumberAnswerWire('-2.5E-3')).toBe('-0.0025')
+    expect(inspectionNumberAnswerWire('-0.000')).toBe('0')
+    expect(inspectionNumberAnswerWire('0')).toBe('0')
+  })
+
+  it('keeps precision a JavaScript number would lose', () => {
+    expect(inspectionNumberAnswerWire('12345678901234567890.123456789')).toBe(
+      '12345678901234567890.123456789',
+    )
+  })
+
+  it('refuses exponents a numeric column cannot hold', () => {
+    expect(parseInspectionNumberAnswer('1e3')).toBe('1e3')
+    expect(parseInspectionNumberAnswer(' ')).toBeNull()
+    expect(() => parseInspectionNumberAnswer('1e99999')).toThrow('Enter a valid number')
+    expect(() => parseInspectionNumberAnswer('abc')).toThrow('Enter a valid number')
   })
 })

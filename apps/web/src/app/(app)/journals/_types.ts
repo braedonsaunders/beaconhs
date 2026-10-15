@@ -152,12 +152,3 @@ export type EntryMetaResult = {
   summary: string
   tags: string[]
 }
-
-export type EntryPatch = {
-  bodyHtml?: string
-  definition?: JournalDefinition
-  siteOrgUnitId?: string | null
-  supervisorPersonId?: string | null
-  entryDate?: string
-  tags?: string[]
-}

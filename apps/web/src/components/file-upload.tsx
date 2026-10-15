@@ -114,6 +114,12 @@ export function FileUpload({
       setError(tGenerated('m_07fc9a5de7d865', { value0: maxFiles }))
       return
     }
+    // Uploads need a live connection; they are not queued on the device.
+    if (!navigator.onLine) {
+      setError(tGenerated('m_0149ae2f927cc5'))
+      if (inputRef.current) inputRef.current.value = ''
+      return
+    }
     setError(tGeneratedValue(null))
     start(async () => {
       try {

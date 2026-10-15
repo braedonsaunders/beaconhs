@@ -15,3 +15,12 @@ export function normalizeJournalTags(value: unknown): string[] | null {
   }
   return Array.from(new Set(value.map((tag: string) => tag.trim().toLowerCase())))
 }
+
+/**
+ * The one order an entry's tags travel in between the page and the record
+ * saver (plain code-unit order, identical on server and client), so the same
+ * set of tags always compares equal.
+ */
+export function canonicalJournalTags(tags: readonly string[]): string[] {
+  return [...tags].sort()
+}

@@ -6,6 +6,7 @@ import { Button, Drawer } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
 import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import { unwrapSigningResult } from '@/lib/hazid-signing-result'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { signCrewMember } from './_signing-actions'
 
 export function CrewSignatureDrawer({
@@ -26,6 +27,8 @@ export function CrewSignatureDrawer({
   const [ink, setInk] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  // Signatures are never queued on the device: saving ink needs signal.
+  const runOnline = useOnlineAction()
   const signer = signers[index]
   function close() {
     if (
@@ -52,18 +55,22 @@ export function CrewSignatureDrawer({
             if (!ready || !ink || !signer) return
             setError(null)
             start(async () => {
-              try {
-                unwrapSigningResult(await signCrewMember(signer.id, revision, ink))
-                setInk(null)
-                if (index + 1 < signers.length) setIndex((i) => i + 1)
-                else onClose()
-                await onSaved()
-              } catch (err) {
-                unstable_rethrow(err)
-                setError(
-                  err instanceof Error ? err.message : 'Could not save your signature. Try again.',
-                )
-              }
+              await runOnline('finish', async () => {
+                try {
+                  unwrapSigningResult(await signCrewMember(signer.id, revision, ink))
+                  setInk(null)
+                  if (index + 1 < signers.length) setIndex((i) => i + 1)
+                  else onClose()
+                  await onSaved()
+                } catch (err) {
+                  unstable_rethrow(err)
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : 'Could not save your signature. Try again.',
+                  )
+                }
+              })
             })
           }}
         >

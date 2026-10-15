@@ -20,6 +20,7 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { Loader2, Plus } from 'lucide-react'
 import { Button, FileUploader, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
@@ -63,6 +64,7 @@ export function CertificateDrawer({
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  const runOnline = useOnlineAction()
 
   function reset() {
     setInspectedOn(todayIso)
@@ -87,25 +89,27 @@ export function CertificateDrawer({
       return
     }
     start(async () => {
-      const res = await saveAction({
-        itemId,
-        inspectedOn,
-        result,
-        inspectedByPersonId: personId || null,
-        inspectorName: inspectorName.trim() || null,
-        inspectorCompany: inspectorCompany.trim() || null,
-        certificateAttachmentId: uploaded?.attachmentId ?? null,
-        notes: notes.trim() || null,
+      await runOnline('finish', async () => {
+        const res = await saveAction({
+          itemId,
+          inspectedOn,
+          result,
+          inspectedByPersonId: personId || null,
+          inspectorName: inspectorName.trim() || null,
+          inspectorCompany: inspectorCompany.trim() || null,
+          certificateAttachmentId: uploaded?.attachmentId ?? null,
+          notes: notes.trim() || null,
+        })
+        if (res.ok) {
+          toast.success(tGenerated('m_1d67aec605c8f7'))
+          reset()
+          router.push(closeHref)
+          router.refresh()
+        } else {
+          setError(tGeneratedValue(res.error))
+          toast.error(tGeneratedValue(res.error))
+        }
       })
-      if (res.ok) {
-        toast.success(tGenerated('m_1d67aec605c8f7'))
-        reset()
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(tGeneratedValue(res.error))
-        toast.error(tGeneratedValue(res.error))
-      }
     })
   }
 

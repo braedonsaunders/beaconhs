@@ -827,7 +827,6 @@ export default async function FormResponsePage({
                             <OnlineActionForm
                               action={finalizeResponse}
                               purpose="finish"
-                              syncResponseId={id}
                               className="inline"
                             >
                               <input type="hidden" name="responseId" value={id} />
@@ -844,7 +843,6 @@ export default async function FormResponsePage({
                             <OnlineActionForm
                               action={lockResponse}
                               purpose="finish"
-                              syncResponseId={id}
                               className="inline"
                             >
                               <input type="hidden" name="responseId" value={id} />

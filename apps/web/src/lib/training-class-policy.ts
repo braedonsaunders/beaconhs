@@ -13,7 +13,7 @@ const MAX_TRAINING_CLASS_COMPLETION_PAGE_SIZE = 100
 const MAX_TRAINING_CLASS_TITLE_LENGTH = 200
 const MAX_TRAINING_CLASS_NOTES_LENGTH = 20_000
 
-const TRAINING_CLASS_MUTABLE_FIELDS = [
+export const TRAINING_CLASS_MUTABLE_FIELDS = [
   'courseId',
   'title',
   'schedule',
@@ -25,7 +25,7 @@ const TRAINING_CLASS_MUTABLE_FIELDS = [
   'reminderHours',
 ] as const
 
-type TrainingClassMutableField = (typeof TRAINING_CLASS_MUTABLE_FIELDS)[number]
+export type TrainingClassMutableField = (typeof TRAINING_CLASS_MUTABLE_FIELDS)[number]
 
 export type ParsedTrainingClassField =
   | { field: 'courseId'; value: string }
@@ -52,21 +52,8 @@ export function parseTrainingClassField(
         field,
         value: requiredTextInput(value, 'Class title', MAX_TRAINING_CLASS_TITLE_LENGTH),
       }
-    case 'schedule': {
-      let raw: { startsAt?: unknown; endsAt?: unknown }
-      try {
-        raw = JSON.parse(typeof value === 'string' ? value : '') as typeof raw
-      } catch {
-        throw new Error('Class schedule is invalid.')
-      }
-      const startsAt =
-        typeof raw?.startsAt === 'string' ? parseDatetimeLocal(raw.startsAt, timezone) : null
-      const endsAt =
-        typeof raw?.endsAt === 'string' ? parseDatetimeLocal(raw.endsAt, timezone) : null
-      if (!startsAt || !endsAt) throw new Error('Class schedule is invalid.')
-      assertTrainingClassSchedule(startsAt, endsAt)
-      return { field, value: { startsAt, endsAt } }
-    }
+    case 'schedule':
+      return { field, value: parseTrainingClassSchedule(value, timezone) }
     case 'location':
       return { field, value: optionalTextInput(value, 'Class location', 500) }
     case 'reminderHours': {
@@ -95,6 +82,27 @@ export function parseTrainingClassField(
         value: optionalTextInput(value, 'Class notes', MAX_TRAINING_CLASS_NOTES_LENGTH),
       }
   }
+}
+
+/**
+ * The class schedule as the record page edits it: start and end together, as
+ * wall-clock `YYYY-MM-DDTHH:mm` values in the worker's timezone, so moving a
+ * class to another day never passes through an end-before-start state.
+ */
+export function parseTrainingClassSchedule(
+  value: unknown,
+  timezone: string,
+): { startsAt: Date; endsAt: Date } {
+  const raw =
+    value != null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as { startsAt?: unknown; endsAt?: unknown })
+      : null
+  const startsAt =
+    typeof raw?.startsAt === 'string' ? parseDatetimeLocal(raw.startsAt, timezone) : null
+  const endsAt = typeof raw?.endsAt === 'string' ? parseDatetimeLocal(raw.endsAt, timezone) : null
+  if (!startsAt || !endsAt) throw new Error('Class schedule is invalid.')
+  assertTrainingClassSchedule(startsAt, endsAt)
+  return { startsAt, endsAt }
 }
 
 export function assertTrainingClassSchedule(startsAt: Date, endsAt: Date): void {

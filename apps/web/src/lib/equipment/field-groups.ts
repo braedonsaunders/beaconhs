@@ -8,13 +8,13 @@
 //
 // Client-safe: plain data + pure helpers, imported by server pages and the
 // category drawer alike. Field names are equipment_items camelCase columns —
-// updateEquipmentField's allowlist and the record page renderer both derive
-// from this registry, so adding a field here wires both ends.
+// the equipment record saver's allowlist and the record page renderer both
+// derive from this registry, so adding a field here wires both ends.
 
 type EquipmentNativeFieldType = 'text' | 'date' | 'number' | 'select'
 
 export type EquipmentNativeField = {
-  /** equipment_items column, camelCase (matches Drizzle + the autosave allowlist). */
+  /** equipment_items column, camelCase (matches Drizzle + the record saver's ops). */
   field: string
   label: string
   type: EquipmentNativeFieldType
@@ -140,4 +140,15 @@ export function resolveEnabledFieldGroups(
 ): EquipmentFieldGroup[] {
   const keys = new Set(enabledKeys ?? DEFAULT_ENABLED_GROUP_KEYS)
   return EQUIPMENT_FIELD_GROUPS.filter((g) => keys.has(g.key))
+}
+
+/**
+ * A registry field's stored value as its record-page input shows it (and as
+ * the equipment record saver compares it): '' for empty, and decimals as the
+ * plain number — `numeric` columns come back zero-padded ("12.50").
+ */
+export function equipmentFieldWireValue(field: EquipmentNativeField, value: unknown): string {
+  if (value == null) return ''
+  if (field.type === 'number' && field.numeric !== 'int') return String(Number(value))
+  return String(value)
 }

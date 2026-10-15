@@ -2,10 +2,11 @@
 
 // Create / update server actions for the locations detail page and its
 // sub-entities. A location IS an org_unit with its own /locations/[id] detail
-// page that doubles as the edit surface (LiveField autosave on the Overview
-// tab). A project instant-creates and redirects to its own detail page. A
-// customer contact has no detail page — it's a sub-record created and edited in
-// a flyout on the parent location.
+// page that doubles as the edit surface (Overview fields save on the device
+// and sync through the locations record saver, see ../_record-edits.ts). A
+// project instant-creates and redirects to its own detail page. A customer
+// contact has no detail page — it's a sub-record created and edited in a
+// flyout on the parent location.
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -14,85 +15,6 @@ import { customerContacts, orgUnits } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-
-// Address sub-fields live inside the org_units.address JSON column; they post
-// as flat field names from the Overview LiveFields and are folded into the
-// JSON object here.
-const ADDRESS_FIELDS = {
-  addressLine1: 'line1',
-  addressLine2: 'line2',
-  addressCity: 'city',
-  addressRegion: 'region',
-  addressPostal: 'postal',
-  addressCountry: 'country',
-} as const
-type AddressFieldKey = keyof typeof ADDRESS_FIELDS
-
-const TEXT_FIELDS = new Set(['name', 'code'])
-const NUMBER_FIELDS = new Set(['lat', 'lng', 'geofenceMeters'])
-
-/**
- * Inline field editor for the location Overview tab. Each Live* field posts
- * {id, field, value}; this validates the field against an allowlist, coerces it
- * for its column (text / number / address-JSON sub-key), persists, audits, and
- * revalidates. Stays on the page — no redirect.
- *
- * Allowlist:
- *   • text:    name, code
- *   • number:  lat, lng, geofenceMeters (blank → null)
- *   • address: addressLine1, addressLine2, addressCity, addressRegion,
- *              addressPostal, addressCountry (folded into the address JSON)
- *   • name is required (a blank name is rejected).
- */
-export async function updateLocationField(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.org.manage')
-  const id = String(formData.get('id') ?? '')
-  const field = String(formData.get('field') ?? '')
-  const raw = formData.get('value')
-  const value = typeof raw === 'string' ? raw : ''
-  if (!id || !field) throw new Error('Missing id/field')
-
-  const isAddress = field in ADDRESS_FIELDS
-  const allowed = TEXT_FIELDS.has(field) || NUMBER_FIELDS.has(field) || isAddress
-  if (!allowed) throw new Error('Field not allowed')
-
-  const before = await ctx.db(async (tx) => {
-    const [u] = await tx.select().from(orgUnits).where(eq(orgUnits.id, id)).limit(1)
-    return u
-  })
-  if (!before) throw new Error('Location not found')
-
-  const trimmed = value.trim()
-  let patch: Partial<typeof orgUnits.$inferInsert>
-
-  if (NUMBER_FIELDS.has(field)) {
-    const num = trimmed === '' ? null : Number(trimmed)
-    if (num != null && Number.isNaN(num)) throw new Error('Invalid number')
-    patch = { [field]: num }
-  } else if (isAddress) {
-    const key = ADDRESS_FIELDS[field as AddressFieldKey]
-    const next = { ...(before.address ?? {}) }
-    if (trimmed === '') delete next[key]
-    else next[key] = trimmed
-    patch = { address: Object.keys(next).length > 0 ? next : null }
-  } else {
-    // Text fields.
-    if (field === 'name' && trimmed === '') throw new Error('Name is required')
-    patch = { [field]: field === 'name' ? trimmed : trimmed === '' ? null : trimmed }
-  }
-
-  await ctx.db((tx) => tx.update(orgUnits).set(patch).where(eq(orgUnits.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'org_unit',
-    entityId: id,
-    action: 'update',
-    summary: `Updated ${field}`,
-    after: patch as unknown as Record<string, unknown>,
-  })
-  revalidatePath(`/locations/${id}`)
-  revalidatePath('/locations')
-}
 
 /**
  * Instant-create a project under a customer and land in its detail page (the

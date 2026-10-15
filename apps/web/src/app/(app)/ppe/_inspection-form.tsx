@@ -15,9 +15,16 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 // straight from FormData; the controlled state drives the live status and the
 // submit gate. On a registered item, high+ severity fails still auto-spawn a
 // corrective action server-side; other PPE failures are recorded only.
+//
+// The inspection is created in one call when it is submitted, so its answers
+// are kept on the device as the worker goes (see useDeviceForm): a dead zone,
+// a reload, or iOS discarding the tab never loses them, and the drawer
+// restores them when it reopens. Submitting needs signal (uploading photos
+// too); offline, the worker is told and the answers stay on the device.
 
 import * as React from 'react'
 import Link from 'next/link'
+import { unstable_rethrow } from 'next/navigation'
 import {
   Alert,
   AlertDescription,
@@ -29,7 +36,10 @@ import {
   UrlDrawer,
   cn,
 } from '@beaconhs/ui'
+import { DraftRecoveryBanner, DraftSyncIndicator } from '@/components/draft-sync-status'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
+import { useDeviceForm } from '@/lib/offline-drafts/use-device-form'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import { InspectionStatusPill } from '@/components/inspection-status-pill'
 import { RemoteSelectField } from '@/components/remote-search-select'
 import { submitPpeInspection } from './_inspection-actions'
@@ -48,6 +58,20 @@ const ANSWERS: { value: Answer; label: string }[] = [
   { value: 'fail', label: 'Fail' },
   { value: 'n_a', label: 'N/A' },
 ]
+
+type PickedOption = { value: string; label: string }
+
+/** What the device keeps for an unsubmitted inspection. */
+type InspectionAnswers = {
+  answers: Record<string, Answer>
+  reasons: Record<string, string>
+  photos: Record<string, AttachedFile[]>
+  serialNumber: string
+  suppliedBy: string
+  site: PickedOption | null
+  supervisor: PickedOption | null
+  notes: string
+}
 
 type InspectionTarget =
   | { kind: 'item'; itemId: string }
@@ -74,12 +98,51 @@ export function PpeInspectionForm({
   criteria: Criterion[]
 }) {
   const tGenerated = useGeneratedTranslations()
+  const runOnline = useOnlineAction()
   const [answers, setAnswers] = React.useState<Record<string, Answer>>({})
   const [reasons, setReasons] = React.useState<Record<string, string>>({})
   const [photos, setPhotos] = React.useState<Record<string, AttachedFile[]>>({})
+  const [serialNumber, setSerialNumber] = React.useState('')
+  const [suppliedBy, setSuppliedBy] = React.useState('')
+  const [site, setSite] = React.useState<PickedOption | null>(null)
+  const [supervisor, setSupervisor] = React.useState<PickedOption | null>(null)
+  const [notes, setNotes] = React.useState('')
+  // Remounts the uncontrolled pickers when answers are restored or cleared.
+  const [pickerVersion, setPickerVersion] = React.useState(0)
   const [uploading, setUploading] = React.useState<Record<string, boolean>>({})
   const [error, setError] = React.useState<string | null>(null)
   const [pending, start] = React.useTransition()
+
+  const applyAnswers = React.useCallback((saved: InspectionAnswers | null) => {
+    setAnswers(saved?.answers ?? {})
+    setReasons(saved?.reasons ?? {})
+    setPhotos(saved?.photos ?? {})
+    setSerialNumber(saved?.serialNumber ?? '')
+    setSuppliedBy(saved?.suppliedBy ?? '')
+    setSite(saved?.site ?? null)
+    setSupervisor(saved?.supervisor ?? null)
+    setNotes(saved?.notes ?? '')
+    setPickerVersion((version) => version + 1)
+  }, [])
+  const device = useDeviceForm<InspectionAnswers>({
+    enabled: open,
+    form: 'ppe-inspection',
+    localId: `${target.kind === 'item' ? `item:${target.itemId}` : `other:${typeId}`}:${kind}`,
+    onRestore: applyAnswers,
+  })
+  const { save: saveOnDevice } = device
+  const current = React.useMemo<InspectionAnswers>(
+    () => ({ answers, reasons, photos, serialNumber, suppliedBy, site, supervisor, notes }),
+    [answers, reasons, photos, serialNumber, suppliedBy, site, supervisor, notes],
+  )
+  const started =
+    Object.keys(answers).length > 0 ||
+    Object.values(reasons).some((reason) => reason.trim()) ||
+    Object.values(photos).some((files) => files.length > 0) ||
+    Boolean(serialNumber.trim() || suppliedBy.trim() || site || supervisor || notes.trim())
+  React.useEffect(() => {
+    if (started) saveOnDevice(current)
+  }, [current, saveOnDevice, started])
 
   const answeredCount = criteria.filter((c) => answers[c.id]).length
   const missingEvidence = criteria.filter((criterion) => {
@@ -116,13 +179,16 @@ export function PpeInspectionForm({
         // content height, and the tail of the checklist rendered under and past
         // the bar — the drawer appeared to lurch and end early.
         <div className="flex w-full items-center justify-between gap-3">
-          <InspectionStatusPill
-            status={status}
-            answered={answeredCount}
-            total={criteria.length}
-            missingEvidence={missingEvidence}
-            uploadingCount={uploadingCount}
-          />
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <InspectionStatusPill
+              status={status}
+              answered={answeredCount}
+              total={criteria.length}
+              missingEvidence={missingEvidence}
+              uploadingCount={uploadingCount}
+            />
+            <DraftSyncIndicator state={device.state} onRetry={() => undefined} />
+          </div>
           <Button type="submit" form="ppe-inspection-form" disabled={!allAnswered || pending}>
             <GeneratedValue
               value={
@@ -143,14 +209,27 @@ export function PpeInspectionForm({
           event.preventDefault()
           if (!allAnswered || pending) return
           const data = new FormData(event.currentTarget)
+          const answered = current
           setError(null)
           start(async () => {
-            try {
-              const result = await submitPpeInspection(data)
-              if (result?.error) setError(result.error)
-            } catch {
-              setError('Could not record the inspection. Your answers are kept. Please try again.')
-            }
+            await runOnline('finish', async () => {
+              // Submitted: the device copy is no longer needed. It is put back
+              // if the server refuses the inspection.
+              device.clear()
+              try {
+                const result = await submitPpeInspection(data)
+                if (result?.error) {
+                  setError(result.error)
+                  saveOnDevice(answered)
+                }
+              } catch (submitError) {
+                unstable_rethrow(submitError)
+                saveOnDevice(answered)
+                setError(
+                  'Could not record the inspection. Your answers are kept. Please try again.',
+                )
+              }
+            })
           })
         }}
       >
@@ -166,6 +245,17 @@ export function PpeInspectionForm({
         <input type="hidden" name="kind" value={kind} />
 
         <div className="space-y-4">
+          <DraftRecoveryBanner
+            restored={device.restored}
+            conflict={false}
+            onDismiss={device.dismissRestored}
+            onDiscard={() => {
+              device.clear()
+              applyAnswers(null)
+            }}
+            onTakeDeviceCopy={() => undefined}
+            onTakeSavedVersion={() => undefined}
+          />
           {error ? (
             <Alert variant="destructive">
               <AlertDescription>
@@ -200,7 +290,13 @@ export function PpeInspectionForm({
                   <Label htmlFor="ppe-other-serial">
                     <GeneratedText id="m_0ff1343b241439" />
                   </Label>
-                  <Input id="ppe-other-serial" name="serialNumber" maxLength={200} />
+                  <Input
+                    id="ppe-other-serial"
+                    name="serialNumber"
+                    maxLength={200}
+                    value={serialNumber}
+                    onChange={(event) => setSerialNumber(event.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="ppe-other-supplied-by">
@@ -211,6 +307,8 @@ export function PpeInspectionForm({
                     name="suppliedBy"
                     maxLength={200}
                     placeholder={tGenerated('m_1507cb4f441bb1')}
+                    value={suppliedBy}
+                    onChange={(event) => setSuppliedBy(event.target.value)}
                   />
                 </div>
               </div>
@@ -407,8 +505,14 @@ export function PpeInspectionForm({
               <GeneratedText id="m_055f11420b2da4" />
             </Label>
             <RemoteSelectField
+              key={`site-${pickerVersion}`}
               name="siteOrgUnitId"
               lookup="ppe-inspection-sites"
+              defaultValue={site?.value ?? ''}
+              initialOption={site ?? undefined}
+              onOptionChange={(option) =>
+                setSite(option ? { value: option.value, label: option.label } : null)
+              }
               placeholder={tGenerated('m_00833db103546a')}
               searchPlaceholder={tGenerated('m_016e087c3c8544')}
             />
@@ -421,8 +525,14 @@ export function PpeInspectionForm({
             {/* A person, not a tenant user — the foreman who watched the check
               is often someone without a login. */}
             <RemoteSelectField
+              key={`supervisor-${pickerVersion}`}
               name="supervisorPersonId"
               lookup="ppe-inspection-supervisors"
+              defaultValue={supervisor?.value ?? ''}
+              initialOption={supervisor ?? undefined}
+              onOptionChange={(option) =>
+                setSupervisor(option ? { value: option.value, label: option.label } : null)
+              }
               placeholder={tGenerated('m_0ba815306341be')}
             />
           </div>
@@ -431,7 +541,12 @@ export function PpeInspectionForm({
             <Label>
               <GeneratedText id="m_0b8dadcb78cd08" />
             </Label>
-            <Input name="notes" placeholder={tGenerated('m_0e9c5a8419946e')} />
+            <Input
+              name="notes"
+              placeholder={tGenerated('m_0e9c5a8419946e')}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+            />
           </div>
         </div>
       </form>

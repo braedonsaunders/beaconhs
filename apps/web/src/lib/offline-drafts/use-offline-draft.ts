@@ -14,12 +14,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getDraftSyncEngine, type DraftSyncState, type FlushOutcome } from './engine'
 import {
-  draftRecordKey,
+  formDraftKey,
   pendingCount,
   reconcileDeviceDraft,
   type DraftClientCursor,
   type DraftServerCursor,
   type DraftSnapshot,
+  type FormDraftRecord,
   type OfflineDraftRecord,
   type SnapshotWork,
 } from './model'
@@ -86,11 +87,10 @@ function freshCursor(baseRevision: number, serverCreated: boolean): DraftClientC
 }
 
 /** A stored record narrowed to an unsynced whole-draft snapshot. */
-function snapshotRecord(
-  record: OfflineDraftRecord | null,
-): (OfflineDraftRecord & { work: SnapshotWork }) | null {
-  if (!record || record.work.kind !== 'snapshot' || pendingCount(record.work) === 0) return null
-  return record as OfflineDraftRecord & { work: SnapshotWork }
+function snapshotRecord(record: OfflineDraftRecord | null): FormDraftRecord | null {
+  if (!record || record.target !== 'form' || record.work.kind !== 'snapshot') return null
+  if (pendingCount(record.work) === 0) return null
+  return record as FormDraftRecord
 }
 
 export function useOfflineDraft(options: OfflineDraftOptions): OfflineDraftHandle {
@@ -139,7 +139,7 @@ export function useOfflineDraft(options: OfflineDraftOptions): OfflineDraftHandl
     (
       next: DraftSession,
       cursor: DraftClientCursor | null,
-      record: (OfflineDraftRecord & { work: SnapshotWork }) | null,
+      record: FormDraftRecord | null,
       conflictRevision?: number,
     ) => {
       const engine = getDraftSyncEngine()
@@ -158,6 +158,7 @@ export function useOfflineDraft(options: OfflineDraftOptions): OfflineDraftHandl
             scope: scopeKey ?? '',
             tenantId: scope?.tenantId ?? '',
             userId: scope?.userId ?? '',
+            target: 'form',
             templateId,
             responseId: next.responseId,
             complianceObligationId,
@@ -184,15 +185,14 @@ export function useOfflineDraft(options: OfflineDraftOptions): OfflineDraftHandl
     if (!enabled) return
     let cancelled = false
     const engine = getDraftSyncEngine()
-    const keyFor = (responseId: string) =>
-      draftRecordKey(scopeKey ?? 'unscoped', 'snapshot', responseId)
+    const keyFor = (responseId: string) => formDraftKey(scopeKey ?? 'unscoped', responseId)
 
     void (async () => {
       await engine.ready()
       if (cancelled) return
       const props = optionsRef.current
       let lock: HeldLock | null = null
-      let record: (OfflineDraftRecord & { work: SnapshotWork }) | null = null
+      let record: FormDraftRecord | null = null
       let responseId = initialResponseId
       const origin: DraftSession['origin'] = initialResponseId ? 'resume' : 'new'
 
@@ -208,7 +208,8 @@ export function useOfflineDraft(options: OfflineDraftOptions): OfflineDraftHandl
           // started for the same app (and compliance task) on this device.
           const candidates = (await engine.listStored(scopeKey))
             .filter(
-              (r) =>
+              (r): r is FormDraftRecord =>
+                r.target === 'form' &&
                 r.origin === 'new' &&
                 r.templateId === templateId &&
                 r.complianceObligationId === complianceObligationId &&
@@ -377,7 +378,7 @@ export function useOfflineDraft(options: OfflineDraftOptions): OfflineDraftHandl
       lockRef.current?.release()
       lockRef.current = null
       const responseId = crypto.randomUUID()
-      const nextKey = draftRecordKey(scopeKey ?? 'unscoped', 'snapshot', responseId)
+      const nextKey = formDraftKey(scopeKey ?? 'unscoped', responseId)
       void engine.acquireLock(nextKey, 0).then((lock) => {
         lockRef.current = lock
         openSession(

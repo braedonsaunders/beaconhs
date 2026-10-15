@@ -9,13 +9,12 @@ import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
-import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
+import { and, asc, count, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
+import { assertCan, can } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
   attachments,
   formResponses,
-  formTemplateVersions,
   formTemplates,
   hazidAssessmentAppResponses,
   hazidAssessmentHazards,
@@ -34,7 +33,6 @@ import {
   hazidHazardTypes,
   hazidLocationTasks,
   hazidTasks,
-  orgUnits,
   people,
   tenantUsers,
 } from '@beaconhs/db/schema'
@@ -59,12 +57,20 @@ import { riskRating } from './_risk-scale'
 import { hazidAppIsApplicable } from '@/lib/hazid-app-condition'
 import { parsePhotoEdits } from '@/lib/photo-edits'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
+import {
+  ASSESSMENT_LOCKED_MESSAGE,
+  assessmentPaths,
+  createAssessmentAppResponse,
+  createAutoAssessmentApps,
+  lockEditableAssessment,
+  lockVisibleAssessment,
+  updateAssessmentHazardRow,
+  type AssessmentHazardUpdate,
+  type HazidCtx,
+} from './_assessment-rules'
+import { nullableText, postedFlag } from './_assessment-inputs'
 
-// All HazID server actions assume a tenant is active. requireRequestContext
-// types tenantId as string | null because some admin pages run pre-tenant —
-// but every page below /hazard-assessments is tenant-scoped, so we narrow once here.
-type HazidCtx = Omit<RequestContext, 'tenantId'> & { tenantId: string }
-
+// All HazID server actions assume a tenant is active (see HazidCtx).
 async function ctxWithTenant(): Promise<HazidCtx> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('Active tenant required')
@@ -87,7 +93,7 @@ async function assertCanSeeAssessment(ctx: HazidCtx, assessmentId: string): Prom
 // Lock/unlock/copy/delete/export keep the plain visibility guard.
 async function assertAssessmentEditable(ctx: HazidCtx, assessmentId: string): Promise<void> {
   const row = await resolveAssessmentAccess(ctx, assessmentId)
-  if (row.locked) throw new Error('This assessment is locked. Unlock it to make changes.')
+  if (row.locked) throw new Error(ASSESSMENT_LOCKED_MESSAGE)
 }
 
 async function resolveAssessmentAccess(
@@ -128,220 +134,8 @@ async function resolveAssessmentAccess(
   }
 }
 
-const PATHS = (id: string) => [`/hazard-assessments/${id}`, '/hazard-assessments']
-
 function revalidateAssessment(id: string) {
-  for (const p of PATHS(id)) revalidatePath(p)
-}
-
-type HazidTx = any
-
-async function lockVisibleAssessment(
-  ctx: HazidCtx,
-  tx: HazidTx,
-  assessmentId: string,
-): Promise<{
-  locked: boolean
-  signingFrozenAt: Date | null
-  signingRevision: number
-  reportedByTenantUserId: string | null
-}> {
-  const [row] = await tx
-    .select({
-      reportedByTenantUserId: hazidAssessments.reportedByTenantUserId,
-      siteOrgUnitId: hazidAssessments.siteOrgUnitId,
-      locked: hazidAssessments.locked,
-      signingFrozenAt: hazidAssessments.signingFrozenAt,
-      signingRevision: hazidAssessments.signingRevision,
-    })
-    .from(hazidAssessments)
-    .where(
-      and(
-        eq(hazidAssessments.tenantId, ctx.tenantId),
-        eq(hazidAssessments.id, assessmentId),
-        isNull(hazidAssessments.deletedAt),
-      ),
-    )
-    .limit(1)
-    .for('update')
-  if (!row) throw new Error('Assessment not found')
-  const visible = await canSeeRecord(ctx, tx, {
-    prefix: 'hazid',
-    ownerIds: [row.reportedByTenantUserId],
-    siteId: row.siteOrgUnitId,
-  })
-  if (!visible) throw new Error('Assessment not found')
-  return {
-    locked: row.locked,
-    signingFrozenAt: row.signingFrozenAt,
-    signingRevision: row.signingRevision,
-    reportedByTenantUserId: row.reportedByTenantUserId,
-  }
-}
-
-async function lockEditableAssessment(
-  ctx: HazidCtx,
-  tx: HazidTx,
-  assessmentId: string,
-): Promise<void> {
-  const row = await lockVisibleAssessment(ctx, tx, assessmentId)
-  if (row.locked) throw new Error('This assessment is locked. Unlock it to make changes.')
-}
-
-async function latestTemplateVersion(tx: HazidTx, templateId: string) {
-  const [version] = await tx
-    .select({ id: formTemplateVersions.id })
-    .from(formTemplateVersions)
-    .where(eq(formTemplateVersions.templateId, templateId))
-    .orderBy(desc(formTemplateVersions.version))
-    .limit(1)
-  return version ?? null
-}
-
-async function createAssessmentAppResponse(
-  tx: HazidTx,
-  args: {
-    tenantId: string
-    assessmentId: string
-    typeAppId: string
-    templateId: string
-    entityOrder: number
-    submittedBy?: string | null
-  },
-) {
-  const [assessment] = await tx
-    .select({ siteOrgUnitId: hazidAssessments.siteOrgUnitId })
-    .from(hazidAssessments)
-    .where(
-      and(
-        eq(hazidAssessments.tenantId, args.tenantId),
-        eq(hazidAssessments.id, args.assessmentId),
-        isNull(hazidAssessments.deletedAt),
-      ),
-    )
-    .limit(1)
-  if (!assessment) return null
-
-  const version = await latestTemplateVersion(tx, args.templateId)
-  if (!version) return null
-
-  const [response] = await tx
-    .insert(formResponses)
-    .values({
-      tenantId: args.tenantId,
-      templateId: args.templateId,
-      templateVersionId: version.id,
-      status: 'draft',
-      submittedBy: args.submittedBy ?? null,
-      siteOrgUnitId: assessment.siteOrgUnitId,
-      data: {},
-      sourceEntityType: 'hazid_assessment',
-      sourceEntityId: args.assessmentId,
-    })
-    .returning({ id: formResponses.id })
-  if (!response) return null
-
-  const [link] = await tx
-    .insert(hazidAssessmentAppResponses)
-    .values({
-      tenantId: args.tenantId,
-      assessmentId: args.assessmentId,
-      typeAppId: args.typeAppId,
-      templateId: args.templateId,
-      responseId: response.id,
-      entityOrder: args.entityOrder,
-    })
-    .returning()
-  return link ?? null
-}
-
-async function createAutoAssessmentApps(
-  tx: HazidTx,
-  args: {
-    ctx: HazidCtx
-    tenantId: string
-    assessmentId: string
-    assessmentTypeId: string | null
-    submittedBy?: string | null
-  },
-) {
-  if (!args.assessmentTypeId) return []
-  const roleKeys = await getEffectiveRoleKeys(args.ctx, tx)
-  type AutoAssessmentAppRow = {
-    app: typeof hazidAssessmentTypeApps.$inferSelect
-    templateStatus: typeof formTemplates.$inferSelect.status
-    templateAllowedRoles: typeof formTemplates.$inferSelect.allowedRoles
-    templateDeletedAt: typeof formTemplates.$inferSelect.deletedAt
-  }
-  const rows: AutoAssessmentAppRow[] = await tx
-    .select({
-      app: hazidAssessmentTypeApps,
-      templateStatus: formTemplates.status,
-      templateAllowedRoles: formTemplates.allowedRoles,
-      templateDeletedAt: formTemplates.deletedAt,
-    })
-    .from(hazidAssessmentTypeApps)
-    .innerJoin(formTemplates, eq(formTemplates.id, hazidAssessmentTypeApps.templateId))
-    .where(
-      and(
-        eq(hazidAssessmentTypeApps.typeId, args.assessmentTypeId),
-        eq(hazidAssessmentTypeApps.autoCreate, true),
-        isNull(hazidAssessmentTypeApps.deletedAt),
-      ),
-    )
-    .orderBy(asc(hazidAssessmentTypeApps.entityOrder))
-  const [questionRows, existingRows] = await Promise.all([
-    tx
-      .select({
-        sourceTypeQuestionId: hazidAssessmentQuestions.sourceTypeQuestionId,
-        answer: hazidAssessmentQuestions.answer,
-      })
-      .from(hazidAssessmentQuestions)
-      .where(eq(hazidAssessmentQuestions.assessmentId, args.assessmentId)),
-    tx
-      .select({ typeAppId: hazidAssessmentAppResponses.typeAppId })
-      .from(hazidAssessmentAppResponses)
-      .where(eq(hazidAssessmentAppResponses.assessmentId, args.assessmentId)),
-  ])
-  const answers = new Map<string, string | null>(
-    questionRows.flatMap((row: { sourceTypeQuestionId: string | null; answer: string | null }) =>
-      row.sourceTypeQuestionId ? [[row.sourceTypeQuestionId, row.answer] as const] : [],
-    ),
-  )
-  const existingTypeAppIds = new Set(
-    existingRows.flatMap((row: { typeAppId: string | null }) =>
-      row.typeAppId ? [row.typeAppId] : [],
-    ),
-  )
-  const apps = rows.filter(
-    (row) =>
-      !existingTypeAppIds.has(row.app.id) &&
-      hazidAppIsApplicable(row.app.config, answers) &&
-      canAccessTemplate(
-        args.ctx,
-        {
-          status: row.templateStatus,
-          allowedRoles: row.templateAllowedRoles,
-          deletedAt: row.templateDeletedAt,
-        },
-        roleKeys,
-        'operate',
-      ),
-  )
-
-  const links = []
-  for (const { app } of apps) {
-    const link = await createAssessmentAppResponse(tx, {
-      tenantId: args.tenantId,
-      assessmentId: args.assessmentId,
-      typeAppId: app.id,
-      templateId: app.templateId,
-      entityOrder: app.entityOrder,
-      submittedBy: args.submittedBy,
-    })
-    if (link) links.push(link)
-  }
-  return links
+  for (const p of assessmentPaths(id)) revalidatePath(p)
 }
 
 // ------------------------------------------------------------------
@@ -825,111 +619,6 @@ export async function openAssessmentApp(formData: FormData) {
   redirect(`/apps/responses/${target.responseId}` as any)
 }
 
-export async function updateTextField(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
-  const id = String(formData.get('id') ?? '')
-  const field = String(formData.get('field') ?? '')
-  const value = nullable(formData.get('value'))
-  if (!id || !field) throw new Error('Missing id/field')
-  await assertAssessmentEditable(ctx, id)
-  const ALLOWED = new Set([
-    'jobScope',
-    // General-info fields editable inline on the single-page form
-    'locationOnSite',
-    'siteOrgUnitId',
-    'projectOrgUnitId',
-    'supervisorPersonId',
-    'occurredAt',
-    'assessmentTypeId',
-  ])
-  if (!ALLOWED.has(field)) throw new Error('Field not allowed')
-
-  // Nullable FK columns — empty string clears them.
-  const NULLABLE_IDS = new Set([
-    'siteOrgUnitId',
-    'projectOrgUnitId',
-    'supervisorPersonId',
-    'assessmentTypeId',
-  ])
-  const DATES = new Set(['occurredAt'])
-
-  // Rich-text columns store HTML; sanitize on write and store an empty editor
-  // (`<p></p>`) as null.
-  const RICH = new Set(['jobScope'])
-
-  let val: unknown = value
-  if (RICH.has(field)) val = nullableRichText(value)
-  if (NULLABLE_IDS.has(field)) val = value || null
-  if (DATES.has(field)) {
-    // datetime-local wall-clock strings are parsed in the user's timezone.
-    const d = value ? parseDatetimeLocal(value, ctx.timezone) : null
-    if (!d) throw new Error('Invalid date')
-    val = d
-  }
-
-  await ctx.db(async (tx) => {
-    await lockEditableAssessment(ctx, tx, id)
-    if (field === 'supervisorPersonId' && val) {
-      if (!isUuid(String(val))) throw new Error('Choose an active supervisor')
-      const [supervisor] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.id, String(val)), activePeopleWhere()))
-        .limit(1)
-      if (!supervisor) throw new Error('Choose an active supervisor')
-    }
-    if (field === 'siteOrgUnitId' && val) {
-      if (!isUuid(String(val))) throw new Error('Invalid location')
-      const [location] = await tx
-        .select({ id: orgUnits.id })
-        .from(orgUnits)
-        .where(and(eq(orgUnits.id, String(val)), isNull(orgUnits.deletedAt)))
-        .limit(1)
-      if (!location) throw new Error('Location not found')
-    }
-    const updates: Record<string, unknown> = { [field]: val }
-    await tx
-      .update(hazidAssessments)
-      .set(updates as any)
-      .where(eq(hazidAssessments.id, id))
-    if (field === 'siteOrgUnitId') {
-      const linkedResponses = await tx
-        .select({ id: hazidAssessmentAppResponses.responseId })
-        .from(hazidAssessmentAppResponses)
-        .where(
-          and(
-            eq(hazidAssessmentAppResponses.tenantId, ctx.tenantId),
-            eq(hazidAssessmentAppResponses.assessmentId, id),
-          ),
-        )
-      if (linkedResponses.length > 0) {
-        await tx
-          .update(formResponses)
-          .set({ siteOrgUnitId: val as string | null })
-          .where(
-            and(
-              eq(formResponses.tenantId, ctx.tenantId),
-              inArray(
-                formResponses.id,
-                linkedResponses.map((response) => response.id),
-              ),
-              isNull(formResponses.deletedAt),
-            ),
-          )
-      }
-    }
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'hazid_assessment',
-      entityId: id,
-      action: 'update',
-      summary: `Updated ${field}`,
-      after: { [field]: val },
-    })
-  })
-  revalidateAssessment(id)
-}
-
 export async function lockAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.update')
@@ -1384,8 +1073,8 @@ export async function updateTask(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  const description = nullable(formData.get('description'))
-  const controls = nullable(formData.get('controls'))
+  const description = nullableText(formData.get('description'))
+  const controls = nullableText(formData.get('controls'))
   await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, assessmentId)
     await tx
@@ -1551,18 +1240,16 @@ export async function updateHazard(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  // Partial update: only fields present on the FormData are written, so the
-  // inline checklist widgets (applicable toggle, specific-controls autosave)
-  // can save one field without clobbering the rest of the row.
-  const updates: Record<string, unknown> = {}
+  // Partial update: only fields present on the FormData are written (the
+  // inline checklist edits single fields through the record saver, with the
+  // same parse rules and the same row writer).
+  const updates: AssessmentHazardUpdate = {}
   if (formData.has('specificControls'))
-    updates.specificControls = nullable(formData.get('specificControls'))
-  if (formData.has('applicable'))
-    updates.applicable =
-      formData.get('applicable') === 'on' || formData.get('applicable') === 'true'
+    updates.specificControls = nullableText(formData.get('specificControls'))
+  if (formData.has('applicable')) updates.applicable = postedFlag(formData.get('applicable'))
   if (formData.has('standardControls'))
-    updates.standardControls = nullable(formData.get('standardControls'))
-  if (formData.has('name')) updates.name = nullable(formData.get('name'))
+    updates.standardControls = nullableText(formData.get('standardControls'))
+  if (formData.has('name')) updates.name = nullableText(formData.get('name'))
   // Risk-rating fields are optional 1..RISK_AXIS_MAX ints; absent → leave the
   // column alone, empty → null it out, otherwise clamp into the valid range.
   if (formData.has('preLikelihood'))
@@ -1571,19 +1258,11 @@ export async function updateHazard(formData: FormData) {
   if (formData.has('postLikelihood'))
     updates.postLikelihood = riskRating(formData.get('postLikelihood'))
   if (formData.has('postSeverity')) updates.postSeverity = riskRating(formData.get('postSeverity'))
-  if (formData.has('controls')) updates.controls = nullable(formData.get('controls'))
+  if (formData.has('controls')) updates.controls = nullableText(formData.get('controls'))
   if (Object.keys(updates).length === 0) return
   await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, assessmentId)
-    await tx
-      .update(hazidAssessmentHazards)
-      .set(updates)
-      .where(
-        and(
-          eq(hazidAssessmentHazards.id, id),
-          eq(hazidAssessmentHazards.assessmentId, assessmentId),
-        ),
-      )
+    await updateAssessmentHazardRow(tx, ctx, { assessmentId, hazardRowId: id, updates })
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'hazid_assessment_hazard',
       entityId: id,
@@ -1649,7 +1328,7 @@ export async function addPPE(formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   if (!assessmentId || !name) throw new Error('Missing fields')
   await assertAssessmentEditable(ctx, assessmentId)
-  const description = nullable(formData.get('description'))
+  const description = nullableText(formData.get('description'))
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
   await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, assessmentId)
@@ -1682,7 +1361,7 @@ export async function updatePPE(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
   const name = String(formData.get('name') ?? '').trim() || undefined
-  const description = nullable(formData.get('description'))
+  const description = nullableText(formData.get('description'))
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
   const updates: Record<string, unknown> = { description, required }
   if (name) updates.name = name
@@ -1697,30 +1376,6 @@ export async function updatePPE(formData: FormData) {
       entityId: id,
       action: 'update',
       summary: 'Updated PPE row',
-    })
-  })
-  revalidateAssessment(assessmentId)
-}
-
-export async function answerPPE(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
-  const id = String(formData.get('id') ?? '')
-  const assessmentId = String(formData.get('assessmentId') ?? '')
-  const answer = String(formData.get('answer') ?? '')
-  if (!['yes', 'no', 'na'].includes(answer)) throw new Error('Bad answer')
-  await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db(async (tx) => {
-    await lockEditableAssessment(ctx, tx, assessmentId)
-    await tx
-      .update(hazidAssessmentPPE)
-      .set({ answer: answer as 'yes' | 'no' | 'na' })
-      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId)))
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'hazid_assessment_ppe',
-      entityId: id,
-      action: 'update',
-      summary: `Answered PPE row: ${answer}`,
     })
   })
   revalidateAssessment(assessmentId)
@@ -1806,46 +1461,6 @@ export async function addQuestion(formData: FormData) {
       entityId: assessmentId,
       action: 'update',
       summary: 'Added question',
-    })
-  })
-  revalidateAssessment(assessmentId)
-}
-
-export async function answerQuestion(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
-  const id = String(formData.get('id') ?? '')
-  const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertAssessmentEditable(ctx, assessmentId)
-  const answer = nullable(formData.get('answer'))
-  await ctx.db(async (tx) => {
-    await lockEditableAssessment(ctx, tx, assessmentId)
-    await tx
-      .update(hazidAssessmentQuestions)
-      .set({ answer })
-      .where(
-        and(
-          eq(hazidAssessmentQuestions.id, id),
-          eq(hazidAssessmentQuestions.assessmentId, assessmentId),
-        ),
-      )
-    const [assessment] = await tx
-      .select({ assessmentTypeId: hazidAssessments.assessmentTypeId })
-      .from(hazidAssessments)
-      .where(eq(hazidAssessments.id, assessmentId))
-      .limit(1)
-    await createAutoAssessmentApps(tx, {
-      ctx,
-      tenantId: ctx.tenantId,
-      assessmentId,
-      assessmentTypeId: assessment?.assessmentTypeId ?? null,
-      submittedBy: ctx.membership?.id ?? null,
-    })
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'hazid_assessment_question',
-      entityId: id,
-      action: 'update',
-      summary: 'Answered question',
     })
   })
   revalidateAssessment(assessmentId)
@@ -2148,8 +1763,8 @@ export async function createHazardType(formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const color = String(formData.get('color') ?? '#64748b').trim() || '#64748b'
-  const iconKey = nullable(formData.get('iconKey'))
-  const description = nullable(formData.get('description'))
+  const iconKey = nullableText(formData.get('iconKey'))
+  const description = nullableText(formData.get('description'))
   const [row] = await ctx.db((tx) =>
     tx
       .insert(hazidHazardTypes)
@@ -2172,8 +1787,8 @@ export async function updateHazardType(formData: FormData) {
   const updates = {
     name: String(formData.get('name') ?? '').trim() || undefined,
     color: String(formData.get('color') ?? '').trim() || undefined,
-    iconKey: nullable(formData.get('iconKey')),
-    description: nullable(formData.get('description')),
+    iconKey: nullableText(formData.get('iconKey')),
+    description: nullableText(formData.get('description')),
   }
   await ctx.db((tx) => tx.update(hazidHazardTypes).set(updates).where(eq(hazidHazardTypes.id, id)))
   await recordAudit(ctx, {
@@ -2204,10 +1819,10 @@ export async function createHazardLibrary(formData: FormData) {
   assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
-  const hazardTypeId = nullable(formData.get('hazardTypeId'))
-  const description = nullable(formData.get('description'))
-  const standardControls = nullable(formData.get('standardControls'))
-  const risks = nullable(formData.get('risks'))
+  const hazardTypeId = nullableText(formData.get('hazardTypeId'))
+  const description = nullableText(formData.get('description'))
+  const standardControls = nullableText(formData.get('standardControls'))
+  const risks = nullableText(formData.get('risks'))
   const [row] = await ctx.db((tx) =>
     tx
       .insert(hazidHazards)
@@ -2229,10 +1844,10 @@ export async function updateHazardLibrary(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const updates = {
     name: String(formData.get('name') ?? '').trim() || undefined,
-    hazardTypeId: nullable(formData.get('hazardTypeId')),
-    description: nullable(formData.get('description')),
-    standardControls: nullable(formData.get('standardControls')),
-    risks: nullable(formData.get('risks')),
+    hazardTypeId: nullableText(formData.get('hazardTypeId')),
+    description: nullableText(formData.get('description')),
+    standardControls: nullableText(formData.get('standardControls')),
+    risks: nullableText(formData.get('risks')),
   }
   await ctx.db((tx) => tx.update(hazidHazards).set(updates).where(eq(hazidHazards.id, id)))
   await recordAudit(ctx, {
@@ -2265,7 +1880,7 @@ export async function createHazardSet(formData: FormData) {
   assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
-  const description = nullable(formData.get('description'))
+  const description = nullableText(formData.get('description'))
   const hazardIds = String(formData.get('hazardIds') ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -2295,7 +1910,7 @@ export async function updateHazardSet(formData: FormData) {
     .filter((s) => s.length > 0)
   const updates = {
     name: String(formData.get('name') ?? '').trim() || undefined,
-    description: nullable(formData.get('description')),
+    description: nullableText(formData.get('description')),
     hazardIds,
   }
   await ctx.db((tx) => tx.update(hazidHazardSets).set(updates).where(eq(hazidHazardSets.id, id)))
@@ -2327,7 +1942,7 @@ export async function createTaskLibrary(formData: FormData) {
   assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
-  const description = nullable(formData.get('description'))
+  const description = nullableText(formData.get('description'))
   const controls = nullableRichText(formData.get('controls'))
   const hazardIds = String(formData.get('hazardIds') ?? '')
     .split(',')
@@ -2368,7 +1983,7 @@ export async function updateTaskLibrary(formData: FormData) {
     .filter((s) => s.length > 0)
   const updates = {
     name: String(formData.get('name') ?? '').trim() || undefined,
-    description: nullable(formData.get('description')),
+    description: nullableText(formData.get('description')),
     controls: nullableRichText(formData.get('controls')),
     hazardIds,
     preLikelihood: riskRating(formData.get('preLikelihood')),
@@ -2421,13 +2036,13 @@ export async function createAssessmentType(formData: FormData) {
       .values({
         tenantId: ctx.tenantId,
         name,
-        description: nullable(formData.get('description')),
+        description: nullableText(formData.get('description')),
         style,
         hasPPE: flag('hasPPE'),
         hasQuestions: flag('hasQuestions'),
         hasRiskRatings: style === 'hazard_based' ? flag('hasRiskRatings') : true,
         defaultHazardSetId:
-          style === 'hazard_based' ? nullable(formData.get('defaultHazardSetId')) : null,
+          style === 'hazard_based' ? nullableText(formData.get('defaultHazardSetId')) : null,
         availableToGroupIds,
       })
       .returning(),
@@ -2444,14 +2059,8 @@ export async function createAssessmentType(formData: FormData) {
 // ------------------------------------------------------------------
 // Utility helpers
 // ------------------------------------------------------------------
-function nullable(v: FormDataEntryValue | null): string | null {
-  if (v === null) return null
-  const s = String(v).trim()
-  return s === '' ? null : s
-}
-
 function nullableRichText(v: FormDataEntryValue | null): string | null {
-  const raw = nullable(v)
+  const raw = nullableText(v)
   if (!raw) return null
   const clean = sanitizeDocumentHtml(raw)
   return htmlToText(clean) ? clean : null

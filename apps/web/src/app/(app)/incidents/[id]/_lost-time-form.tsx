@@ -7,6 +7,7 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 
 import { useTransition } from 'react'
 import { Input, Label, Select, Textarea } from '@beaconhs/ui'
+import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 
 const STATUSES = [
   { value: 'off_work', label: 'Off work' },
@@ -25,8 +26,17 @@ export function LostTimeAddForm({
 }) {
   const tGenerated = useGeneratedTranslations()
   const [isPending, startTransition] = useTransition()
+  const runOnline = useOnlineAction()
   return (
-    <form id={formId} action={(fd) => startTransition(() => addAction(fd))} className="space-y-3">
+    <form
+      id={formId}
+      action={(fd) =>
+        startTransition(async () => {
+          await runOnline('finish', () => addAction(fd))
+        })
+      }
+      className="space-y-3"
+    >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="ltf-status">

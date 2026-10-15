@@ -22,19 +22,15 @@ type SkillFieldInitialOptions = {
 }
 
 export function SkillDetailFields({
-  id,
   initial,
   initialOptions,
   disabled,
   personHref,
-  updateAction,
 }: {
-  id: string
   initial: SkillFieldValues
   initialOptions: SkillFieldInitialOptions
   disabled?: boolean
   personHref?: string | null
-  updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
   return (
@@ -48,7 +44,6 @@ export function SkillDetailFields({
         <div className="grid grid-cols-2 gap-4">
           <div className="min-w-0 space-y-1">
             <LiveRemoteSelect
-              id={id}
               field="personId"
               label={tGenerated('m_12e926c9216094')}
               initialValue={initial.personId}
@@ -56,7 +51,6 @@ export function SkillDetailFields({
               lookup="training-skill-assignment-people"
               emptyLabel={tGenerated('m_0be39d3a196b5b')}
               disabled={disabled}
-              updateAction={updateAction}
             />
             <GeneratedValue
               value={
@@ -72,7 +66,6 @@ export function SkillDetailFields({
             />
           </div>
           <LiveRemoteSelect
-            id={id}
             field="skillTypeId"
             label={tGenerated('m_0f4481ed349502')}
             initialValue={initial.skillTypeId}
@@ -80,11 +73,9 @@ export function SkillDetailFields({
             lookup="training-skill-assignment-types"
             emptyLabel={tGenerated('m_1ac86a66a34aae')}
             disabled={disabled}
-            updateAction={updateAction}
           />
         </div>
         <LiveSelect
-          id={id}
           field="status"
           label={tGenerated('m_0b9da892d6faf0')}
           initialValue={initial.status}
@@ -93,37 +84,30 @@ export function SkillDetailFields({
           )}
           allowEmpty={false}
           disabled={disabled}
-          updateAction={updateAction}
         />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <LiveField
-            id={id}
             field="grantedOn"
             label={tGenerated('m_06ff18f1003d06')}
             type="date"
             initialValue={initial.grantedOn}
             disabled={disabled}
-            updateAction={updateAction}
           />
           <LiveField
-            id={id}
             field="expiresOn"
             label={tGenerated('m_001b29133dcb72')}
             type="date"
             initialValue={initial.expiresOn}
             disabled={disabled}
-            updateAction={updateAction}
           />
         </div>
         <LiveField
-          id={id}
           field="notes"
           label={tGenerated('m_0b8dadcb78cd08')}
           initialValue={initial.notes}
           multiline
           rows={3}
           disabled={disabled}
-          updateAction={updateAction}
         />
       </CardContent>
     </Card>
