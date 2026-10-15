@@ -128,6 +128,10 @@ To change how badges look:
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
+## Working without signal
+
+On a person's page, every field — including groups, job titles, and company-specific fields — saves to this device first and sends when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**. Adding files and deleting a person need signal. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.**
+
 ## Tips
 
 - Some companies sync people from another system. Synced fields show as read-only and cannot be edited here. If a locked field is wrong, fix it in the source system and it will update on the next sync.
@@ -199,6 +203,10 @@ Tell your crews which Location to pick for each job. A record filed against the 
 The list page shows locations with their projects and sites. For one flat, searchable list of every level — customer, project, site, and area — open [Org units](/locations/units) and use the **Level** filter.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
+
+## Working without signal
+
+On a location's page, the name, code, address, map position, geofence, and company-specific fields save to this device first and send when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**. An archived location is read-only until you restore it. Contacts, projects, and archiving need signal.
 
 ## Tips
 

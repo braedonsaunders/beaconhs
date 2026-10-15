@@ -146,6 +146,8 @@ To start one, click **New assessment**. In the flyout, choose the person, then c
 6. A graded assessment with a free-text answer shows **Awaiting review**. Your answers are locked while training staff award the points. Other graded assessments show the score and pass or fail result immediately.
 7. A completion-only assessment shows **Completed**. It records your answers without inventing a score or pass mark.
 
+Your answers save as you go, to this device first, so you can answer with no signal and come back later. **Submit for grading** and **Complete assessment** need signal. BeaconHS sends your saved answers first, then grades them.
+
 Use **Print / PDF** in the assessment header for a paper copy in the same question order as the page, including every answer choice and your selected answer. Results use a green check for correct answers and a red cross for incorrect answers. Training staff can also see the correct answer after submission. A passed assessment also offers **Certificate**.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
@@ -214,7 +216,13 @@ To remove a type, open **Settings**, choose **Delete type**, and confirm. A succ
 2. Choose the **Awaiting review** status filter.
 3. Open an assessment. The learner's answers are locked and cannot be changed.
 4. Under **Manual review**, enter whole-number **Points awarded** for every submitted free-text answer. Add **Review notes** when the learner needs feedback.
-5. Choose **Complete review**. BeaconHS calculates the final score and pass or fail result, issues any earned linked-course record, and refreshes compliance.`,
+5. Choose **Complete review**. BeaconHS calculates the final score and pass or fail result, issues any earned linked-course record, and refreshes compliance.
+
+## Working without signal
+
+Certificates, skill tickets (including additional fields), skill types, classes, and authority account numbers save to this device first and send when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**. A class's **Starts** and **Ends** save together; an end before the start shows a note right away.
+
+You need signal to start, renew, or revoke a record, attach files, add attendees, email a class, complete, cancel, reopen, or delete a class, and add or remove additional fields. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.**`,
   },
   {
     slug: 'training-courses',
@@ -645,6 +653,10 @@ A document cannot be unpublished, archived, or deleted while it belongs to a pub
 - **Delete** removes a document completely: click **Delete** on the document's page, or select documents in the list and pick **Delete**. Readers lose access and it disappears from all lists. It is removed from draft books, but a published book must be unpublished first. Version history is kept for audit.
 - A document that an active compliance obligation still requires cannot be unpublished, archived, or deleted — pause or delete the obligation first.
 
+## Working without signal
+
+The **Overview** details save to this device first and send when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**. If BeaconHS refuses a value — for example a key another live document already uses — the reason shows under the field. Writing in Word, publishing, and the PDF preview need signal.
+
 ## Tips
 
 - Acknowledgments always point at published versions, so you can edit the draft freely without affecting sign-offs.
@@ -804,6 +816,10 @@ If your role can see them, work orders track repairs.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
+## Working without signal
+
+On a unit's page, every field — including company-specific fields — saves to this device first and sends when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**. Work orders, log entries, files, custody changes, schedules, and reminders need signal. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.**
+
 ## Tips
 
 - A red **missing** badge means someone reported the unit missing. If you find it, tell your supervisor.
@@ -938,7 +954,7 @@ Walking a site instead of checking a unit? Those live separately — see [Site i
 
 Starting from a unit's own page is quicker still: on the **Inspections** tab, tap **Start** on the schedule row you need. The check is already known, so nothing is asked twice and the inspection opens over the unit's page.
 6. Check **Performed**, **Location**, and **Hours / meter reading**. The reading updates the unit's real hour meter; a backdated inspection does not replace a newer reading. Go through each required item and tap **Pass**, **Fail**, or **N/A**. **N/A** is available only when the inspection type allows it. An item marked **Optional** may be left blank.
-7. Your answers save as you go — watch for **Saved** at the top. You can stop and come back later; the inspection stays **In progress**.
+7. Your answers save as you go, to this device first, so you can keep going with no signal. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**. You can stop and come back later; the inspection stays **In progress**.
 
 ## Record a failed item
 
@@ -981,6 +997,10 @@ If you manage equipment, submitted inspections can send emails on their own — 
 2. Add the **A record is submitted** trigger.
 3. Connect actions like **Send email**, **Notify role**, or **Create CAPA**.
 4. Turn the flow on. It runs every time an inspection is submitted.
+
+## Working without signal
+
+You need signal to submit the inspection, use **Pass all**, reopen, delete, or add photos. BeaconHS sends your saved answers before it submits. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.** See [Working without signal](/help/forms) for how recovery and conflicts work.
 
 ## Tips
 
@@ -1122,6 +1142,14 @@ If you manage PPE, recorded inspections can send emails on their own — for exa
 4. Turn the flow on. It runs every time an inspection is recorded, including other PPE. Use the **Other PPE (not in the register)** and **Supplied by** fields in conditions and templates. A flow cannot change an item status for other PPE, because there is no item.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
+
+## Working without signal
+
+A PPE inspection is created when you submit it. Until then, your answers, failure reasons, and notes stay on this device as you go. If the page closes, open the inspection again: **Recovered unsynced changes** appears and your answers are back. Tap **Discard and start over** to clear them.
+
+You need signal to submit the inspection and to add photos. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.**
+
+On a PPE item's page, the item's fields — including company-specific fields — save to this device first and send when signal comes back.
 
 ## Tips
 

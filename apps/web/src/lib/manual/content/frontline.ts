@@ -46,7 +46,7 @@ Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
 5. Choose an active **Supervisor**. You can save a draft without one, but you must choose one before submitting. Set the location if it applies.
 
-The header changes from **Saving…** to **Saved** after your latest edit is stored. Wait for **Saved** before closing or refreshing the browser. Opening another entry saves your pending changes first. If a save fails, your words stay in the editor. Tap **Not saved — retry** and wait for **Saved** before leaving or submitting the entry.
+Your words save to this device first, then send to BeaconHS. The badge in the header shows **Saved on device**, **Offline · saved on device**, or **Synced**. You can keep writing with no signal — the entry sends by itself when signal comes back, even if you close the app. Entries you already opened stay available offline. Opening another entry, starting a new date, adding photos, and AI writing help need signal. See [Working without signal](/help/forms) for how recovery and conflicts work.
 
 ## Using AI writing help
 
@@ -73,7 +73,7 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 ## Submitting
 
 1. Choose an active **Supervisor** in the full editor, then tap **Submit** in the header when your entry is done. You can write and save a draft before choosing a supervisor. **Submit** becomes available after you have chosen a supervisor, and stays above the scrolling text on a phone.
-2. **Submit** waits for your latest words to save, then marks the entry **Submitted**. Autosave alone keeps an entry as a draft. If saving or submission fails, the error appears above the text; retry before leaving.
+2. **Submit** needs signal. It sends your latest words first, then marks the entry **Submitted**. Autosave alone keeps an entry as a draft. Without signal, BeaconHS says so and your entry stays on this device.
 3. Submitted entries become read-only. To correct your own entry, tap **Unlock**, confirm, make your changes, then **Submit** again. Unlocking is permission-checked and recorded in Activity.
 
 ## Viewing past entries
@@ -233,6 +233,14 @@ People with permission to review hazard assessments can record an advisory decis
 
 In **Photos**, tap **Take photo or upload** to take a new photo or choose pictures from your phone's photo library. Use the pencil button for a caption or markup, the trash button to remove a photo, and the arrow buttons to change the order. The editor keeps the photo's original shape while you add captions or markup. Large camera photos are optimized automatically when they upload. Unlock a submitted assessment before making photo changes. Locking it again runs the submit flows for the revised assessment.
 
+## Working without signal
+
+Once an assessment is open, keep working with no signal. The **General Information** fields, PPE **Yes** / **No** / **N/A** answers, question answers, and each checklist hazard's **Applicable** switch and site-specific controls save to this device first and send when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**.
+
+Question answers save by themselves — tap an answer, or type it and move on. There is no save button.
+
+You need signal to add, edit, move, or delete tasks, hazards, PPE, and questions, to open an attached app, for crew sign-on and signatures, to add photos, and to submit, unlock, copy, review, or email the assessment. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.** See [Working without signal](/help/forms) for how recovery and conflicts work.
+
 ## Tips
 
 - Changing the job keeps earlier signatures in **Activity** and prepares fresh signature spaces. Adding crew members preserves signatures already collected for the same job.
@@ -318,6 +326,12 @@ Use the buttons in the header to **Print / PDF**, **Send email**, **Copy inspect
 - **Delete** is available to inspection managers and people with permission to delete their own inspection records. Confirm it carefully; the record leaves operational lists, while its audit history is retained.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
+
+## Working without signal
+
+Once an inspection is open, keep working with no signal. The record details and every item's answer, severity, finding, action taken, correction, assignee, due date, and notes save to this device first and send when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**.
+
+You need signal to add photos, capture the customer signature, use **Mark remaining items Pass** or **Mark section N/A**, and to submit, unlock, copy, email, or delete the record. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.** With signal, BeaconHS sends your saved answers first. See [Working without signal](/help/forms) for how recovery and conflicts work.
 
 ## Tips
 
@@ -414,6 +428,12 @@ If your role can manage Incidents, the **Manage** pages include **Classification
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
+## Working without signal
+
+Once an incident is open, every field on the page saves to this device first and sends when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**.
+
+You need signal to change the status, lock or unlock the incident, add or edit people, injuries, lost time, timeline events, causes, whys, and preventative steps, add photos, and to copy, email, or delete the incident. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.** See [Working without signal](/help/forms) for how recovery and conflicts work.
+
 ## Tips
 
 - Report first, get details later. A quick report now beats a perfect report tomorrow.
@@ -472,6 +492,12 @@ The due date is on the row in the list and at the top of the action. Overdue act
 Supervisors can use the report tabs to work through larger backlogs. **Aging** filters open actions by age, severity, and status. **Overdue** searches all overdue actions and filters by severity, status, or whether an owner is assigned. **By assignee** finds owners with overdue or outstanding work, and **By source** shows which records create the most actions. Click a heading to change the sort order.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
+
+## Working without signal
+
+Every field in **Details** and **Work** saves to this device first and sends when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**.
+
+You need signal to change the status, add a step or signature, verify, close, reopen, email, and add photos. BeaconHS sends your saved changes before it closes or verifies the action. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.** See [Working without signal](/help/forms) for how recovery and conflicts work.
 
 ## Tips
 
@@ -629,29 +655,33 @@ Person fields on forms offer active people who have not been deleted. If a perso
 
 ## Working without signal
 
-Every form keeps your answers on your phone or tablet as you type — entries you start with **New entry**, assigned forms in your Workspace, **Tools**, and forms inside an assessment. Losing signal, switching apps, or the phone closing the page does not lose them.
+BeaconHS keeps your work on your phone or tablet as you type. This covers forms — entries you start with **New entry**, assigned forms in your Workspace, **Tools**, and forms inside an assessment — and the record pages of hazard assessments, inspections, PPE and equipment inspections, incidents, corrective actions, journals, training, people, locations, equipment, and documents. Losing signal, switching apps, or the phone closing the page does not lose your changes.
 
-You need signal to tap **New entry**, because BeaconHS creates the entry on the server. Open the entry before you head into a dead zone. Once it is open, keep filling it with no signal.
+You need signal to start something new — for example **New entry** — because BeaconHS creates it on the server. Open it before you head into a dead zone. Once it is open, keep working with no signal.
 
-Check the badge at the top of the form:
+Check the badge at the top of the page:
 
-- **Saved on device** with **Pending (2)** — your answers are on this device. Two changes are waiting to send.
-- **Offline · saved on device** — no signal. Keep working. Your answers send by themselves when signal comes back, even if you close the form.
+- **Saved on device** with **Pending (2)** — your changes are on this device. Two are waiting to send.
+- **Offline · saved on device** — no signal. Keep working. Your changes send by themselves when signal comes back, even if you close the page.
 - **Syncing…** — sending now.
-- **Synced** — BeaconHS has everything. It is safe to close the form.
-- **Sync failed — retry** — BeaconHS could not accept the save. Tap it to try again. If it keeps failing, tell your supervisor.
+- **Synced** — BeaconHS has everything. It is safe to close the page.
+- **Sync failed — retry** — BeaconHS could not accept a change. Tap it to try again. If it keeps failing, tell your supervisor.
 
-If the form closed before your answers synced, open it again:
+On a record page, each field also shows its own status. **…** means the change is waiting to send. **Saved ✓** means BeaconHS has it. **Not saved — retry** means BeaconHS refused that value. The reason shows under the field. Fix the field and it sends again.
 
-1. Your unsynced answers come back, and **Recovered unsynced changes** appears at the top.
+If the page closed before your changes synced, open it again:
+
+1. Your unsynced changes come back, and **Recovered unsynced changes** appears at the top.
 2. Tap **Dismiss** to keep going.
 3. To throw them away instead, tap **Discard and use saved version**. On a brand-new entry from **Tools** or your Workspace the button reads **Discard and start over**.
 
-If someone saved the same answer from another tab or device in the meantime, **This form was changed somewhere else** appears and the form pauses. Tap **Use this device's copy** to keep your answers, or **Use saved version** to keep the other copy.
+If someone changed the same field from another tab or device in the meantime, **This form was changed somewhere else** appears and editing pauses. Tap **Use this device's copy** to keep your changes, or **Use saved version** to keep the other copy. BeaconHS never overwrites a newer change without asking.
 
-You need signal to tap **Submit**, **Finalize**, or **Lock**. BeaconHS sends anything still waiting first. When you are offline, your answers stay on the device and BeaconHS asks you to try again once you have signal.
+If the record was locked or submitted while your changes waited, **These changes can't be saved** appears. Tap **Discard these changes** to clear them from the device.
 
-When you sign out, BeaconHS first tries to send anything waiting. If a form still has not synced, you are warned before it is deleted from the device. Always sign out of a shared tablet so the next person never sees your drafts.
+Some steps always need signal: **Submit**, **Finalize**, **Lock**, signing, adding or removing rows, adding photos or files, and emailing a record. BeaconHS sends anything still waiting first. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.** Nothing is lost.
+
+When you sign out, BeaconHS first tries to send anything waiting. If something still has not synced, you are warned before it is deleted from the device. Always sign out of a shared tablet so the next person never sees your work.
 
 ## Finding a past entry
 
