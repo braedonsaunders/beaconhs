@@ -56,7 +56,7 @@ Other employees cannot see your **Documents & files**, **Incidents**, **Employme
 
 1. Open [People](/people).
 2. Click **Add person**.
-3. Fill in their name, employee number, **Primary job title**, department, and hire date.
+3. Fill in their name, employee number, **Primary job title**, department, **Location**, and hire date.
 4. Click **Create person**. Active people who have not been deleted show up in pickers across the app. Inactive and terminated people remain in historical records but cannot be chosen for new assignments.
 
 ## Delete a manually managed person (managers)
@@ -92,6 +92,16 @@ Each person belongs to one department. Equipment can also be assigned to a depar
 1. Open [Departments](/people/departments).
 2. Click **Add department** to create one, or search the list to edit one.
 3. Reassign any people, equipment, or incidents and remove compliance audiences that use the department before deleting it. Archived records can also keep a department in use.
+
+## Location
+
+A person can also have one **Location** — the customer, site, or project they work at, or the company they come from for outside training. It is optional.
+
+1. Open the person's page.
+2. Pick their **Location**. It saves on its own.
+3. To see everyone at a location, open the location and click its **People** tab.
+
+On the [People](/people) list, use the **All locations** filter to show the people at one location, and the **Location** column to sort by it. Training records and skills reports include the person's location too. A compliance requirement aimed at a location applies to the people whose location it is.
 
 ## Add company-specific fields (managers)
 
@@ -192,7 +202,7 @@ The field type is fixed after creation. Removing a choice option or tightening a
 
 When someone fills out a form or reports an incident, they pick a Location. That choice controls:
 
-- Which location's tabs the record shows up on (each location page has **Incidents** and **Equipment** tabs).
+- Which location's tabs the record shows up on (each location page has **People**, **Incidents** and **Equipment** tabs). The **People** tab lists everyone whose **Location** is this location or one of its projects or sites. It shows active people first; use **Status** to see others.
 - How reports and dashboards group results by location or project.
 - Who gets notified, when notifications are set up by location.
 
@@ -810,7 +820,11 @@ Every module that ships a template appears on that tab, and each one has a match
 
 Tables in a PDF template keep the same column widths on every page, so a long list that runs over a page break does not change shape halfway down, and the column headings repeat at the top of each page.
 
-To change a column's width, select any cell in it and drag the handle on its edge — the column next to it gives up or takes back the space, so the table always fills the page. The **Table** toolbar also takes a width as a percentage if you would rather type it.
+To change a column's width, select any cell in it and drag the handle on its edge — the column next to it gives up or takes back the space, so the table always fills the page. The **Table** toolbar also takes a width as a percentage if you would rather type it. If a table is narrower than the page, drag the handle on its right edge back out, or click **Fit to width** on the **Table** toolbar.
+
+To delete a column, select any cell in it and click **− Col** on the **Table** toolbar, or press **Delete**. The whole column goes — its heading and its cell in every row — and the other columns widen to fill the page. A heading that spans the whole table stays and spans the columns that are left. **+ Col** adds a cell to every row the same way.
+
+When you open a template, any table whose rows are out of line is repaired. Short rows get an empty cell and the columns are resized to fill the page. Nothing you typed is removed. Click **Save** to keep the repair.
 
 Open a PDF template to get three tabs. **Design** is the drag-and-drop page builder. **HTML** shows the same document as raw markup for people who would rather type it — edit there and switch back to **Design** to reload the canvas from your markup. **Preview** paginates the result on real paper with the header, footer, and page numbers. All three edit one document, so **Save** stores whichever tab you were last working in. Repeating rows (hazards, signatures, checklist items) are marked on the row itself, so the builder cannot break them.
 

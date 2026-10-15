@@ -18,6 +18,7 @@ export type PeopleTableRow = {
   employeeNo: string | null
   primaryTitleName: string | null
   departmentName: string | null
+  locationName: string | null
   tradeName: string | null
   hireDate: string | null
   status: 'active' | 'inactive' | 'terminated'
@@ -91,6 +92,7 @@ export function PeopleRecordsTable({
                 [
                   r.primaryTitleName,
                   r.departmentName,
+                  r.locationName,
                   r.tradeName,
                   r.hireDate ? `Hired ${r.hireDate}` : null,
                 ]
@@ -127,6 +129,9 @@ export function PeopleRecordsTable({
               </SortTh>
               <SortTh column="department" {...sortProps}>
                 <GeneratedText id="m_1af68228b8305a" />
+              </SortTh>
+              <SortTh column="location" {...sortProps}>
+                <GeneratedText id="m_055f11420b2da4" />
               </SortTh>
               <SortTh column="trade" {...sortProps}>
                 <GeneratedText id="m_1f1e634a4380dc" />
@@ -182,6 +187,9 @@ export function PeopleRecordsTable({
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                       <GeneratedValue value={r.departmentName ?? '—'} />
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                      <GeneratedValue value={r.locationName ?? '—'} />
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                       <GeneratedValue value={r.tradeName ?? '—'} />

@@ -160,6 +160,10 @@ export const people = pgTable(
     departmentId: uuid('department_id'),
     tradeId: uuid('trade_id'),
     crewId: uuid('crew_id'),
+    // Optional home location (customer / site / project) — where the person
+    // works or, for training clients, the company they belong to. Drives the
+    // People tab on a location and compliance audiences targeted at it.
+    locationOrgUnitId: uuid('location_org_unit_id'),
     email: text('email'),
     phone: text('phone'),
     photoAttachmentId: uuid('photo_attachment_id'),
@@ -208,6 +212,7 @@ export const people = pgTable(
     departmentIdx: index('people_department_idx').on(t.tenantId, t.departmentId),
     tradeIdx: index('people_trade_idx').on(t.tenantId, t.tradeId),
     crewIdx: index('people_crew_idx').on(t.tenantId, t.crewId),
+    locationIdx: index('people_location_idx').on(t.tenantId, t.locationOrgUnitId),
     managerIdx: index('people_manager_idx').on(t.tenantId, t.managerPersonId),
     // Reverse-lookup index for "user → person" resolution (compliance audience,
     // notification recipients, flows delivery) which join people by userId.
@@ -240,41 +245,16 @@ export const people = pgTable(
       columns: [t.tenantId, t.crewId],
       foreignColumns: [crews.tenantId, crews.id],
     }),
+    locationFk: foreignKey({
+      name: 'people_tenant_location_fk',
+      columns: [t.tenantId, t.locationOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
     managerFk: foreignKey({
       name: 'people_tenant_manager_fk',
       columns: [t.tenantId, t.managerPersonId],
       foreignColumns: [t.tenantId, t.id],
     }),
-  }),
-)
-
-export const peopleAssignments = pgTable(
-  'people_assignments',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id').notNull(),
-    orgUnitId: uuid('org_unit_id').notNull(),
-    validFrom: date('valid_from').notNull(),
-    validTo: date('valid_to'),
-    ...timestamps,
-  },
-  (t) => ({
-    tenantIdx: index('people_assignments_tenant_idx').on(t.tenantId),
-    personIdx: index('people_assignments_person_idx').on(t.tenantId, t.personId),
-    orgIdx: index('people_assignments_org_idx').on(t.tenantId, t.orgUnitId),
-    personFk: foreignKey({
-      name: 'people_assignments_tenant_person_fk',
-      columns: [t.tenantId, t.personId],
-      foreignColumns: [people.tenantId, people.id],
-    }).onDelete('cascade'),
-    orgFk: foreignKey({
-      name: 'people_assignments_tenant_org_fk',
-      columns: [t.tenantId, t.orgUnitId],
-      foreignColumns: [orgUnits.tenantId, orgUnits.id],
-    }).onDelete('cascade'),
   }),
 )
 
@@ -303,22 +283,14 @@ export const peopleRelations = relations(people, ({ one, many }) => ({
     fields: [people.tenantId, people.crewId],
     references: [crews.tenantId, crews.id],
   }),
+  location: one(orgUnits, {
+    fields: [people.tenantId, people.locationOrgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
+  }),
   manager: one(people, {
     fields: [people.tenantId, people.managerPersonId],
     references: [people.tenantId, people.id],
     relationName: 'manager',
   }),
   reports: many(people, { relationName: 'manager' }),
-  assignments: many(peopleAssignments),
-}))
-
-export const peopleAssignmentsRelations = relations(peopleAssignments, ({ one }) => ({
-  person: one(people, {
-    fields: [peopleAssignments.tenantId, peopleAssignments.personId],
-    references: [people.tenantId, people.id],
-  }),
-  orgUnit: one(orgUnits, {
-    fields: [peopleAssignments.tenantId, peopleAssignments.orgUnitId],
-    references: [orgUnits.tenantId, orgUnits.id],
-  }),
 }))

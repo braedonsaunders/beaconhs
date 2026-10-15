@@ -49,6 +49,7 @@ import {
   incidentInjuries,
   incidentPeople,
   incidents,
+  orgUnits,
   people,
   personFiles,
   personGroupMemberships,
@@ -77,7 +78,13 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { RawImage } from '@/components/raw-image'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { LiveField, LivePersonSelect, LiveRichText, LiveSelect } from '@/components/live-field'
+import {
+  LiveField,
+  LivePersonSelect,
+  LiveRemoteSelect,
+  LiveRichText,
+  LiveSelect,
+} from '@/components/live-field'
 import { LiveMultiSelect } from '@/components/live-multi-select'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
@@ -196,6 +203,7 @@ export default async function PersonDetailPage({
         department: departments,
         trade: trades,
         crew: crews,
+        location: { id: orgUnits.id, name: orgUnits.name },
         photoKey: attachments.r2Key,
         tenantSettings: tenants.settings,
       })
@@ -203,6 +211,7 @@ export default async function PersonDetailPage({
       .leftJoin(departments, eq(departments.id, people.departmentId))
       .leftJoin(trades, eq(trades.id, people.tradeId))
       .leftJoin(crews, eq(crews.id, people.crewId))
+      .leftJoin(orgUnits, eq(orgUnits.id, people.locationOrgUnitId))
       .leftJoin(attachments, eq(attachments.id, people.photoAttachmentId))
       .innerJoin(tenants, eq(tenants.id, people.tenantId))
       .where(and(eq(people.id, id), isNull(people.deletedAt)))
@@ -440,6 +449,7 @@ export default async function PersonDetailPage({
     department,
     trade,
     crew,
+    location,
     training,
     skills,
     incidentInvolvement,
@@ -681,6 +691,18 @@ export default async function PersonDetailPage({
                   </SidebarRow>
                   <SidebarRow label={tGenerated('m_13fc63a82a07d0')}>
                     <GeneratedValue value={crew?.name ?? '—'} />
+                  </SidebarRow>
+                  <SidebarRow label={tGenerated('m_055f11420b2da4')}>
+                    {location ? (
+                      <Link
+                        href={`/locations/${location.id}`}
+                        className="text-teal-700 hover:underline dark:text-teal-300"
+                      >
+                        <GeneratedValue value={location.name} />
+                      </Link>
+                    ) : (
+                      <GeneratedValue value="—" />
+                    )}
                   </SidebarRow>
                   {canReadPrivate ? (
                     <SidebarRow label={tGenerated('m_1bd874d72669b8')}>
@@ -980,6 +1002,16 @@ export default async function PersonDetailPage({
                               initialValue={person.tradeId}
                               options={tradeOptions.map((t) => ({ value: t.id, label: t.name }))}
                               disabled={fieldDisabled('tradeId')}
+                            />
+                            <LiveRemoteSelect
+                              field="locationOrgUnitId"
+                              label={tGenerated('m_055f11420b2da4')}
+                              initialValue={person.locationOrgUnitId}
+                              initialOption={
+                                location ? { value: location.id, label: location.name } : undefined
+                              }
+                              lookup="person-locations"
+                              disabled={fieldDisabled('locationOrgUnitId')}
                             />
                             <LiveSelect
                               field="crewId"

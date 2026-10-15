@@ -43,6 +43,7 @@ import {
 } from '@beaconhs/ui'
 import {
   customerContacts,
+  departments,
   equipmentItems,
   equipmentTypes,
   incidents,
@@ -89,6 +90,7 @@ const CUSTOMER_TABS = [
   'projects',
   'sites',
   'contacts',
+  'people',
   'incidents',
   'equipment',
   'activity',
@@ -97,11 +99,12 @@ const PROJECT_TABS = [
   'overview',
   'sites',
   'contacts',
+  'people',
   'incidents',
   'equipment',
   'activity',
 ] as const
-const SITE_TABS = ['overview', 'contacts', 'incidents', 'equipment', 'activity'] as const
+const SITE_TABS = ['overview', 'contacts', 'people', 'incidents', 'equipment', 'activity'] as const
 
 type CustomerTab = (typeof CUSTOMER_TABS)[number]
 type ProjectTab = (typeof PROJECT_TABS)[number]
@@ -140,6 +143,14 @@ const LOCATION_LIST_KEYS = {
     page: 'contactPage',
     perPage: 'contactPerPage',
     filter: 'contactFilter',
+  },
+  people: {
+    q: 'peopleQ',
+    sort: 'peopleSort',
+    dir: 'peopleDir',
+    page: 'peoplePage',
+    perPage: 'peoplePerPage',
+    filter: 'peopleStatus',
   },
   incidents: {
     q: 'incidentQ',
@@ -191,6 +202,18 @@ const EQUIPMENT_STATUSES = [
   { value: 'lost', label: 'Lost' },
   { value: 'retired', label: 'Retired' },
 ] as const
+
+const PEOPLE_STATUSES = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'terminated', label: 'Terminated' },
+] as const
+
+/** The People tab lists active people unless another status (or `all`) is picked. */
+function peopleStatusFrom(value: string | undefined) {
+  if (value === 'all') return undefined
+  return PEOPLE_STATUSES.find((option) => option.value === value)?.value ?? 'active'
+}
 
 function incidentStatusFrom(value: string | undefined) {
   return INCIDENT_STATUSES.find((option) => option.value === value)?.value
@@ -329,6 +352,57 @@ async function loadEquipmentForUnits(
             .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
             .where(filtered)
             .orderBy(asc(equipmentItems.name), asc(equipmentItems.id))
+            .limit(params.perPage)
+            .offset((params.page - 1) * params.perPage)
+        : Promise.resolve([]),
+    ])
+    return {
+      rows,
+      total: Number(totalRow?.c ?? 0),
+      filteredTotal: Number(filteredRow?.c ?? 0),
+    }
+  })
+}
+
+/** People whose home location is one of these units (a location and its children). */
+async function loadPeopleForUnits(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  orgUnitIds: string[],
+  params: LocationListParams,
+  status: 'active' | 'inactive' | 'terminated' | undefined,
+  includeRows: boolean,
+) {
+  if (orgUnitIds.length === 0) return { rows: [], total: 0, filteredTotal: 0 }
+  return ctx.db(async (tx) => {
+    const base = and(inArray(people.locationOrgUnitId, orgUnitIds), isNull(people.deletedAt))
+    const filtered = and(
+      base,
+      recordSearchWhere('people', params.q),
+      status ? eq(people.status, status) : undefined,
+    )
+    const [[totalRow], [filteredRow], rows] = await Promise.all([
+      tx.select({ c: count() }).from(people).where(base),
+      includeRows ? tx.select({ c: count() }).from(people).where(filtered) : Promise.resolve([]),
+      includeRows
+        ? tx
+            .select({
+              id: people.id,
+              firstName: people.firstName,
+              lastName: people.lastName,
+              employeeNo: people.employeeNo,
+              status: people.status,
+              department: departments.name,
+              location: orgUnits.name,
+            })
+            .from(people)
+            .leftJoin(departments, eq(departments.id, people.departmentId))
+            .leftJoin(orgUnits, eq(orgUnits.id, people.locationOrgUnitId))
+            .where(filtered)
+            .orderBy(
+              params.dir === 'desc' ? desc(people.lastName) : asc(people.lastName),
+              params.dir === 'desc' ? desc(people.firstName) : asc(people.firstName),
+              asc(people.id),
+            )
             .limit(params.perPage)
             .offset((params.page - 1) * params.perPage)
         : Promise.resolve([]),
@@ -603,9 +677,12 @@ async function renderCustomer({
     active === 'incidents' ? incidentStatusFrom(pickString(sp[listKeys.filter])) : undefined
   const equipmentStatus =
     active === 'equipment' ? equipmentStatusFrom(pickString(sp[listKeys.filter])) : undefined
-  const [incidentData, equipmentData] = await Promise.all([
+  const peopleStatus =
+    active === 'people' ? peopleStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const [incidentData, equipmentData, peopleData] = await Promise.all([
     loadIncidentsForUnits(ctx, descendantIds, listParams, incidentStatus, active === 'incidents'),
     loadEquipmentForUnits(ctx, descendantIds, listParams, equipmentStatus, active === 'equipment'),
+    loadPeopleForUnits(ctx, descendantIds, listParams, peopleStatus, active === 'people'),
   ])
 
   const activity =
@@ -680,6 +757,7 @@ async function renderCustomer({
               },
               { key: 'sites', label: 'Sites', count: orgData.siteCount, hidden: !hierarchy.site },
               { key: 'contacts', label: 'Contacts', count: contactData.total },
+              { key: 'people', label: 'People', count: peopleData.total },
               { key: 'incidents', label: 'Incidents', count: incidentData.total },
               { key: 'equipment', label: 'Equipment', count: equipmentData.total },
               { key: 'activity', label: 'Activity' },
@@ -768,6 +846,33 @@ async function renderCustomer({
                   timeZone={ctx.timezone}
                   locale={ctx.locale}
                 />
+              </ListTabShell>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            active === 'people' ? (
+              <ListTabShell
+                basePath={basePath}
+                sp={sp}
+                params={listParams}
+                listKeys={listKeys}
+                total={peopleData.filteredTotal}
+                placeholder={tGenerated('m_01a392ecae59a7')}
+                filters={
+                  <FilterChips
+                    basePath={basePath}
+                    currentParams={sp}
+                    paramKey={listKeys.filter}
+                    pageParamKey={listKeys.page}
+                    label={tGenerated('m_0b9da892d6faf0')}
+                    defaultValue="active"
+                    options={[...PEOPLE_STATUSES]}
+                  />
+                }
+              >
+                <PeopleTab people={peopleData.rows} />
               </ListTabShell>
             ) : null
           }
@@ -890,9 +995,12 @@ async function renderProject({
     active === 'incidents' ? incidentStatusFrom(pickString(sp[listKeys.filter])) : undefined
   const equipmentStatus =
     active === 'equipment' ? equipmentStatusFrom(pickString(sp[listKeys.filter])) : undefined
-  const [incidentData, equipmentData] = await Promise.all([
+  const peopleStatus =
+    active === 'people' ? peopleStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const [incidentData, equipmentData, peopleData] = await Promise.all([
     loadIncidentsForUnits(ctx, descendantIds, listParams, incidentStatus, active === 'incidents'),
     loadEquipmentForUnits(ctx, descendantIds, listParams, equipmentStatus, active === 'equipment'),
+    loadPeopleForUnits(ctx, descendantIds, listParams, peopleStatus, active === 'people'),
   ])
 
   const activity =
@@ -941,6 +1049,7 @@ async function renderProject({
               { key: 'overview', label: 'Overview' },
               { key: 'sites', label: 'Sites', count: siteData.total, hidden: !hierarchy.site },
               { key: 'contacts', label: 'Contacts', count: contactData.total },
+              { key: 'people', label: 'People', count: peopleData.total },
               { key: 'incidents', label: 'Incidents', count: incidentData.total },
               { key: 'equipment', label: 'Equipment', count: equipmentData.total },
               { key: 'activity', label: 'Activity' },
@@ -1013,6 +1122,33 @@ async function renderProject({
                   timeZone={ctx.timezone}
                   locale={ctx.locale}
                 />
+              </ListTabShell>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            active === 'people' ? (
+              <ListTabShell
+                basePath={basePath}
+                sp={sp}
+                params={listParams}
+                listKeys={listKeys}
+                total={peopleData.filteredTotal}
+                placeholder={tGenerated('m_01a392ecae59a7')}
+                filters={
+                  <FilterChips
+                    basePath={basePath}
+                    currentParams={sp}
+                    paramKey={listKeys.filter}
+                    pageParamKey={listKeys.page}
+                    label={tGenerated('m_0b9da892d6faf0')}
+                    defaultValue="active"
+                    options={[...PEOPLE_STATUSES]}
+                  />
+                }
+              >
+                <PeopleTab people={peopleData.rows} />
               </ListTabShell>
             ) : null
           }
@@ -1108,9 +1244,12 @@ async function renderSite({
     active === 'incidents' ? incidentStatusFrom(pickString(sp[listKeys.filter])) : undefined
   const equipmentStatus =
     active === 'equipment' ? equipmentStatusFrom(pickString(sp[listKeys.filter])) : undefined
-  const [incidentData, equipmentData] = await Promise.all([
+  const peopleStatus =
+    active === 'people' ? peopleStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const [incidentData, equipmentData, peopleData] = await Promise.all([
     loadIncidentsForUnits(ctx, [id], listParams, incidentStatus, active === 'incidents'),
     loadEquipmentForUnits(ctx, [id], listParams, equipmentStatus, active === 'equipment'),
+    loadPeopleForUnits(ctx, [id], listParams, peopleStatus, active === 'people'),
   ])
 
   const activity =
@@ -1158,6 +1297,7 @@ async function renderSite({
             tabs={[
               { key: 'overview', label: 'Overview' },
               { key: 'contacts', label: 'Contacts', count: contactData.total },
+              { key: 'people', label: 'People', count: peopleData.total },
               { key: 'incidents', label: 'Incidents', count: incidentData.total },
               { key: 'equipment', label: 'Equipment', count: equipmentData.total },
               { key: 'activity', label: 'Activity' },
@@ -1214,6 +1354,33 @@ async function renderSite({
                   timeZone={ctx.timezone}
                   locale={ctx.locale}
                 />
+              </ListTabShell>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            active === 'people' ? (
+              <ListTabShell
+                basePath={basePath}
+                sp={sp}
+                params={listParams}
+                listKeys={listKeys}
+                total={peopleData.filteredTotal}
+                placeholder={tGenerated('m_01a392ecae59a7')}
+                filters={
+                  <FilterChips
+                    basePath={basePath}
+                    currentParams={sp}
+                    paramKey={listKeys.filter}
+                    pageParamKey={listKeys.page}
+                    label={tGenerated('m_0b9da892d6faf0')}
+                    defaultValue="active"
+                    options={[...PEOPLE_STATUSES]}
+                  />
+                }
+              >
+                <PeopleTab people={peopleData.rows} />
               </ListTabShell>
             ) : null
           }
@@ -1920,6 +2087,92 @@ function IncidentsTab({
             </TableRow>
           ))}
         />
+      </TableBody>
+    </Table>
+  )
+}
+
+function PeopleTab({
+  people: rows,
+}: {
+  people: {
+    id: string
+    firstName: string
+    lastName: string
+    employeeNo: string | null
+    status: 'active' | 'inactive' | 'terminated'
+    department: string | null
+    location: string | null
+  }[]
+}) {
+  const tGenerated = useGeneratedTranslations()
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon={<Users size={32} />}
+        title={tGenerated('m_0934f316a0842b')}
+        description={tGenerated('m_1e84e6f56be049')}
+      />
+    )
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>
+            <GeneratedText id="m_02b18d5c7f6f2d" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_0230d1a18b5206" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_055f11420b2da4" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_1af68228b8305a" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_0b9da892d6faf0" />
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.id}>
+            <TableCell className="font-medium">
+              <Link
+                href={`/people/${row.id}`}
+                className="text-teal-700 hover:underline dark:text-teal-300"
+              >
+                <GeneratedValue value={`${row.lastName}, ${row.firstName}`} />
+              </Link>
+            </TableCell>
+            <TableCell className="text-slate-600 dark:text-slate-300">
+              <GeneratedValue value={row.employeeNo ?? '—'} />
+            </TableCell>
+            <TableCell className="text-slate-600 dark:text-slate-300">
+              <GeneratedValue value={row.location ?? '—'} />
+            </TableCell>
+            <TableCell className="text-slate-600 dark:text-slate-300">
+              <GeneratedValue value={row.department ?? '—'} />
+            </TableCell>
+            <TableCell>
+              <Badge
+                variant={
+                  row.status === 'active'
+                    ? 'success'
+                    : row.status === 'inactive'
+                      ? 'secondary'
+                      : 'destructive'
+                }
+              >
+                <GeneratedValue
+                  value={PEOPLE_STATUSES.find((option) => option.value === row.status)?.label}
+                />
+              </Badge>
+            </TableCell>
+          </TableRow>
+        ))}
       </TableBody>
     </Table>
   )

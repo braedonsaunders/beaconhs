@@ -313,8 +313,7 @@ Sites carry lat/long + geofence radius for the GPS auto-suggest feature.
 - `roles` — built-in + custom (id, tenant_id, name, permissions JSONB)
 - `role_assignments` — tenant_user_id, role_id, scope (JSONB: sites/crews/self)
 - `org_units` — id, tenant_id, parent_id, level, name, geometry
-- `people` — workers/contractors (id, tenant_id, employee_no, name, dob, hire_date, contact, …)
-- `people_assignments` — person_id, org_unit_id, valid_from/to
+- `people` — workers/contractors (id, tenant_id, employee_no, name, dob, hire_date, contact, optional home `location_org_unit_id`, …)
 - `departments`, `roles_trades` — people grouping
 - `crews` — current-day team unit
 - `audit_log` — tenant_id, actor, entity_type, entity_id, action, before JSONB, after JSONB, ts

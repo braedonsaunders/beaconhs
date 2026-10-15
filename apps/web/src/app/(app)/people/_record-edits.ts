@@ -4,7 +4,7 @@
 // the directory's sync lock (an actively synced person's identity fields and
 // title assignments belong to the source system), required names, an active
 // manager who is not the person themself, one audit entry per change, and the
-// compliance audience refresh when status / department / trade move — plus a
+// compliance audience refresh when status / department / trade / location move — plus a
 // compare-and-set against the value the device last saw.
 //
 // Ops: person columns by name, `groups` and `titles` (the full selected id
@@ -13,6 +13,7 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import { activePeopleWhere, isUniqueViolation, type Database } from '@beaconhs/db'
 import {
+  orgUnits,
   people,
   personGroupMemberships,
   personGroups,
@@ -61,7 +62,12 @@ const PERSON_STATUSES = ['active', 'inactive', 'terminated'] as const
 const SYNC_OWNED_FIELDS = new Set<string>(SYNC_OWNED_PERSON_FIELDS)
 /** Ops that audit themselves (relationships and custom fields). */
 const RELATIONSHIP_OPS = new Set(['groups', 'titles', 'primaryTitleId'])
-const COMPLIANCE_AUDIENCE_FIELDS = new Set(['status', 'departmentId', 'tradeId'])
+const COMPLIANCE_AUDIENCE_FIELDS = new Set([
+  'status',
+  'departmentId',
+  'tradeId',
+  'locationOrgUnitId',
+])
 const EMPLOYEE_NO_UNIQUE = 'people_tenant_employee_no_ux'
 
 function personCodecs(personId: string): { [K in keyof PersonRow]?: Codec<PersonRow[K]> } {
@@ -84,6 +90,7 @@ function personCodecs(personId: string): { [K in keyof PersonRow]?: Codec<Person
     departmentId: optionalRef({ label: 'Department' }),
     tradeId: optionalRef({ label: 'Trade' }),
     crewId: optionalRef({ label: 'Crew' }),
+    locationOrgUnitId: optionalRef({ label: 'Location' }),
     managerPersonId: {
       parse: (wire) => {
         const value = manager.parse(wire)
@@ -127,6 +134,20 @@ async function personColumnUpdate(
       )
       .limit(1)
     if (!manager) throw new RecordEditRejection('Choose an active manager')
+  }
+  if (patch.locationOrgUnitId) {
+    const [location] = await tx
+      .select({ id: orgUnits.id })
+      .from(orgUnits)
+      .where(
+        and(
+          eq(orgUnits.tenantId, ctx.tenantId),
+          eq(orgUnits.id, patch.locationOrgUnitId),
+          isNull(orgUnits.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!location) throw new RecordEditRejection('Choose an existing location')
   }
   try {
     await tx

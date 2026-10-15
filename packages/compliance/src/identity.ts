@@ -1,11 +1,10 @@
-import { and, eq, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   complianceAudience,
   complianceObligations,
   complianceStatus,
   people,
-  peopleAssignments,
   roleAssignments,
   roles,
   tenantUsers,
@@ -74,6 +73,7 @@ export async function materializeIdentityAudienceObligations(
       userId: people.userId,
       departmentId: people.departmentId,
       tradeId: people.tradeId,
+      locationOrgUnitId: people.locationOrgUnitId,
     })
     .from(people)
     .where(and(eq(people.tenantId, tenantId), inArray(people.id, personIds)))
@@ -91,22 +91,9 @@ export async function materializeIdentityAudienceObligations(
     ...new Set(currentPeople.map((person) => person.userId).filter((id) => id !== null)),
   ]
 
-  let orgUnitIds: string[] = []
-  if (currentPersonIds.length > 0) {
-    const today = sql`current_date`
-    const rows = await tx
-      .selectDistinct({ id: peopleAssignments.orgUnitId })
-      .from(peopleAssignments)
-      .where(
-        and(
-          eq(peopleAssignments.tenantId, tenantId),
-          inArray(peopleAssignments.personId, currentPersonIds),
-          lte(peopleAssignments.validFrom, today),
-          or(isNull(peopleAssignments.validTo), gte(peopleAssignments.validTo, today)),
-        ),
-      )
-    orgUnitIds = rows.map((row) => row.id)
-  }
+  const orgUnitIds = [
+    ...new Set(currentPeople.map((person) => person.locationOrgUnitId).filter((id) => id !== null)),
+  ]
 
   let roleKeys: string[] = []
   if (userIds.length > 0) {

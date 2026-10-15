@@ -17,6 +17,7 @@ import {
 import {
   crews,
   departments,
+  orgUnits,
   people,
   personTitleAssignments,
   personTitles,
@@ -32,6 +33,8 @@ import {
 } from '@/lib/job-title-compliance'
 import { revalidatePath } from 'next/cache'
 import { PageContainer } from '@/components/page-layout'
+import { RemoteSelectField } from '@/components/remote-search-select'
+import { isUuid } from '@/lib/list-params'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -51,11 +54,23 @@ async function createPerson(formData: FormData) {
   const departmentId = String(formData.get('departmentId') ?? '').trim() || null
   const tradeId = String(formData.get('tradeId') ?? '').trim() || null
   const crewId = String(formData.get('crewId') ?? '').trim() || null
+  const locationOrgUnitId = String(formData.get('locationOrgUnitId') ?? '').trim() || null
   const primaryTitleId = String(formData.get('primaryTitleId') ?? '').trim() || null
 
   if (!firstName || !lastName) throw new Error('First and last name are required')
 
+  if (locationOrgUnitId && !isUuid(locationOrgUnitId))
+    throw new Error('Choose an existing location')
+
   const row = await ctx.db(async (tx) => {
+    if (locationOrgUnitId) {
+      const [location] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(and(eq(orgUnits.id, locationOrgUnitId), isNull(orgUnits.deletedAt)))
+        .limit(1)
+      if (!location) throw new Error('Choose an existing location')
+    }
     let lockedTitleObligations: Awaited<ReturnType<typeof lockJobTitleObligations>> = []
     if (primaryTitleId) {
       const [title] = await tx
@@ -81,6 +96,7 @@ async function createPerson(formData: FormData) {
         departmentId,
         tradeId,
         crewId,
+        locationOrgUnitId,
         titleIds: primaryTitleId ? [primaryTitleId] : [],
       })
       .returning()
@@ -109,6 +125,7 @@ async function createPerson(formData: FormData) {
         departmentId,
         tradeId,
         crewId,
+        locationOrgUnitId,
         primaryTitleId,
       },
     })
@@ -194,6 +211,13 @@ export default async function NewPersonPage() {
                       </option>
                     ))}
                   </Select>
+                </Field>
+                <Field label={tGenerated('m_055f11420b2da4')}>
+                  <RemoteSelectField
+                    name="locationOrgUnitId"
+                    lookup="person-locations"
+                    ariaLabel={tGenerated('m_055f11420b2da4')}
+                  />
                 </Field>
                 <Field label={tGenerated('m_13fc63a82a07d0')}>
                   <Select name="crewId" defaultValue="">

@@ -2,7 +2,7 @@ import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, isNull, type SQL, sql } from 'drizzle-orm'
 import { primaryPersonTitleName } from '@beaconhs/db'
-import { departments, people, trades } from '@beaconhs/db/schema'
+import { departments, orgUnits, people, trades } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -13,7 +13,7 @@ import {
   csvResponse,
 } from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +24,7 @@ const SORTS = [
   'title',
   'hire_date',
   'department',
+  'location',
   'trade',
   'status',
 ] as const
@@ -43,6 +44,8 @@ export async function GET(req: NextRequest) {
     ? (rawStatus as StatusFilter)
     : 'active'
   const departmentFilter = pickString(sp.department) ?? null
+  const locationRaw = pickString(sp.location)
+  const locationFilter = locationRaw && isUuid(locationRaw) ? locationRaw : null
   const personTypeFilter = pickString(sp.personType)
   const ctx = await requireExportContext()
   assertCan(ctx, 'admin.users.manage')
@@ -54,6 +57,7 @@ export async function GET(req: NextRequest) {
     if (search) filters.push(search)
     if (statusFilter !== 'all') filters.push(eq(people.status, statusFilter))
     if (departmentFilter) filters.push(eq(people.departmentId, departmentFilter))
+    if (locationFilter) filters.push(eq(people.locationOrgUnitId, locationFilter))
     if (personTypeFilter === 'employee' || personTypeFilter === 'contractor')
       filters.push(sql`${people.metadata}->>'personType' = ${personTypeFilter}`)
     const whereClause = and(...filters)
@@ -71,19 +75,23 @@ export async function GET(req: NextRequest) {
               ? [params.dir === 'asc' ? asc(people.hireDate) : desc(people.hireDate)]
               : params.sort === 'department'
                 ? [params.dir === 'asc' ? asc(departments.name) : desc(departments.name)]
-                : params.sort === 'status'
-                  ? [params.dir === 'asc' ? asc(people.status) : desc(people.status)]
-                  : [params.dir === 'asc' ? asc(trades.name) : desc(trades.name)]
+                : params.sort === 'location'
+                  ? [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
+                  : params.sort === 'status'
+                    ? [params.dir === 'asc' ? asc(people.status) : desc(people.status)]
+                    : [params.dir === 'asc' ? asc(trades.name) : desc(trades.name)]
 
     return tx
       .select({
         person: people,
         department: departments,
+        locationName: orgUnits.name,
         trade: trades,
         primaryTitleName,
       })
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
+      .leftJoin(orgUnits, eq(orgUnits.id, people.locationOrgUnitId))
       .leftJoin(trades, eq(trades.id, people.tradeId))
       .where(whereClause)
       .orderBy(...orderBy)
@@ -99,7 +107,12 @@ export async function GET(req: NextRequest) {
     summary: `Exported ${rows.length} people to CSV`,
     metadata: {
       format: 'csv',
-      filters: { q: params.q ?? null, status: statusFilter, department: departmentFilter },
+      filters: {
+        q: params.q ?? null,
+        status: statusFilter,
+        department: departmentFilter,
+        location: locationFilter,
+      },
     },
   })
 
@@ -109,6 +122,7 @@ export async function GET(req: NextRequest) {
     'Employee #',
     'Primary job title',
     'Department',
+    'Location',
     'Trade',
     'Hire date',
     'Email',
@@ -127,6 +141,7 @@ export async function GET(req: NextRequest) {
         r.person.employeeNo ?? '',
         r.primaryTitleName ?? '',
         r.department?.name ?? '',
+        r.locationName ?? '',
         r.trade?.name ?? '',
         r.person.hireDate ?? '',
         r.person.email ?? '',

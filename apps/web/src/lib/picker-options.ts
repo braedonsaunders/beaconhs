@@ -47,6 +47,7 @@ const PICKER_LOOKUPS = [
   'safe-distance-operators',
   'compliance-by-person',
   'location-parent-units',
+  'person-locations',
   'incident-sites',
   'incident-departments',
   'incident-classifications',

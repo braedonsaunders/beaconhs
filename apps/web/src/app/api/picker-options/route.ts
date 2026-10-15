@@ -277,6 +277,10 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
       return can(ctx, 'compliance.read')
     case 'location-parent-units':
       return can(ctx, 'admin.org.manage')
+    // Every member can open the People directory, so every member can filter
+    // it by location; setting one is checked by the people record saver.
+    case 'person-locations':
+      return true
     case 'document-signoff-sites':
       return can(ctx, 'documents.manage')
     case 'incident-sites':
@@ -1590,6 +1594,7 @@ async function loadOptions(
       lookup === 'form-response-locations' ||
       lookup === 'safe-distance-sites' ||
       lookup === 'location-parent-units' ||
+      lookup === 'person-locations' ||
       lookup === 'incident-sites' ||
       lookup === 'inspection-sites' ||
       lookup === 'equipment-inspection-sites' ||

@@ -94,6 +94,8 @@ export const REPORT_VIEWS_SQL: string[] = [
      ,(p.first_name || ' ' || p.last_name) AS person_name
      ,(SELECT d.code FROM departments d WHERE d.id = p.department_id AND d.tenant_id = p.tenant_id) AS department_code
      ,${skillAdditionalFields('a.tenant_id', 't.id', 'au.id', 'a.id')} AS additional_fields
+     ,p.location_org_unit_id AS location_id
+     ,(SELECT l.name FROM org_units l WHERE l.id = p.location_org_unit_id AND l.tenant_id = p.tenant_id) AS location_name
    FROM (
      SELECT DISTINCT ON (tenant_id, person_id, skill_type_id) *
      FROM training_skill_assignments
@@ -525,7 +527,9 @@ export const REPORT_VIEWS_SQL: string[] = [
          ORDER BY gm.group_id
        ),
        ','
-     ) AS group_id_list
+     ) AS group_id_list,
+     p.location_org_unit_id AS location_id,
+     (SELECT l.name FROM org_units l WHERE l.id = p.location_org_unit_id AND l.tenant_id = p.tenant_id) AS location_name
    FROM training_records r
    JOIN people p ON p.id = r.person_id AND p.tenant_id = r.tenant_id
    JOIN training_courses c ON c.id = r.course_id AND c.tenant_id = r.tenant_id

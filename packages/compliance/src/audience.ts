@@ -8,11 +8,10 @@
 // Returns BOTH the person id and the linked user id: the web needs personId for
 // compliance status; the worker needs userId for notifications.
 
-import { and, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   people,
-  peopleAssignments,
   personGroupMemberships,
   roleAssignments,
   roles,
@@ -87,23 +86,12 @@ export async function resolveObligationAudience(
     )
   }
   if (orgUnitIds.length > 0) {
-    // Only assignments whose validity window covers today count toward the
-    // audience — ended assignments (validTo in the past) age out.
-    const today = sql`current_date`
+    // People whose home location is one of the targeted locations.
     add(
       await tx
         .select({ id: people.id, userId: people.userId })
-        .from(peopleAssignments)
-        .innerJoin(people, eq(people.id, peopleAssignments.personId))
-        .where(
-          and(
-            eq(peopleAssignments.tenantId, tenantId),
-            inArray(peopleAssignments.orgUnitId, orgUnitIds),
-            lte(peopleAssignments.validFrom, today),
-            or(isNull(peopleAssignments.validTo), gte(peopleAssignments.validTo, today)),
-            baseActive,
-          ),
-        ),
+        .from(people)
+        .where(and(baseActive, inArray(people.locationOrgUnitId, orgUnitIds))),
     )
   }
   if (crewIds.length > 0) {

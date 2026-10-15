@@ -30,8 +30,6 @@ const cascadeRelationships = [
   'job_title_tasks.tenant_id,title_id->person_titles.tenant_id,id',
   'kiosk_scans.tenant_id,person_id->people.tenant_id,id',
   'org_units.tenant_id,parent_id->org_units.tenant_id,id',
-  'people_assignments.tenant_id,org_unit_id->org_units.tenant_id,id',
-  'people_assignments.tenant_id,person_id->people.tenant_id,id',
   'person_files.tenant_id,person_id->people.tenant_id,id',
   'person_group_memberships.tenant_id,group_id->person_groups.tenant_id,id',
   'person_group_memberships.tenant_id,person_id->people.tenant_id,id',
@@ -44,6 +42,7 @@ const noActionRelationships = [
   'kiosk_scans.tenant_id,site_org_unit_id->org_units.tenant_id,id',
   'people.tenant_id,crew_id->crews.tenant_id,id',
   'people.tenant_id,department_id->departments.tenant_id,id',
+  'people.tenant_id,location_org_unit_id->org_units.tenant_id,id',
   'people.tenant_id,trade_id->trades.tenant_id,id',
 ] as const
 
@@ -58,7 +57,6 @@ const domainTables = new Set([
   'kiosk_scans',
   'org_units',
   'people',
-  'people_assignments',
   'person_files',
   'person_group_memberships',
   'person_title_assignments',
@@ -92,6 +90,30 @@ function manifestRelationships(): ManifestRelationship[] {
     legacyConstraint: match[6]!,
     deleteAction: match[7]! as DeleteAction,
   }))
+}
+
+/** Child tables dropped after the cutover (0071 retired people_assignments). */
+const RETIRED_CHILD_TABLES = new Set(['people_assignments'])
+
+/** Relationships added after the cutover, with the same tenant-aware shape. */
+const ADDED_RELATIONSHIPS: Array<
+  Pick<ManifestRelationship, 'childTable' | 'childColumn' | 'parentTable' | 'deleteAction'>
+> = [
+  // 0071: a person's optional home location.
+  {
+    childTable: 'people',
+    childColumn: 'location_org_unit_id',
+    parentTable: 'org_units',
+    deleteAction: 'no action',
+  },
+]
+
+/** The cutover manifest as the schema holds it today. */
+function currentRelationships() {
+  return [
+    ...manifestRelationships().filter(({ childTable }) => !RETIRED_CHILD_TABLES.has(childTable)),
+    ...ADDED_RELATIONSHIPS,
+  ]
 }
 
 function signature(input: { childTable: string; childColumn: string; parentTable: string }) {
@@ -139,7 +161,7 @@ describe('people and org relational integrity', () => {
       ...partialSetNullRelationships.map((value) => `${value}|set null`),
     ].sort()
     expect(
-      relationships
+      currentRelationships()
         .map((relationship) => `${signature(relationship)}|${relationship.deleteAction}`)
         .sort(),
     ).toEqual(expected)
@@ -153,7 +175,7 @@ describe('people and org relational integrity', () => {
 
   it('models every relationship with a tenant-aware schema key and child index', () => {
     const tables = new Map(allTableConfigs().map((table) => [table.name, table]))
-    for (const relationship of manifestRelationships()) {
+    for (const relationship of currentRelationships()) {
       const relationshipSignature = signature(relationship)
       const child = tables.get(relationship.childTable)!
       const schemaDeleteAction =
@@ -181,7 +203,7 @@ describe('people and org relational integrity', () => {
     }
   })
 
-  it('keeps all 19 ORM relation joins tenant-qualified', () => {
+  it('keeps every ORM relation join tenant-qualified', () => {
     const { tables, tableNamesMap } = extractTablesRelationalConfig(
       schema,
       createTableRelationsHelpers,
@@ -197,10 +219,9 @@ describe('people and org relational integrity', () => {
       ['orgUnits', 'parent', 'org_units', ['tenant_id', 'parent_id']],
       ['people', 'crew', 'crews', ['tenant_id', 'crew_id']],
       ['people', 'department', 'departments', ['tenant_id', 'department_id']],
+      ['people', 'location', 'org_units', ['tenant_id', 'location_org_unit_id']],
       ['people', 'manager', 'people', ['tenant_id', 'manager_person_id']],
       ['people', 'trade', 'trades', ['tenant_id', 'trade_id']],
-      ['peopleAssignments', 'orgUnit', 'org_units', ['tenant_id', 'org_unit_id']],
-      ['peopleAssignments', 'person', 'people', ['tenant_id', 'person_id']],
       ['personFiles', 'person', 'people', ['tenant_id', 'person_id']],
       ['personGroupMemberships', 'group', 'person_groups', ['tenant_id', 'group_id']],
       ['personGroupMemberships', 'person', 'people', ['tenant_id', 'person_id']],

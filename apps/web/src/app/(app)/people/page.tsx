@@ -7,15 +7,16 @@ import { Users } from 'lucide-react'
 import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { primaryPersonTitleName } from '@beaconhs/db'
-import { departments, people, trades } from '@beaconhs/db/schema'
+import { departments, orgUnits, people, trades } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { DownloadLink } from '@/components/download-link'
-import { buildExportHref, mergeHref, parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { FilterChips } from '@/components/filter-bar'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from './_components/people-sub-nav'
@@ -33,6 +34,7 @@ const SORTS = [
   'title',
   'hire_date',
   'department',
+  'location',
   'trade',
   'status',
 ] as const
@@ -56,6 +58,8 @@ export default async function PeoplePage({
     : 'active'
   const personTypeFilter = pickString(sp.personType)
   const departmentFilter = pickString(sp.department) ?? null
+  const locationRaw = pickString(sp.location)
+  const locationFilter = locationRaw && isUuid(locationRaw) ? locationRaw : null
   const ctx = await requireRequestContext()
   const canManage = canManageModule(ctx, 'people')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'admin.users.manage')
@@ -66,6 +70,7 @@ export default async function PeoplePage({
     const search = recordSearchWhere('people', params.q)
     if (search) baseFilters.push(search)
     if (departmentFilter) baseFilters.push(eq(people.departmentId, departmentFilter))
+    if (locationFilter) baseFilters.push(eq(people.locationOrgUnitId, locationFilter))
     if (personTypeFilter === 'employee' || personTypeFilter === 'contractor')
       baseFilters.push(sql`${people.metadata}->>'personType' = ${personTypeFilter}`)
     const filters = [...baseFilters]
@@ -88,20 +93,24 @@ export default async function PeoplePage({
               ? [dirFn(people.hireDate)]
               : params.sort === 'department'
                 ? [dirFn(departments.name)]
-                : params.sort === 'status'
-                  ? [dirFn(people.status)]
-                  : [dirFn(trades.name)]
+                : params.sort === 'location'
+                  ? [dirFn(orgUnits.name)]
+                  : params.sort === 'status'
+                    ? [dirFn(people.status)]
+                    : [dirFn(trades.name)]
 
     const [tot] = await tx.select({ c: count() }).from(people).where(whereClause)
     const data = await tx
       .select({
         person: people,
         department: departments,
+        locationName: orgUnits.name,
         trade: trades,
         primaryTitleName,
       })
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
+      .leftJoin(orgUnits, eq(orgUnits.id, people.locationOrgUnitId))
       .leftJoin(trades, eq(trades.id, people.tradeId))
       .where(whereClause)
       .orderBy(...orderBy)
@@ -128,12 +137,23 @@ export default async function PeoplePage({
     listPersonGroupsForBulk(),
     listPersonDepartmentsForBulk(),
   ])
+  const activeLocation = locationFilter
+    ? ((
+        await ctx.db((tx) =>
+          tx
+            .select({ value: orgUnits.id, label: orgUnits.name })
+            .from(orgUnits)
+            .where(eq(orgUnits.id, locationFilter))
+            .limit(1),
+        )
+      )[0] ?? null)
+    : null
   const activeDepartmentName = departmentFilter
     ? (departmentOptions.find((d) => d.id === departmentFilter)?.name ?? 'Unknown')
     : null
 
   const tableRows: PeopleTableRow[] = rows.map(
-    ({ person, department, trade, primaryTitleName }) => ({
+    ({ person, department, locationName, trade, primaryTitleName }) => ({
       id: person.id,
       firstName: person.firstName,
       lastName: person.lastName,
@@ -146,6 +166,7 @@ export default async function PeoplePage({
             : 'Unclassified',
       primaryTitleName,
       departmentName: department?.name ?? null,
+      locationName,
       tradeName: trade?.name ?? null,
       hireDate: person.hireDate,
       status: person.status,
@@ -214,6 +235,16 @@ export default async function PeoplePage({
                 },
                 { value: 'all', label: 'All', count: allCount },
               ]}
+            />
+            <RemoteSearchFilter
+              lookup="person-locations"
+              basePath="/people"
+              currentParams={sp}
+              paramKey="location"
+              placeholder={tGenerated('m_1a37e747f6006b')}
+              allLabel={tGenerated('m_1a37e747f6006b')}
+              ariaLabel={tGenerated('m_055f11420b2da4')}
+              initialOption={activeLocation ?? undefined}
             />
             <GeneratedValue
               value={
