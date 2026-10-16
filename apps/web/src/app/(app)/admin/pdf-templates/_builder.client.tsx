@@ -12,10 +12,11 @@ import { GeneratedValue } from '@/i18n/generated'
 // Multi-page pagination is the Preview tab (Paged.js); here it's one tall sheet.
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import GjsEditor, { BlocksProvider, Canvas } from '@grapesjs/react'
+import GjsEditor, { Canvas } from '@grapesjs/react'
 import grapesjs, { type Editor } from 'grapesjs'
 import 'grapesjs/dist/css/grapes.min.css'
-import { TemplateBuilderBlockPalette } from '@/components/template-builder-block-palette'
+import { TemplateBuilderSidebar } from '@/components/template-builder-sidebar'
+import { installTemplateComponents } from '../_template-components'
 import {
   collectionTableBlockHtml,
   mergeFieldBlockHtml,
@@ -159,12 +160,20 @@ export default function PdfBuilder({
 
   return (
     <div
+      data-editor-ready={!!editor}
       className="gjs-light flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-slate-900"
       style={LIGHT_THEME}
     >
       <GjsEditor
         grapesjs={grapesjs}
-        options={{ height: '100%', storageManager: false, fromElement: false }}
+        options={{
+          height: '100%',
+          storageManager: false,
+          fromElement: false,
+          panels: { defaults: [] },
+          // All active controls use bundled SVGs; the default icon CDN is blocked by CSP.
+          cssIcons: '',
+        }}
         onEditor={(editor: Editor) => {
           const bm = editor.BlockManager
           for (const b of BASE_BLOCKS) {
@@ -199,32 +208,21 @@ export default function PdfBuilder({
             doc.head.appendChild(style)
           })
           // Cells delete as whole columns; must be in place before components load.
+          installTemplateComponents(editor)
           installTableEditing(editor)
-          try {
-            if (initialHtml && initialHtml.trim()) {
-              editor.setComponents(initialHtml)
-            } else {
-              editor.setComponents(STARTER_HTML)
-            }
-          } catch {
-            try {
-              editor.setComponents(STARTER_HTML)
-            } catch {
-              /* noop */
-            }
-          }
+          editor.setComponents(initialHtml?.trim() ? initialHtml : STARTER_HTML)
           // Open tables whole: rows padded to one column count, widths filling 100%.
           repairTables(editor)
-          editorRef.current = editor
-          setEditor(editor)
-          onReady(editor)
+          editor.onReady(() => {
+            editorRef.current = editor
+            setEditor(editor)
+            onReady(editor)
+          })
         }}
       >
-        <div className="grid h-full min-h-0 grid-cols-3 grid-rows-1">
-          <aside className="col-span-1 min-h-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
-            <BlocksProvider>{(props) => <TemplateBuilderBlockPalette {...props} />}</BlocksProvider>
-          </aside>
-          <div className="relative col-span-2 min-h-0 overflow-hidden bg-[#3f4856]">
+        <div className="flex h-full min-h-0">
+          <TemplateBuilderSidebar editor={editor} />
+          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[#3f4856]">
             <GeneratedValue
               value={
                 paperLabel ? (
@@ -234,6 +232,14 @@ export default function PdfBuilder({
                 ) : null
               }
             />
+            {!editor && (
+              <div
+                role="status"
+                className="absolute inset-0 z-30 flex items-center justify-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-900 dark:text-slate-300"
+              >
+                <GeneratedValue value="Loading editor…" />
+              </div>
+            )}
             <TableToolbar editor={editor} />
             <TableColumnResizer editor={editor} />
             <Canvas className="h-full" />

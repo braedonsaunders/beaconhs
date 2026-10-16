@@ -826,7 +826,18 @@ To delete a column, select any cell in it and click **− Col** on the **Table**
 
 When you open a template, any table whose rows are out of line is repaired. Short rows get an empty cell and the columns are resized to fill the page. Nothing you typed is removed. Click **Save** to keep the repair.
 
-Open a PDF template to get three tabs. **Design** is the drag-and-drop page builder. **HTML** shows the same document as raw markup for people who would rather type it — edit there and switch back to **Design** to reload the canvas from your markup. **Preview** paginates the result on real paper with the header, footer, and page numbers. All three edit one document, so **Save** stores whichever tab you were last working in. Repeating rows (hazards, signatures, checklist items) are marked on the row itself, so the builder cannot break them.
+Open a PDF template to get three tabs. **Design** is the drag-and-drop page builder. **HTML** shows the same document as raw markup for people who would rather type it — edit there and switch back to **Design** to reload the canvas from your markup. **Preview** paginates the result on real paper with the header, footer, and page numbers. All three edit one document, so **Save** stores whichever tab you were last working in. Repeating rows (hazards, signatures, checklist items) are marked on the row itself.
+
+## Edit labels, fields and layout
+
+1. Open a template and choose **Design**. These tools work in ordinary field tables, such as a training class's **Session** section, and in repeating tables.
+2. Double-click a label, such as **Course**, and type its replacement. Record values appear with dotted outlines. They fill from the record; move, copy or delete them without changing their field names.
+3. In **Blocks**, drag a field or content block into the middle of any cell. Drag an existing field to another cell to move it. Empty cells can receive content too. Use **Layers** to select and rearrange nested content.
+4. Select content and open **Styles** to change fonts, alignment, colours, backgrounds, borders, spacing and sizes. Use **Select parent** to select the cell, row or table around it. **Settings** shows the selected element's properties.
+5. Use **+ Row**, **− Row**, **+ Col** and **− Col** on the **Table** toolbar to change the grid. The arrow buttons move the selected row within its section. Row movement is unavailable when cells span more than one row. Deleting a label or record value removes only that content; select the cell itself to delete its column.
+6. Use **Undo** or **Redo** to reverse or restore changes. Check **Preview**, then click **Save**. Reopening a saved template keeps the labels, fields and styles.
+
+Moving a value outside its repeating row changes which record supplies it. Keep attendee fields inside the attendee row, for example. The same editing controls are available in **Email templates**.
 
 ## Configure direct card printing
 

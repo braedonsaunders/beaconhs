@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { JSDOM } from 'jsdom'
 import type { Component, Editor } from 'grapesjs'
 import { nextColumnPercents } from './_table-grid'
 import {
   applyColumnPercents,
   columnCount,
+  canMoveTableRow,
+  moveTableRow,
   fitTableToWidth,
   insertTableColumn,
   insertTableRow,
@@ -17,6 +19,10 @@ import {
   tableCols,
 } from './_table-model'
 import { installTableEditing } from './_table-tools'
+import { installTemplateComponents } from './_template-components'
+import { MODULE_PDF_TEMPLATE_SEEDS } from '@beaconhs/db/seed/pdf-templates'
+import { renderTemplate, sanitizeEmailHtml, expandRepeatMarkers } from '@beaconhs/email-render'
+import { serializeTemplateEditor } from '@/lib/template-builder-html'
 
 // The table tools against a real GrapesJS document, driven headlessly. The
 // arithmetic is pinned in table-grid.test.ts; what goes wrong in the builder is
@@ -34,6 +40,14 @@ const TABLE =
   '<tbody><tr data-each="ppe"><td>{{name}}</td><td>{{required}}</td><td>&nbsp;</td></tr></tbody>' +
   '<tfoot><tr><td>Total</td><td>{{count}}</td><td>Signed</td></tr></tfoot>' +
   '</table>'
+
+const opened: { editor: Editor; dom: JSDOM }[] = []
+afterEach(() => {
+  for (const { editor, dom } of opened.splice(0).reverse()) {
+    editor.destroy()
+    dom.window.close()
+  }
+})
 
 async function loadEditor(html: string, setup?: (editor: Editor) => void) {
   const dom = new JSDOM('<!doctype html><body></body>', { pretendToBeVisual: true })
@@ -62,6 +76,7 @@ async function loadEditor(html: string, setup?: (editor: Editor) => void) {
   }
   const grapesjs = (await import('grapesjs')).default
   const editor = grapesjs.init({ headless: true, storageManager: false })
+  opened.push({ editor, dom })
   setup?.(editor)
   editor.setComponents(html)
   const find = (cmp: Component): Component | null => {
@@ -346,4 +361,119 @@ describe('fit to width', () => {
     expect(table.getStyle().width).toBe('100%')
     expect(readColumnPercents(readTable(table))).toEqual([50, 50])
   })
+})
+
+describe('editable record documents', () => {
+  const setup = (editor: Editor) => {
+    installTemplateComponents(editor)
+    installTableEditing(editor)
+  }
+
+  it('separates labels from atomic values in ordinary cells and keeps styles on reopen', async () => {
+    const { editor, table } = await loadEditor(
+      '<table><tr><td>Course</td><td>{{course_name}} ({{course_code}})</td></tr></table>',
+      setup,
+    )
+    const model = readTable(table)
+    const label = model.cells[0]![0]!.components().at(0)!
+    expect(label.get('type')).toBe('text')
+    expect(label.get('editable')).toBe(true)
+    label.components('Session course')
+    label.addStyle({ color: '#008080', 'font-size': '18px' })
+    const values = model.cells[0]![1]!.components()
+      .toArray()
+      .filter((c) => c.get('type') === 'record-value')
+    expect(values).toHaveLength(2)
+    expect(values[0]!.get('draggable')).toBe(true)
+    expect(values[0]!.get('editable')).toBe(false)
+    values[1]!.move(model.cells[0]![0]!)
+    const saved = serializeTemplateEditor(editor)
+    const reopened = await loadEditor(sanitizeEmailHtml(saved), setup)
+    const next = readTable(reopened.table)
+    expect(next.cells[0]![0]!.toHTML()).toContain('Session course')
+    expect(next.cells[0]![0]!.components().at(0)!.getStyle().color).toBe('rgb(0, 128, 128)')
+    expect(
+      next.cells[0]![0]!.components()
+        .toArray()
+        .some((c) => c.get('type') === 'record-value'),
+    ).toBe(true)
+    expect(next.cells[0]![1]!.toHTML()).not.toContain('{{course_code}}')
+  })
+
+  it('deletes a value without deleting its cell or other rows', async () => {
+    const { editor, table } = await loadEditor(
+      '<table><tr><td>Course</td><td>{{course_name}}</td></tr><tr><td>Code</td><td>{{course_code}}</td></tr></table>',
+      setup,
+    )
+    editor.select(readTable(table).cells[0]![1]!.components().at(0)!)
+    editor.runCommand('core:component-delete')
+    expect(readTable(table).cells.map((cells) => cells.length)).toEqual([2, 2])
+    expect(editor.getHtml()).not.toContain('{{course_name}}')
+    expect(editor.getHtml()).toContain('{{course_code}}')
+  })
+
+  it('lets empty and blank existing cells accept typed text', async () => {
+    const { table } = await loadEditor('<table><tr><td></td><td>&nbsp;</td></tr></table>', setup)
+    for (const cell of readTable(table).cells[0]!) {
+      const text = cell.components().at(0)!
+      expect(text.get('type')).toBe('text')
+      expect(text.get('editable')).toBe(true)
+    }
+  })
+
+  it('new rows and columns also have editable label spans', async () => {
+    const { table } = await loadEditor('<table><tr><td>A</td><td>B</td></tr></table>', setup)
+    insertTableRow(table, readTable(table).rows[0]!)
+    insertTableColumn(table, 1)
+    for (const cells of readTable(table).cells)
+      for (const cell of cells) {
+        expect(cell.components().at(0)!.get('type')).toBe('text')
+        expect(cell.components().at(0)!.get('editable')).toBe(true)
+      }
+  })
+
+  it('reorders whole rows within a section and refuses to break rowspans', async () => {
+    const { table } = await loadEditor(
+      '<table><tr><td>A</td></tr><tr><td>B</td></tr></table>',
+      setup,
+    )
+    const row = readTable(table).rows[1]!
+    expect(moveTableRow(table, row, -1)).toBe(true)
+    expect(readTable(table).rows[0]).toBe(row)
+    expect(canMoveTableRow(table, row, -1)).toBe(false)
+    expect(moveTableRow(table, row, 1)).toBe(true)
+    expect(readTable(table).rows[1]).toBe(row)
+    const spanning = await loadEditor(
+      '<table><tr><td rowspan="2">A</td><td>B</td></tr><tr><td>C</td></tr></table>',
+      setup,
+    )
+    expect(moveTableRow(spanning.table, readTable(spanning.table).rows[1]!, -1)).toBe(false)
+  })
+
+  for (const seed of MODULE_PDF_TEMPLATE_SEEDS) {
+    it(`preserves every binding and control block for ${seed.key}`, async () => {
+      const { editor } = await loadEditor(seed.html, setup)
+      const bindings = (html: string) =>
+        [...html.matchAll(/\{\{\{?[\s\S]*?\}\}\}?/g)].map((m) => m[0]).sort()
+      const saved = serializeTemplateEditor(editor)
+      expect(bindings(saved)).toEqual(bindings(seed.html))
+      const reopened = await loadEditor(sanitizeEmailHtml(saved), setup)
+      expect(bindings(serializeTemplateEditor(reopened.editor))).toEqual(bindings(seed.html))
+      const data = {
+        course_name: 'Safety basics',
+        course_code: 'SB-1',
+        title: 'Morning session',
+        attendee_count: 1,
+        attendees: [{ name: 'Test trainee', email: 'trainee@example.com', status: 'Enrolled' }],
+      }
+      // Parse the compiled output as HTML: a designer round-trip must still fill
+      // scalar fields, loop rows, and conditions rather than print token text.
+      const output = renderTemplate(expandRepeatMarkers(saved), data)
+      expect(output).not.toContain('{{')
+      if (seed.key === 'training-class-pdf') {
+        expect(output).toContain('Safety basics')
+        expect(output).toContain('Test trainee')
+      }
+    })
+  }
 })

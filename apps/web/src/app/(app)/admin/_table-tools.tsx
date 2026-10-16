@@ -1,6 +1,11 @@
 'use client'
 
-import { GeneratedText, GeneratedValue, useGeneratedTranslations } from '@/i18n/generated'
+import {
+  GeneratedText,
+  GeneratedValue,
+  useGeneratedTranslations,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
 
 // Shared table-editing tools for the GrapesJS builders (email + pdf). The plain
 // HTML tables authored in the builders need real structural editing — add and
@@ -14,12 +19,14 @@ import type { Component, Editor } from 'grapesjs'
 import { layoutTable, nextColumnPercents, nextTableWidthPct } from './_table-grid'
 import {
   applyColumnPercents,
+  canMoveTableRow,
   cellAtColumn,
   cellPosition,
   fitTableToWidth,
   insertTableColumn,
   insertTableRow,
   isTableCell,
+  moveTableRow,
   normalizeTables,
   readColumnPercents,
   readTableWidthPct,
@@ -130,7 +137,7 @@ function currentColWidthPct(pos: CellPosition | null): string {
  */
 export function installTableEditing(editor: Editor): void {
   editor.DomComponents.addType('cell', {
-    model: { defaults: { draggable: false, copyable: false } },
+    model: { defaults: { draggable: false, copyable: false, droppable: true, stylable: true } },
   })
   editor.on(
     'command:run:before:core:component-delete',
@@ -164,16 +171,21 @@ const BTN =
 
 // Floats at the top of the canvas whenever a table cell is selected.
 export function TableToolbar({ editor }: { editor: Editor | null }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const [active, setActive] = useState(false)
   const [canDelete, setCanDelete] = useState(false)
   const [canSize, setCanSize] = useState(false)
   const [width, setWidth] = useState('')
+  const [canMoveUp, setCanMoveUp] = useState(false)
+  const [canMoveDown, setCanMoveDown] = useState(false)
 
   useEffect(() => {
     if (!editor) return
     const sync = () => {
       const pos = selectedPosition(editor)
+      setCanMoveUp(!!pos && canMoveTableRow(pos.table, pos.row, -1))
+      setCanMoveDown(!!pos && canMoveTableRow(pos.table, pos.row, 1))
       setActive(!!pos)
       setCanDelete(canDeleteColumn(pos))
       setCanSize(!!pos && pos.placement.span === 1 && pos.count > 1)
@@ -191,13 +203,21 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
 
   if (!editor || !active) return null
 
+  const moveRow = (direction: -1 | 1) => {
+    const pos = selectedPosition(editor)
+    if (pos && moveTableRow(pos.table, pos.row, direction)) {
+      editor.select(pos.cell)
+      refresh(editor)
+    }
+  }
+
   const applyWidth = (raw: string) => {
     const n = Number(raw)
     setColumnWidth(editor, Number.isFinite(n) && n > 0 ? n : null)
   }
 
   return (
-    <div className="absolute top-2 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/95">
+    <div className="absolute top-2 right-2 left-2 z-20 flex flex-wrap items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/95">
       <span className="px-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
         <GeneratedText id="m_1ccaefc0402329" />
       </span>
@@ -245,6 +265,26 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
         <GeneratedText id="m_1fd502c12105c1" />
       </button>
       <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-600" />
+      <button
+        type="button"
+        className={BTN}
+        disabled={!canMoveUp}
+        onClick={() => moveRow(-1)}
+        aria-label={tGeneratedValue('Move row up')}
+        title={tGeneratedValue('Move row up')}
+      >
+        ↑
+      </button>
+      <button
+        type="button"
+        className={BTN}
+        disabled={!canMoveDown}
+        onClick={() => moveRow(1)}
+        aria-label={tGeneratedValue('Move row down')}
+        title={tGeneratedValue('Move row down')}
+      >
+        ↓
+      </button>
       <label className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
         <GeneratedText id="m_086b61a81c41e5" />
         <input

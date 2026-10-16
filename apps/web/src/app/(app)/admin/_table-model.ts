@@ -197,7 +197,9 @@ function cellDef(tag: 'td' | 'th', text: string, colspan = 1) {
     type: 'cell',
     tagName: tag,
     ...(colspan > 1 ? { attributes: { colspan: String(colspan) } } : {}),
-    components: [{ type: 'textnode', content: text }],
+    components: [
+      { type: 'text', tagName: 'span', components: [{ type: 'textnode', content: text }] },
+    ],
   }
 }
 
@@ -335,6 +337,23 @@ export function insertTableRow(table: Component, row: Component): void {
   }
   // A row added under a cell that spans down can collide with it; even it out.
   normalizeTable(table)
+}
+
+/** Move a row within its section; crossing rowspans would change the grid's meaning. */
+export function canMoveTableRow(table: Component, row: Component, direction: -1 | 1): boolean {
+  const model = readTable(table)
+  if (model.grid.some((r) => r.cells.some((cell) => cell.rowspan > 1))) return false
+  const index = row.index() + direction
+  if (index < 0) return false
+  const sibling = row.parent()?.components().at(index)
+  return !!sibling && tagOf(sibling) === 'tr'
+}
+
+export function moveTableRow(table: Component, row: Component, direction: -1 | 1): boolean {
+  const parent = row.parent()
+  if (!parent || !canMoveTableRow(table, row, direction)) return false
+  row.move(parent, { at: row.index() + (direction === 1 ? 2 : -1) })
+  return true
 }
 
 /** Remove a row, keeping at least one. Cells that spanned down through it are evened out. */

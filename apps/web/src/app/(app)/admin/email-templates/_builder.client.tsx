@@ -1,14 +1,14 @@
 'use client'
 import { GeneratedValue } from '@/i18n/generated'
 
-// Plain-HTML GrapesJS email builder in a 1/3–2/3 layout (like the document
+// Plain-HTML GrapesJS email builder in a palette and canvas layout (like the document
 // editor). Runs in HTML mode (NO MJML) so every element — including the record
 // data tables — is a real, editable component. Email-safe inline styles are
 // authored directly; the repeating table rows carry a `data-each` marker that
 // is expanded to a {{#each}} loop at compile (see compileBuilderHtml).
-//   • LEFT 1/3  — palette: layout/content blocks + the record's merge-field
+//   • LEFT  — palette: layout/content blocks + the record's merge-field
 //     tokens (Record fields) + one drag-in table per collection (Tables).
-//   • RIGHT 2/3 — the live canvas.
+//   • RIGHT — the live canvas.
 // Client-only (touches window) → always mounted via dynamic(ssr:false). Forces a
 // LIGHT theme via GrapesJS CSS variables (its default chrome is dark).
 //
@@ -17,10 +17,11 @@ import { GeneratedValue } from '@/i18n/generated'
 // overflow is clipped by the wrapper (the "can't scroll to the bottom" bug).
 
 import { useState, type CSSProperties } from 'react'
-import GjsEditor, { BlocksProvider, Canvas } from '@grapesjs/react'
+import GjsEditor, { Canvas } from '@grapesjs/react'
 import grapesjs, { type Editor } from 'grapesjs'
 import 'grapesjs/dist/css/grapes.min.css'
-import { TemplateBuilderBlockPalette } from '@/components/template-builder-block-palette'
+import { TemplateBuilderSidebar } from '@/components/template-builder-sidebar'
+import { installTemplateComponents } from '../_template-components'
 import {
   collectionTableBlockHtml,
   mergeFieldBlockHtml,
@@ -122,6 +123,7 @@ export default function EmailBuilder({
   const [editor, setEditor] = useState<Editor | null>(null)
   return (
     <div
+      data-editor-ready={!!editor}
       className="gjs-light flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-slate-900"
       style={LIGHT_THEME}
     >
@@ -131,6 +133,9 @@ export default function EmailBuilder({
           height: '100%',
           storageManager: false,
           fromElement: false,
+          panels: { defaults: [] },
+          // All active controls use bundled SVGs; the default icon CDN is blocked by CSP.
+          cssIcons: '',
           // HTML mode — no MJML plugin; components are real editable HTML.
         }}
         onEditor={(editor: Editor) => {
@@ -159,35 +164,32 @@ export default function EmailBuilder({
             })
           }
           // Cells delete as whole columns; must be in place before components load.
+          installTemplateComponents(editor)
           installTableEditing(editor)
           // Sanitized HTML+CSS is the sole editable source; else use the starter.
-          try {
-            if (initialHtml && initialHtml.trim()) {
-              editor.setComponents(initialHtml)
-            } else {
-              editor.setComponents(STARTER_HTML)
-            }
-          } catch {
-            try {
-              editor.setComponents(STARTER_HTML)
-            } catch {
-              /* noop */
-            }
-          }
+          editor.setComponents(initialHtml?.trim() ? initialHtml : STARTER_HTML)
           // Open tables whole: rows padded to one column count, widths filling 100%.
           repairTables(editor)
-          setEditor(editor)
-          onReady(editor)
+          editor.onReady(() => {
+            setEditor(editor)
+            onReady(editor)
+          })
         }}
       >
-        <div className="grid h-full min-h-0 grid-cols-3 grid-rows-1">
-          {/* LEFT 1/3 — palette */}
-          <aside className="col-span-1 min-h-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
-            <BlocksProvider>{(props) => <TemplateBuilderBlockPalette {...props} />}</BlocksProvider>
-          </aside>
+        <div className="flex h-full min-h-0">
+          {/* LEFT — palette */}
+          <TemplateBuilderSidebar editor={editor} />
 
-          {/* RIGHT 2/3 — the canvas */}
-          <div className="relative col-span-2 min-h-0 overflow-hidden">
+          {/* RIGHT — the canvas */}
+          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+            {!editor && (
+              <div
+                role="status"
+                className="absolute inset-0 z-30 flex items-center justify-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-900 dark:text-slate-300"
+              >
+                <GeneratedValue value="Loading editor…" />
+              </div>
+            )}
             <TableToolbar editor={editor} />
             <TableColumnResizer editor={editor} />
             <Canvas className="h-full" />

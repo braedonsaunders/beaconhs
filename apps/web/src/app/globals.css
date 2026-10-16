@@ -350,3 +350,25 @@
 .dark .ff-surface.field-mode label {
   color: rgb(241 245 249);
 }
+
+/* The embedded GrapesJS managers share the app's light/dark contrast. */
+.template-builder-tools .gjs-one-bg {
+  background-color: var(--color-slate-50);
+}
+.template-builder-tools .gjs-two-color {
+  color: var(--color-slate-700);
+}
+.template-builder-tools .gjs-field {
+  background-color: white;
+  color: var(--color-slate-800);
+}
+.dark .template-builder-tools .gjs-one-bg {
+  background-color: var(--color-slate-900);
+}
+.dark .template-builder-tools .gjs-two-color {
+  color: var(--color-slate-200);
+}
+.dark .template-builder-tools .gjs-field {
+  background-color: var(--color-slate-800);
+  color: var(--color-slate-100);
+}
