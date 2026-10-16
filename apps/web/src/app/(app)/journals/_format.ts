@@ -2,6 +2,7 @@
 
 import type { JournalStatus } from './_types'
 import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 
 function parse(iso: string): Date {
   return new Date(`${iso}T00:00:00`)
@@ -32,8 +33,8 @@ export function localDateISO(d: Date): string {
   ).padStart(2, '0')}`
 }
 
-export function isToday(iso: string): boolean {
-  return iso === localDateISO(new Date())
+export function isToday(iso: string, timeZone: string): boolean {
+  return iso === dateIsoInTimeZone(new Date(), timeZone)
 }
 
 /** "now", "5m", "2h", "3d", else date. */

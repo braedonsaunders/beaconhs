@@ -76,6 +76,7 @@ vi.mock('sonner', () => ({ toast: { error: mocks.error, success: mocks.success }
 vi.mock('next-intl', async (original) => ({
   ...(await original<typeof import('next-intl')>()),
   useLocale: () => 'en',
+  useTimeZone: () => 'America/Toronto',
 }))
 vi.mock('@/i18n/generated', () => ({
   GeneratedText: ({ id }: { id: string }) => id,

@@ -121,7 +121,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       {
         path: '/journals',
         title: 'Start an entry',
-        body: 'Today’s journal opens in the full editor. If there is no entry yet, a draft is created automatically. Date, Log type, Location and Supervisor are available immediately. Submitted journals are read-only until you unlock them.',
+        body: 'Today’s journal opens in the full editor. If there is no entry yet, a draft is created automatically. To prepare another day, tap New entry, then Tomorrow, Today, or Choose date and Open journal. An existing entry for that day opens without creating a duplicate. Submitted journals are read-only until you unlock them.',
       },
       {
         title: 'Write it down',

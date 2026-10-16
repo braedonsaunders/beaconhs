@@ -1,15 +1,10 @@
 import { isUuid } from '../../../lib/list-params'
 import type { GroupBy, JournalFilters } from './_types'
 import { normalizeJournalTags } from './_tag-policy'
+import { isJournalDate } from './_dates'
 
 export function normalizeJournalGroupBy(value: unknown): GroupBy {
   return value === 'site' || value === 'topic' ? value : 'date'
-}
-
-function validDate(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const date = new Date(`${value}T00:00:00.000Z`)
-  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
 }
 
 /** Runtime boundary for filters arriving through a client-called server action. */
@@ -33,7 +28,7 @@ export function normalizeJournalFilters(value: unknown): JournalFilters {
   if (input.definition === 'worker' || input.definition === 'supervisor') {
     filters.definition = input.definition
   }
-  if (validDate(input.from)) filters.from = input.from
-  if (validDate(input.to)) filters.to = input.to
+  if (isJournalDate(input.from)) filters.from = input.from
+  if (isJournalDate(input.to)) filters.to = input.to
   return filters
 }

@@ -13,7 +13,9 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState, useTransition } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Button, Skeleton } from '@beaconhs/ui'
+import { Button, Drawer, Input, Skeleton } from '@beaconhs/ui'
+import { useLocale, useTimeZone } from 'next-intl'
+import { Plus } from 'lucide-react'
 import { unstable_rethrow } from 'next/navigation'
 import { toast } from 'sonner'
 import { SidebarTree } from './_sidebar-tree'
@@ -30,6 +32,9 @@ import type { GroupBy, JournalEntryDetail, JournalFilters, WorkspaceData } from 
 import { mergeTreePages } from './_tree-pages'
 import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
 import type { JournalFieldValues } from './_editor-pane'
+import { formatLongDate } from './_format'
+import { isJournalDate, journalDateChoices } from './_dates'
+import type { AppLocale } from '@beaconhs/i18n'
 
 /** An entry's field values (what the record saver owns). */
 function fieldValues(entry: JournalEntryDetail): JournalFieldValues {
@@ -73,6 +78,8 @@ export function JournalWorkspace({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
+  const locale = useLocale() as AppLocale
+  const timeZone = useTimeZone() ?? 'America/Toronto'
   const runOnline = useOnlineAction()
   const [data, setData] = useState(initialData)
   const [entry, setEntry] = useState(initialEntry)
@@ -86,6 +93,9 @@ export function JournalWorkspace({
   const [groupBy, setGroupBy] = useState<GroupBy>(initialGroupBy)
   const [filters, setFilters] = useState<JournalFilters>({})
   const [treeOpen, setTreeOpen] = useState(false)
+  const [newEntryOpen, setNewEntryOpen] = useState(false)
+  const [dateChoices, setDateChoices] = useState<{ today: string; tomorrow: string } | null>(null)
+  const [chosenDate, setChosenDate] = useState('')
   const [treeLoading, setTreeLoading] = useState(false)
   const [treeLoadingMore, setTreeLoadingMore] = useState(false)
   const [opening, startNav] = useTransition()
@@ -97,7 +107,7 @@ export function JournalWorkspace({
   const filtersKey = JSON.stringify(filters)
   const treeRequestId = useRef(0)
 
-  const openInitialJournal = useEffectEvent(() => newEntry())
+  const openInitialJournal = useEffectEvent(() => openDate())
   useEffect(() => {
     if (autoOpened.current) return
     autoOpened.current = true
@@ -230,7 +240,13 @@ export function JournalWorkspace({
   }, [])
 
   function newEntry() {
-    openDate()
+    if (authorEntryId || !data.canCreate || openingRequest.current) return
+    const choices = journalDateChoices(new Date(), timeZone)
+    setDateChoices(choices)
+    setChosenDate(choices.tomorrow)
+    setOpenError(null)
+    setTreeOpen(false)
+    setNewEntryOpen(true)
   }
 
   function pickDate(dateISO: string) {
@@ -255,6 +271,7 @@ export function JournalWorkspace({
             if (!result.ok) throw new Error(result.error)
             show(result.entry)
             setTreeOpen(false)
+            setNewEntryOpen(false)
             void reloadSidebar().catch((error: unknown) => {
               toast.error(
                 tGeneratedValue(
@@ -308,7 +325,7 @@ export function JournalWorkspace({
     if (entry) openedEntries().delete(entry.id)
     setEntry(null)
     setUrl(null)
-    if (data.canCreate && !authorEntryId) newEntry()
+    if (data.canCreate && !authorEntryId) openDate()
     else void reloadSidebar()
   }
 
@@ -381,6 +398,21 @@ export function JournalWorkspace({
 
       {/* Editor */}
       <main className="flex min-w-0 flex-1 flex-col">
+        {!authorEntryId && data.canCreate ? (
+          <div className="flex shrink-0 justify-end border-b border-slate-200 bg-white px-3 py-1.5 lg:hidden dark:border-slate-800 dark:bg-slate-900">
+            <Button
+              type="button"
+              size="sm"
+              className="min-h-11"
+              variant="outline"
+              onClick={newEntry}
+              disabled={opening}
+              data-walkthrough="journals-new-mobile"
+            >
+              <Plus size={15} /> <GeneratedText id="m_0036397741744c" />
+            </Button>
+          </div>
+        ) : null}
         <div className="min-h-0 flex-1">
           <GeneratedValue
             value={
@@ -408,6 +440,73 @@ export function JournalWorkspace({
           />
         </div>
       </main>
+
+      <Drawer
+        open={newEntryOpen}
+        onClose={() => setNewEntryOpen(false)}
+        title={<GeneratedValue value="New journal entry" />}
+        description={
+          <GeneratedValue value="An existing journal for this date opens instead of creating another entry." />
+        }
+        size="sm"
+      >
+        {dateChoices ? (
+          <div className="space-y-6" aria-busy={opening}>
+            <div className="grid grid-cols-2 gap-3">
+              {(['today', 'tomorrow'] as const).map((choice, index) => (
+                <Button
+                  key={choice}
+                  type="button"
+                  variant={choice === 'tomorrow' ? 'default' : 'outline'}
+                  className="h-auto min-h-16 flex-col gap-1 px-2 py-3 whitespace-normal"
+                  disabled={opening}
+                  onClick={() => openDate(dateChoices[choice])}
+                >
+                  <span className="block first-letter:uppercase">
+                    {new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(index, 'day')}
+                  </span>
+                  <span className="text-xs font-normal">
+                    {formatLongDate(dateChoices[choice], locale)}
+                  </span>
+                </Button>
+              ))}
+            </div>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (isJournalDate(chosenDate)) openDate(chosenDate)
+              }}
+            >
+              <label className="block space-y-2 text-sm font-medium">
+                <span>
+                  <GeneratedValue value="Choose date" />
+                </span>
+                <Input
+                  type="date"
+                  aria-label={tGeneratedValue('Journal date')}
+                  value={chosenDate}
+                  onChange={(event) => setChosenDate(event.target.value)}
+                  required
+                  disabled={opening}
+                />
+              </label>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={opening || !isJournalDate(chosenDate)}
+              >
+                <GeneratedValue value="Open journal" />
+              </Button>
+            </form>
+            {openError ? (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                <GeneratedValue value={openError} />
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </Drawer>
     </div>
   )
 }

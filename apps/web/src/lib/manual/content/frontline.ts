@@ -41,12 +41,20 @@ Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **
 ## Writing today's entry
 
 1. Open [Journals](/journals).
-2. Resume today’s entry or use the draft created automatically for you. There is no separate creation form. Older entries stay in **Browse**.
+2. Resume today’s entry or use the draft created automatically for you. To choose another day, tap **New entry**. Older entries stay in **Browse**.
 3. Type what happened. Your words save automatically as you go — there is no save button.
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
 5. Choose an active **Supervisor**. You can save a draft without one, but you must choose one before submitting. Set the location if it applies.
 
 Your words save to this device first, then send to BeaconHS. The badge in the header shows **Saved on device**, **Offline · saved on device**, or **Synced**. You can keep writing with no signal — the entry sends by itself when signal comes back, even if you close the app. Entries you already opened stay available offline. Opening another entry, starting a new date, adding photos, and AI writing help need signal. See [Working without signal](/help/forms) for how recovery and conflicts work.
+
+## Starting tomorrow's entry or another date
+
+1. Tap **New entry**. On a desktop it is above your entry list. On a phone it is above the editor, or inside **Browse**.
+2. Tap **Tomorrow** to prepare the next day's journal, or **Today** to return to today's entry. These dates follow your account's time zone.
+3. For any other past or future day, use **Choose date**, then tap **Open journal**.
+
+BeaconHS saves your current changes before switching. If you already have a journal for the chosen day, it opens that entry instead of creating a duplicate. Submitted entries stay read-only until you unlock them. Starting another day does not change the date of the entry you were writing.
 
 ## Using AI writing help
 

@@ -37,7 +37,7 @@ beforeEach(() => {
   mocks.entry.mockResolvedValue(entry)
 })
 describe('create or resume directly into the journal editor', () => {
-  it.each([undefined, '2026-10-04'])(
+  it.each([undefined, '2026-10-04', '2026-10-06', '2027-01-02'])(
     'returns the full entry for %s in the same authorized context',
     async (date) => {
       expect(await createEntryForDate(date)).toEqual({ ok: true, entry })

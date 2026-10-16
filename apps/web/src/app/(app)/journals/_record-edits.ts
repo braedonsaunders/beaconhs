@@ -25,7 +25,8 @@ import {
   type RecordChange,
 } from '@/lib/record-sync/edits'
 import { journalMutationScope } from './_mutation-policy'
-import { isJournalDate, journalMutationWhere } from './_mutation-scope'
+import { journalMutationWhere } from './_mutation-scope'
+import { isJournalDate } from './_dates'
 import { canonicalJournalTags, normalizeJournalTags } from './_tag-policy'
 import type { JournalDefinition } from './_types'
 

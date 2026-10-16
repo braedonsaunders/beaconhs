@@ -141,6 +141,7 @@ vi.mock('sonner', () => ({ toast: { error: mocks.error, success: mocks.success }
 vi.mock('next-intl', async (original) => ({
   ...(await original<typeof import('next-intl')>()),
   useLocale: () => 'en',
+  useTimeZone: () => 'America/Toronto',
 }))
 vi.mock('@/i18n/generated', () => ({
   GeneratedText: ({ id }: { id: string }) => id,
@@ -207,9 +208,19 @@ async function render(
   )
 }
 function button(text: string) {
-  return [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+  return [...document.querySelectorAll<HTMLButtonElement>('button')].find(
     (item) => item.textContent === text,
   )!
+}
+function quickDateButton(choice: string) {
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((item) =>
+    item.textContent?.startsWith(choice),
+  )!
+}
+async function openDateChooser() {
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[data-walkthrough="journals-new-mobile"]')!.click(),
+  )
 }
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -220,6 +231,8 @@ function deferred<T>() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-06T01:00:00Z'))
   vi.stubGlobal('matchMedia', () => ({
     matches: true,
     addEventListener: vi.fn(),
@@ -241,6 +254,7 @@ afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 function goOffline() {
   mocks.isOnline = false
@@ -324,6 +338,104 @@ describe('one journal editor', () => {
     await act(async () => pushing.resolve(undefined))
     expect(mocks.create).toHaveBeenCalledExactlyOnceWith('2026-10-04')
   })
+  it('offers tomorrow in the viewer timezone without changing the current journal', async () => {
+    await render(entry)
+    await openDateChooser()
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(document.querySelector<HTMLInputElement>('[aria-label="Journal date"]')!.value).toBe(
+      '2026-10-06',
+    )
+    expect(quickDateButton('today').textContent).toContain('October 5, 2026')
+    expect(quickDateButton('tomorrow').textContent).toContain('October 6, 2026')
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(mocks.change).not.toHaveBeenCalled()
+    expect(window.location.pathname).toBe('/journals')
+    await act(async () =>
+      document.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click(),
+    )
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('J-1')
+  })
+  it('saves the current words before opening tomorrow and resumes its existing draft', async () => {
+    await render(entry)
+    const pushing = deferred<undefined>()
+    mocks.flush.mockReturnValueOnce(pushing.promise)
+    mocks.create.mockResolvedValueOnce({
+      ok: true,
+      entry: {
+        ...entry,
+        id: 'existing-tomorrow',
+        reference: 'J-tomorrow',
+        entryDate: '2026-10-06',
+      },
+    })
+    await act(async () => mocks.edit!('<p>Today’s final words</p>'))
+    await openDateChooser()
+    await act(async () => quickDateButton('tomorrow').click())
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('J-1')
+    expect(quickDateButton('tomorrow').disabled).toBe(true)
+    await act(async () => pushing.resolve(undefined))
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith('2026-10-06')
+    expect(mocks.change).toHaveBeenCalledExactlyOnceWith('bodyHtml', '<p>Today’s final words</p>')
+    expect(window.location.pathname).toBe('/journals/existing-tomorrow')
+    expect(container.textContent).toContain('J-tomorrow')
+  })
+  it('opens the selected future calendar date and does not accept a cleared date', async () => {
+    await render(entry)
+    await openDateChooser()
+    const dateInput = document.querySelector<HTMLInputElement>('[aria-label="Journal date"]')!
+    const setDate = async (value: string) =>
+      act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+          dateInput,
+          value,
+        )
+        dateInput.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    await setDate('')
+    expect(button('Open journal').disabled).toBe(true)
+    await setDate('2027-01-02')
+    expect(button('Open journal').disabled).toBe(false)
+    await act(async () =>
+      dateInput
+        .closest('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    )
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith('2027-01-02')
+    expect(mocks.change).not.toHaveBeenCalled()
+  })
+  it('keeps the current entry and date chooser available if tomorrow cannot open offline', async () => {
+    await render(entry)
+    await openDateChooser()
+    goOffline()
+    await act(async () => quickDateButton('tomorrow').click())
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('J-1')
+    expect(document.querySelector('[role="dialog"] [role="alert"]')!.textContent).toBe(
+      'Could not open your journal.',
+    )
+    expect(mocks.change).not.toHaveBeenCalled()
+  })
+  it('shows creation failures in the date chooser and permits retry without discarding the current journal', async () => {
+    await render(entry)
+    mocks.create.mockResolvedValueOnce({ ok: false, error: 'Connection unavailable' })
+    await openDateChooser()
+    await act(async () => quickDateButton('tomorrow').click())
+    expect(document.querySelector('[role="dialog"] [role="alert"]')!.textContent).toBe(
+      'Connection unavailable',
+    )
+    expect(container.textContent).toContain('J-1')
+    await act(async () => quickDateButton('tomorrow').click())
+    expect(mocks.create).toHaveBeenCalledTimes(2)
+  })
+  it.each([{ canCreate: false }, { authorEntryId: 'author-record' }])(
+    'hides the mobile create affordance from a read-only or author workspace %j',
+    async (options) => {
+      await render(entry, options)
+      expect(container.querySelector('[data-walkthrough="journals-new-mobile"]')).toBeNull()
+    },
+  )
   it('switches back to an entry opened earlier without signal, with its synced edits', async () => {
     mocks.saveState = 'saved'
     await render(entry)

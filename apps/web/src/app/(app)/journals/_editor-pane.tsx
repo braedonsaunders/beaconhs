@@ -18,7 +18,7 @@ import {
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { unstable_rethrow } from 'next/navigation'
-import { useLocale } from 'next-intl'
+import { useLocale, useTimeZone } from 'next-intl'
 import { FileText, Mail, MoreHorizontal, NotebookPen, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
@@ -104,6 +104,7 @@ function EntryEditor({
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const locale = useLocale() as AppLocale
+  const timeZone = useTimeZone() ?? 'America/Toronto'
   const runOnline = useOnlineAction()
   const [submitting, startSubmit] = useTransition()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -245,7 +246,7 @@ function EntryEditor({
             <span className="font-medium whitespace-nowrap text-slate-600 dark:text-slate-300">
               <GeneratedValue
                 value={
-                  isToday(fields.entryDate.value)
+                  isToday(fields.entryDate.value, timeZone)
                     ? new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'day')
                     : formatDate(fields.entryDate.value, locale)
                 }
