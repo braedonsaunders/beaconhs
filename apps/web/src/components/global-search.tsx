@@ -126,10 +126,13 @@ export function GlobalSearch() {
   // typing in an input/textarea so we don't hijack regular typing.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.defaultPrevented || e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
       const target = e.target as HTMLElement | null
       const tag = target?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      // Canvas editors forward keyboard events from their iframe. The target
+      // here is the frame, not the editable cell inside it.
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'IFRAME' || target?.isContentEditable)
+        return
       e.preventDefault()
       inputRef.current?.focus()
     }
