@@ -137,7 +137,66 @@ function currentColWidthPct(pos: CellPosition | null): string {
  */
 export function installTableEditing(editor: Editor): void {
   editor.DomComponents.addType('cell', {
-    model: { defaults: { draggable: false, copyable: false, droppable: true, stylable: true } },
+    extend: 'text',
+    isComponent: (el) => el.nodeType === 1 && ['TD', 'TH'].includes(el.tagName),
+    model: {
+      defaults: {
+        type: 'cell',
+        tagName: 'td',
+        draggable: false,
+        copyable: false,
+        droppable: true,
+        stylable: true,
+        editable: true,
+      },
+    },
+    view: {
+      events() {
+        return {
+          dblclick: 'onActive',
+          input: 'onInput',
+          keydown: 'onCellKeydown',
+        }
+      },
+      onCellKeydown(event: KeyboardEvent) {
+        if (event.key !== 'Enter' || event.isComposing || !this.rteEnabled) return
+        const doc = this.el.ownerDocument
+        if (
+          doc.queryCommandState('insertOrderedList') ||
+          doc.queryCommandState('insertUnorderedList')
+        )
+          return
+        // insertLineBreak adds two breaks before a noneditable inline value in
+        // Chrome. Insert one HTML break instead, retaining the native undo stack.
+        const existing = new Set(this.el.querySelectorAll('[data-bhs-caret]'))
+        doc.execCommand('insertHTML', false, '<br><span data-bhs-caret>\u200b</span>')
+        const inserted = [...this.el.querySelectorAll('[data-bhs-caret]')].find(
+          (span) => !existing.has(span),
+        )
+        if (inserted) {
+          // Browsers need an editable character before a noneditable value at
+          // the start of a line. The parser removes this caret anchor on sync.
+          const range = doc.createRange()
+          range.setStart(inserted.firstChild!, 0)
+          range.collapse(true)
+          const selection = doc.getSelection()
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+        }
+        event.preventDefault()
+        event.stopPropagation()
+      },
+      canActivate() {
+        // Each cell is its own editing surface, including inside nested layout
+        // tables. Never make an outer layout cell edit the nested grid as text.
+        return {
+          result:
+            !this.rteEnabled &&
+            this.model.get('editable') &&
+            this.model.findType('table').length === 0,
+        }
+      },
+    },
   })
   editor.on(
     'command:run:before:core:component-delete',

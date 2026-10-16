@@ -6,15 +6,20 @@ const VALUE = /^\{\{\{?\s*[@\w./-]+\s*\}?\}\}$/
 const VALUES = /\{\{\{?\s*[@\w./-]+\s*\}?\}\}/g
 const TABLE_STRUCTURE = new Set(['TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'COLGROUP'])
 
-/** Give bare cell labels and scalar bindings their own editable/movable elements. */
+/** Keep scalar bindings atomic inside a continuous rich-text editing surface. */
 function editableMarkup(input: string): string {
   const root = document.createElement('template')
   root.innerHTML = input
+  for (const anchor of root.content.querySelectorAll('[data-bhs-caret]')) {
+    const text = document.createTreeWalker(anchor, 4 /* SHOW_TEXT */)
+    for (let node = text.nextNode(); node; node = text.nextNode()) {
+      ;(node as Text).data = (node as Text).data.replace(/\u200b/g, '')
+    }
+    anchor.replaceWith(...anchor.childNodes)
+  }
   for (const cell of root.content.querySelectorAll('td,th')) {
     if (cell.childNodes.length) continue
-    const span = document.createElement('span')
-    span.textContent = '\u00a0'
-    cell.append(span)
+    cell.append(document.createTextNode('\u00a0'))
   }
   const walker = document.createTreeWalker(root.content, 4 /* SHOW_TEXT */)
   const nodes: Text[] = []
@@ -22,22 +27,21 @@ function editableMarkup(input: string): string {
   for (const node of nodes) {
     const parent = node.parentElement
     const text = node.data
-    if (!parent || parent.closest('style,script,textarea,svg')) continue
-    const bareCell = parent.tagName === 'TD' || parent.tagName === 'TH'
-    if (!text.trim() && !bareCell) continue
-    if (TABLE_STRUCTURE.has(parent.tagName)) continue
+    if (parent?.closest('style,script,textarea,svg')) continue
+    if (!text.trim()) continue
+    if (parent && TABLE_STRUCTURE.has(parent.tagName)) continue
     // An existing atomic value is already in the correct shape. Never nest it.
-    if (parent.tagName === 'SPAN' && parent.childNodes.length === 1 && VALUE.test(text)) continue
+    if (parent?.tagName === 'SPAN' && parent.childNodes.length === 1 && VALUE.test(text)) continue
     const matches = [...text.matchAll(VALUES)].filter(
       (match) => !/^\{\{\s*else\s*\}\}$/.test(match[0]),
     )
-    if (!matches.length && !bareCell) continue
+    if (!matches.length) continue
     const fragment = document.createDocumentFragment()
     const append = (value: string, field = false) => {
       if (!value) return
-      // Control blocks must remain raw text in their original scope. Wrapping
-      // {{#if}} or {{/each}} separately would create unbalanced rendered spans.
-      if (!field && /\{\{[#/]|\{\{else\b/.test(value)) {
+      // Labels, separators and Handlebars control blocks remain ordinary text.
+      // Making each separator another text component prevents natural typing.
+      if (!field) {
         fragment.append(document.createTextNode(value))
       } else {
         const span = document.createElement('span')
@@ -71,6 +75,7 @@ export function installTemplateComponents(editor: Editor): void {
         tagName: 'span',
         name: 'Record value',
         editable: false,
+        textable: true,
         droppable: false,
         draggable: true,
         stylable: true,
@@ -90,7 +95,7 @@ export function installTemplateComponents(editor: Editor): void {
     if (!doc) return
     const style = doc.createElement('style')
     style.textContent =
-      '[data-gjs-type="record-value"]{overflow-wrap:anywhere;white-space:normal;outline:1px dotted #94a3b8;cursor:grab;} td,th{min-height:20px;}'
+      '[data-gjs-type="record-value"]{overflow-wrap:anywhere;white-space:normal;outline:1px dotted #94a3b8;cursor:grab;} td,th{min-height:20px;} td[contenteditable="true"],th[contenteditable="true"]{cursor:text;}'
     doc.head.appendChild(style)
   })
   editor.on('parse:html:before', (options: { input: string | HTMLElement }) => {

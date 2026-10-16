@@ -369,14 +369,14 @@ describe('editable record documents', () => {
     installTableEditing(editor)
   }
 
-  it('separates labels from atomic values in ordinary cells and keeps styles on reopen', async () => {
+  it('edits cells as continuous text while keeping movable values and styles on reopen', async () => {
     const { editor, table } = await loadEditor(
       '<table><tr><td>Course</td><td>{{course_name}} ({{course_code}})</td></tr></table>',
       setup,
     )
     const model = readTable(table)
-    const label = model.cells[0]![0]!.components().at(0)!
-    expect(label.get('type')).toBe('text')
+    const label = model.cells[0]![0]!
+    expect(label.isInstanceOf('text')).toBe(true)
     expect(label.get('editable')).toBe(true)
     label.components('Session course')
     label.addStyle({ color: '#008080', 'font-size': '18px' })
@@ -386,12 +386,13 @@ describe('editable record documents', () => {
     expect(values).toHaveLength(2)
     expect(values[0]!.get('draggable')).toBe(true)
     expect(values[0]!.get('editable')).toBe(false)
+    expect(values[0]!.get('textable')).toBe(true)
     values[1]!.move(model.cells[0]![0]!)
     const saved = serializeTemplateEditor(editor)
     const reopened = await loadEditor(sanitizeEmailHtml(saved), setup)
     const next = readTable(reopened.table)
     expect(next.cells[0]![0]!.toHTML()).toContain('Session course')
-    expect(next.cells[0]![0]!.components().at(0)!.getStyle().color).toBe('rgb(0, 128, 128)')
+    expect(next.cells[0]![0]!.getStyle().color).toBe('rgb(0, 128, 128)')
     expect(
       next.cells[0]![0]!.components()
         .toArray()
@@ -415,21 +416,66 @@ describe('editable record documents', () => {
   it('lets empty and blank existing cells accept typed text', async () => {
     const { table } = await loadEditor('<table><tr><td></td><td>&nbsp;</td></tr></table>', setup)
     for (const cell of readTable(table).cells[0]!) {
-      const text = cell.components().at(0)!
-      expect(text.get('type')).toBe('text')
-      expect(text.get('editable')).toBe(true)
+      expect(cell.isInstanceOf('text')).toBe(true)
+      expect(cell.get('editable')).toBe(true)
     }
   })
 
-  it('new rows and columns also have editable label spans', async () => {
+  it('new rows and columns also edit as whole cells', async () => {
     const { table } = await loadEditor('<table><tr><td>A</td><td>B</td></tr></table>', setup)
     insertTableRow(table, readTable(table).rows[0]!)
     insertTableColumn(table, 1)
     for (const cells of readTable(table).cells)
       for (const cell of cells) {
-        expect(cell.components().at(0)!.get('type')).toBe('text')
-        expect(cell.components().at(0)!.get('editable')).toBe(true)
+        expect(cell.isInstanceOf('text')).toBe(true)
+        expect(cell.get('editable')).toBe(true)
       }
+  })
+
+  it('preserves separators, line breaks and bindings through rich-text sync, save and rendering', async () => {
+    const { editor, table } = await loadEditor(
+      '<table><tr><td>{{course_name}}{{course_code}}</td></tr></table>',
+      setup,
+    )
+    const cell = readTable(table).cells[0]![0]!
+    expect(cell.isInstanceOf('text')).toBe(true)
+    cell.components('{{course_name}}{{course_code}}')
+    expect(cell.components().map((component: Component) => component.get('type'))).toEqual([
+      'record-value',
+      'record-value',
+    ])
+    // The cell text view reparses its entire content when rich-text editing ends.
+    cell.components(
+      'Session: <span>{{course_name}}</span> / <span>{{course_code}}</span><br><span data-bhs-caret><strong>Room: \u200b</strong></span><span>{{location}}</span>',
+    )
+    const reopened = await loadEditor(sanitizeEmailHtml(serializeTemplateEditor(editor)), setup)
+    const html = serializeTemplateEditor(reopened.editor)
+    const rendered = new JSDOM(
+      renderTemplate(html, { course_name: 'MEWP', course_code: '101', location: 'Training room' }),
+    )
+    expect(rendered.window.document.querySelector('td')!.innerHTML).toContain('<br>')
+    expect(rendered.window.document.querySelector('td')!.textContent).toBe(
+      'Session: MEWP / 101Room: Training room',
+    )
+    expect(reopened.editor.getHtml()).not.toContain('contenteditable')
+    expect(html).not.toContain('data-bhs-caret')
+    expect(html).not.toContain('\u200b')
+    expect(rendered.window.document.querySelector('strong')!.textContent).toBe('Room: ')
+    rendered.window.close()
+  })
+
+  it('keeps nested layout tables out of whole-cell text editing', async () => {
+    const { editor, table } = await loadEditor(
+      '<table><tr><td><table><tr><td>{{course_name}}</td></tr></table></td></tr></table>',
+      setup,
+    )
+    const outer = readTable(table).cells[0]![0]!
+    const inner = outer.findType('cell')[0]!
+    const view = editor.DomComponents.getType('cell')!.view.prototype as {
+      canActivate: (this: { model: Component; rteEnabled: boolean }) => { result: boolean }
+    }
+    expect(view.canActivate.call({ model: outer, rteEnabled: false }).result).toBe(false)
+    expect(view.canActivate.call({ model: inner, rteEnabled: false }).result).toBe(true)
   })
 
   it('reorders whole rows within a section and refuses to break rowspans', async () => {

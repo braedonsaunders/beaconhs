@@ -106,7 +106,7 @@ export function TemplateBuilderSidebar({ editor }: { editor: Editor | null }) {
         >
           <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
             {translate(
-              'Double-click a label to edit it. Drag fields into cells or use Layers to move them.',
+              'Double-click a cell to edit its text. Type spaces, punctuation or line breaks between fields. Drag fields into the cell or use Layers to move them.',
             )}
           </p>
           <BlocksProvider>{(props) => <TemplateBuilderBlockPalette {...props} />}</BlocksProvider>

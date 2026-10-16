@@ -831,7 +831,7 @@ Open a PDF template to get three tabs. **Design** is the drag-and-drop page buil
 ## Edit labels, fields and layout
 
 1. Open a template and choose **Design**. These tools work in ordinary field tables, such as a training class's **Session** section, and in repeating tables.
-2. Double-click a label, such as **Course**, and type its replacement. Record values appear with dotted outlines. They fill from the record; move, copy or delete them without changing their field names.
+2. Double-click a cell to edit all its text together. Click between record values, or use the arrow keys to move the cursor, then type spaces, punctuation or your own labels. Press **Enter** for a new line. For example, put a space or **/** between the course name and course code. Record values have dotted outlines and stay intact as you type around them. You can still move, copy or delete a whole value without changing its field name.
 3. In **Blocks**, drag a field or content block into the middle of any cell. Drag an existing field to another cell to move it. Empty cells can receive content too. Use **Layers** to select and rearrange nested content.
 4. Select content and open **Styles** to change fonts, alignment, colours, backgrounds, borders, spacing and sizes. Use **Select parent** to select the cell, row or table around it. **Settings** shows the selected element's properties.
 5. Use **+ Row**, **− Row**, **+ Col** and **− Col** on the **Table** toolbar to change the grid. The arrow buttons move the selected row within its section. Row movement is unavailable when cells span more than one row. Deleting a label or record value removes only that content; select the cell itself to delete its column.

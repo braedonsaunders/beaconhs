@@ -197,9 +197,7 @@ function cellDef(tag: 'td' | 'th', text: string, colspan = 1) {
     type: 'cell',
     tagName: tag,
     ...(colspan > 1 ? { attributes: { colspan: String(colspan) } } : {}),
-    components: [
-      { type: 'text', tagName: 'span', components: [{ type: 'textnode', content: text }] },
-    ],
+    components: [{ type: 'textnode', content: text }],
   }
 }
 
