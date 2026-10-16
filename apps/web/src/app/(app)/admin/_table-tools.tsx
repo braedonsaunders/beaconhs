@@ -161,15 +161,13 @@ export function installTableEditing(editor: Editor): void {
       onCellKeydown(event: KeyboardEvent) {
         if (event.key !== 'Enter' || event.isComposing || !this.rteEnabled) return
         const doc = this.el.ownerDocument
-        if (
-          doc.queryCommandState('insertOrderedList') ||
-          doc.queryCommandState('insertUnorderedList')
-        )
-          return
+        const anchor = doc.getSelection()?.anchorNode
+        const element = anchor?.nodeType === 1 ? (anchor as Element) : anchor?.parentElement
+        if (element?.closest('li')) return
         // insertLineBreak adds two breaks before a noneditable inline value in
         // Chrome. Insert one HTML break instead, retaining the native undo stack.
         const existing = new Set(this.el.querySelectorAll('[data-bhs-caret]'))
-        doc.execCommand('insertHTML', false, '<br><span data-bhs-caret>\u200b</span>')
+        this.activeRte.exec('insertHTML', '<br><span data-bhs-caret>\u200b</span>')
         const inserted = [...this.el.querySelectorAll('[data-bhs-caret]')].find(
           (span) => !existing.has(span),
         )
