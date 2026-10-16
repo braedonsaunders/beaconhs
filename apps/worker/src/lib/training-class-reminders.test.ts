@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { drizzle } from 'drizzle-orm/postgres-js'
+import { trainingClasses } from '@beaconhs/db/schema'
 const mocks = vi.hoisted(() => ({ super: vi.fn(), tenant: vi.fn(), event: vi.fn() }))
 vi.mock('@beaconhs/db', () => ({ db: {}, withSuperAdmin: mocks.super, withTenant: mocks.tenant }))
 vi.mock('@beaconhs/events', () => ({ recordModuleFlowEvent: mocks.event }))
@@ -51,6 +53,18 @@ beforeEach(() => {
   mocks.event.mockResolvedValue('event')
 })
 describe('optional class reminders', () => {
+  it('encodes both timestamp bounds before passing the candidate query to postgres-js', async () => {
+    const query = drizzle
+      .mock()
+      .select({ id: trainingClasses.id, tenantId: trainingClasses.tenantId })
+      .from(trainingClasses)
+    vi.spyOn(query, 'execute').mockResolvedValue([])
+    mocks.super.mockImplementationOnce((_db, run) => run({ select: () => ({ from: () => query }) }))
+
+    expect(await scanTrainingClassReminders(now)).toBe(0)
+    expect(query.toSQL().params).toEqual([now.toISOString(), now.toISOString(), 100])
+  })
+
   it.each([
     { emailQueuedAt: null },
     { reminderHours: null },

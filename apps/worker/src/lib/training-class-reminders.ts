@@ -19,7 +19,7 @@ export async function scanTrainingClassReminders(now = new Date()): Promise<numb
           gt(trainingClasses.startsAt, now),
           lte(
             sql`${trainingClasses.startsAt} - ${trainingClasses.reminderHours} * interval '1 hour'`,
-            now,
+            now.toISOString(),
           ),
           or(
             isNull(trainingClasses.reminderQueuedFor),
