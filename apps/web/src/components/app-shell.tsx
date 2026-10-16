@@ -17,6 +17,7 @@ import { MobileTabBar } from './mobile-tab-bar'
 import { ServiceWorkerRegistrar } from './service-worker-registrar'
 import { ImpersonationBanner } from './impersonation-banner'
 import { AppScrollReset } from './app-scroll-reset'
+import { DeploymentUpdateBanner } from './deployment-update-banner'
 
 type Ctx = {
   isSuperAdmin: boolean
@@ -74,6 +75,7 @@ export function AppShell({
 
       <MobileNavProvider>
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden [padding-top:env(safe-area-inset-top)]">
+          <DeploymentUpdateBanner version={appVersion} />
           <GeneratedValue
             value={
               impersonation ? (

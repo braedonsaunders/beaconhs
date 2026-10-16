@@ -1,6 +1,8 @@
 import { IncomingMessage, ServerResponse } from 'node:http'
 import { Socket } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { annotateDiagnosticContext } from './diagnostic-context'
+import type { RequestContext } from '@beaconhs/tenant'
 import { observeHttpResponse } from './http-response-diagnostics'
 
 afterEach(() => vi.restoreAllMocks())
@@ -40,4 +42,48 @@ describe('HTTP response diagnostics', () => {
       statusCode: 500,
     })
   })
+})
+
+it('captures failed server actions with authenticated correlation without exposing action IDs', () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const request = new IncomingMessage(new Socket())
+  request.url = '/training/secret-id?query=secret'
+  request.method = 'POST'
+  request.headers = { 'next-action': 'SECRET-ACTION-ID' }
+  const response = new ServerResponse(request)
+  response.statusCode = 404
+  Object.defineProperty(response, 'writableFinished', { value: true })
+  Object.defineProperty(response, 'headersSent', { value: true })
+  observeHttpResponse(request, response)
+  annotateDiagnosticContext(request.headers, {
+    userId: 'peter',
+    tenantId: 'external-training',
+  } as RequestContext)
+  response.emit('close')
+  const line = String(warn.mock.calls[0]?.[0])
+  expect(JSON.parse(line)).toMatchObject({
+    kind: 'server_action_failed',
+    routeFamily: 'training',
+    actorUserId: 'peter',
+    tenantId: 'external-training',
+    statusCode: 404,
+  })
+  expect(line).not.toMatch(/secret|SECRET-ACTION-ID/)
+  request.destroy()
+})
+
+it('classifies an abandoned prefetch as cancellation rather than a crash', () => {
+  const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const request = new IncomingMessage(new Socket())
+  request.headers = { 'next-router-prefetch': '1' }
+  const response = new ServerResponse(request)
+  observeHttpResponse(request, response)
+  response.emit('close')
+  expect(warn).not.toHaveBeenCalled()
+  expect(JSON.parse(String(info.mock.calls[0]?.[0]))).toMatchObject({
+    kind: 'request_cancelled',
+    prefetch: true,
+  })
+  request.destroy()
 })

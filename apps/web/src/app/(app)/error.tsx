@@ -2,6 +2,7 @@
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 
+import { captureBrowserDiagnostic } from '@/lib/browser-diagnostics'
 import { useEffect } from 'react'
 import Link from 'next/link'
 import * as Sentry from '@sentry/nextjs'
@@ -16,7 +17,12 @@ export default function AppError({
   reset: () => void
 }) {
   useEffect(() => {
-    Sentry.captureException(error)
+    captureBrowserDiagnostic('react_boundary', error)
+    try {
+      Sentry.captureException(error)
+    } catch {
+      // Error reporting must not prevent recovery.
+    }
   }, [error])
 
   return (

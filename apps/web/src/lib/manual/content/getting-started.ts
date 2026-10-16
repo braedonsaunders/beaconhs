@@ -552,4 +552,22 @@ You do not need to confirm again after it is recognized as a defect.
 - Say what you tapped and what you expected to happen.
 - Do not paste emails, phone numbers, or record ids. They are stripped before filing.`,
   },
+  {
+    slug: 'app-updates',
+    title: 'Refreshing after an app update',
+    group: 'Getting started',
+    iconKey: 'settings',
+    summary: 'Keep your work safe when BeaconHS asks you to refresh.',
+    keywords: ['update', 'refresh', 'new version', 'button', 'connection', 'saved work'],
+    body: `BeaconHS can be updated while you have it open. A page left open from an earlier version may need a refresh before its buttons work.
+
+## When the update message appears
+
+1. Tap **Refresh app** in the **BeaconHS has been updated** message.
+2. Check any unfinished form before confirming. Journal and record edits saved on your device will sync first.
+3. Confirm **Refresh app**. If your changes cannot sync, keep the page open and reconnect. **Refresh anyway** is available if you accept that unfinished form entries or uploads may be lost.
+4. After the page reloads, repeat the button or action you were trying.
+
+BeaconHS does not repeat a failed action automatically. Check the record before trying again if you are unsure whether a previous action finished.`,
+  },
 ]

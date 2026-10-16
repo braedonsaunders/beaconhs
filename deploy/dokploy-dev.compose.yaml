@@ -3,9 +3,17 @@
 # The GitHub deploy workflow injects all ${VARS} at deploy time. The same image
 # runs web, worker, and scheduler roles selected by APP_ROLE.
 
+x-application-logging: &application-logging
+  # Host journals survive stopped-container pruning. See the production runbook
+  # for persistent storage/retention setup on every Swarm node before rollout.
+  driver: journald
+  options:
+    tag: beaconhs
+
 services:
   web:
     image: ${IMAGE}
+    logging: *application-logging
     environment:
       APP_ROLE: web
       NODE_ENV: production
@@ -73,6 +81,7 @@ services:
 
   worker:
     image: ${IMAGE}
+    logging: *application-logging
     environment:
       APP_ROLE: worker
       NODE_ENV: production
@@ -123,6 +132,7 @@ services:
   # confirmation after public development/custom domains have been disabled.
   storage-init:
     image: ${IMAGE}
+    logging: *application-logging
     environment:
       APP_ROLE: storage-init
       NODE_ENV: production
@@ -142,6 +152,7 @@ services:
 
   scheduler:
     image: ${IMAGE}
+    logging: *application-logging
     environment:
       APP_ROLE: scheduler
       NODE_ENV: production

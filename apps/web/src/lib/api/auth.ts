@@ -6,6 +6,7 @@
 // tenant-scoped RequestContext so every downstream query is RLS-bound to the
 // key's tenant exactly like a UI session.
 
+import { annotateDiagnosticContext } from '../diagnostic-context'
 import { createHash } from 'node:crypto'
 import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
@@ -136,6 +137,8 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
     permissions: new Set(permissions),
     scopes: [{ type: 'tenant' }],
   })
+
+  annotateDiagnosticContext(req.headers, ctx)
 
   return {
     ctx,

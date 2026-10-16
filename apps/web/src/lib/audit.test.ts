@@ -1,4 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { IncomingMessage, ServerResponse } from 'node:http'
+import { Socket } from 'node:net'
+import { beginDiagnosticRequest } from './diagnostic-context'
+
+const requestHeaders = vi.hoisted(() => ({ headers: new Headers() }))
+vi.mock('next/headers', () => ({ headers: async () => requestHeaders.headers }))
+beforeEach(() => {
+  requestHeaders.headers = new Headers()
+})
 import type { Database } from '@beaconhs/db'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAuditInTransaction } from './audit'
@@ -117,4 +126,34 @@ describe('recordAuditInTransaction', () => {
     })
     expect(capture.captured().conflictTarget).toBeDefined()
   })
+})
+
+it('enriches audit rows only with server-minted request metadata and a verified socket peer', async () => {
+  const socket = new Socket()
+  Object.defineProperty(socket, 'remoteAddress', { value: '10.20.30.40' })
+  const request = new IncomingMessage(socket)
+  request.headers = { 'user-agent': 'Safari/123', 'x-forwarded-for': 'forged-ip' }
+  const response = new ServerResponse(request)
+  const diagnostic = beginDiagnosticRequest(request, response)
+  requestHeaders.headers = new Headers({ 'x-beaconhs-request-id': diagnostic.requestId })
+  const capture = transactionCapture()
+  await recordAuditInTransaction(capture.tx, context(), {
+    entityType: 'journal',
+    action: 'update',
+    metadata: { requestId: 'forged' },
+  })
+  expect(capture.captured().values).toMatchObject({
+    actorIp: '10.20.30.40',
+    actorUserAgent: 'Safari/123',
+    metadata: { requestId: diagnostic.requestId, actorIpSource: 'socket-peer', browser: 'safari' },
+  })
+  response.emit('close')
+  request.destroy()
+  const afterClose = transactionCapture()
+  await recordAuditInTransaction(afterClose.tx, context(), {
+    entityType: 'journal',
+    action: 'update',
+  })
+  expect(afterClose.captured().values?.actorIp).toBeUndefined()
+  expect(afterClose.captured().values?.metadata).toEqual({})
 })

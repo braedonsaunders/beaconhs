@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { annotateDiagnosticActor, annotateDiagnosticContext } from './diagnostic-context'
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { authEntryPath } from './auth-return-path'
@@ -143,6 +144,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
   if (!session?.user?.id) return null
 
   const userId = session.user.id
+  annotateDiagnosticActor(headerStore, userId)
   // The real session's token keys the impersonation pointer (stored on the
   // admin's own session row). The Better-Auth session cookie is never swapped,
   // so this stays the admin's token throughout — "stop" just clears the pointer.
@@ -161,7 +163,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
   // (tenant_users, roles, …) enforce FORCE ROW LEVEL SECURITY, so a normal
   // connection would see zero rows here. The returned context's db() helper is
   // still tenant-scoped via makeTenantContext.
-  return await withSuperAdmin(db, async (tx) => {
+  const context = await withSuperAdmin(db, async (tx) => {
     const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1)
     if (!u) return null
 
@@ -298,6 +300,8 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
       activeRoleId: appliedRoleId,
     })
   })
+  if (context) annotateDiagnosticContext(headerStore, context)
+  return context
 })
 
 /**

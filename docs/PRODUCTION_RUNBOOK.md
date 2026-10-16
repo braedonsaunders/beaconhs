@@ -133,6 +133,52 @@ never places the API key in curl's process arguments.
 retired names and are not consumed by the workflow or containers. Remove stale
 repository entries rather than reintroducing any of them.
 
+## Persistent container logs
+
+Application containers use Docker's `journald` logging driver with the stable
+`beaconhs` tag. Logs remain available after the nightly container prune and
+rolling deployments. Web, worker, scheduler and storage initialization share
+this tag; `CONTAINER_NAME` identifies the service and task.
+
+Before deploying onto any Swarm node, enable persistent host journal storage.
+The production hosts use `/etc/systemd/journald.conf.d/60-beaconhs-retention.conf`:
+
+```ini
+[Journal]
+Storage=persistent
+Compress=yes
+SystemMaxUse=2G
+SystemKeepFree=2G
+MaxRetentionSec=30day
+MaxFileSec=1day
+```
+
+After installing the configuration, restart `systemd-journald` and run
+`journalctl --flush`. This does not restart Docker or the application. Verify
+that `/var/log/journal` exists and that `systemd-analyze cat-config
+systemd/journald.conf` shows the effective settings. The 30-day limit is a
+maximum: the disk and free-space bounds may expire older entries sooner. Check
+actual retained coverage during incident review; do not promise missing logs
+can be recovered.
+
+Read application logs on each node, even when the old containers are gone:
+
+```bash
+sudo journalctl SYSLOG_IDENTIFIER=beaconhs --since '2026-10-16 00:00:00 UTC' -o cat
+sudo journalctl SYSLOG_IDENTIFIER=beaconhs -o json
+```
+
+For running Swarm tasks, `docker service logs --since 1h <service>` still works.
+For older removed tasks, use the host journal. Check all nodes and correlate
+structured `requestId`, tenant/user IDs, release and timestamp with the audit
+log. Restrict journal access to operations staff. Do not paste raw private logs
+into public issues. Preserve original timestamps and use explicit time zones.
+
+Verify retention without restarting the app: create one finite diagnostic
+container using `--log-driver=journald --log-opt tag=beaconhs-retention-check`,
+print a unique harmless marker, remove only that diagnostic container, and
+confirm the marker remains in `journalctl SYSLOG_IDENTIFIER=beaconhs-retention-check`.
+
 ## PostgreSQL backup and recovery
 
 ### Required provider/cluster controls
@@ -402,3 +448,79 @@ Explicit web deployment labels include both the native app routes and the legacy
 redirect. Dokploy does not add its automatic domain labels when custom deploy
 labels already exist. Keep the app host, backend port, and overlay network in
 the same generated routing definition and verify every ingress node.
+
+## Application diagnostics
+
+Web request and browser failures produce structured JSON container logs even
+when Sentry has no DSN. Configure persistent host container-log retention (see
+**Persistent container logs**) before deploying. Optional Sentry still receives
+its existing reports when configured; the local diagnostic path does not depend
+on Sentry or introduce another database log table.
+
+Each incoming Node HTTP request receives a server-generated
+`x-beaconhs-request-id`. The server overwrites supplied IDs. Authentication adds
+`actorUserId`, `effectiveUserId` and `tenantId` only after resolving the session
+and active tenant. Impersonation keeps the real and effective actors distinct.
+The same `requestId` is included in audit metadata. Audit rows also retain a
+bounded user agent and the TCP socket peer address, marked
+`actorIpSource: socket-peer`; behind Traefik this is the proxy address, not a
+verified employee address. Forwarded IP headers are not trusted for attribution.
+Live request identity is removed when the response finishes or disconnects.
+
+Search retained logs for `browser_diagnostic`, `request_error` or
+`http_response`, then filter by the employee's user ID, tenant ID, release and
+time. Browser diagnostics include a random browser-profile `deviceId` (a
+correlation hint, never an identity or authorization claim), coarse browser
+category, module family, client release when present, safe error type, numeric
+framework digest and up to
+five static JavaScript asset positions. They exclude error messages, full
+stacks, record IDs, query strings, cookies, tokens, SQL and form contents.
+`deployment_stale` events distinguish a version mismatch from a framework
+`action_not_found` response. `request_cancelled` and `response_stream_closed`
+events identify cancellations separately from crashes; cancelled browser
+promises are suppressed. Framework failures that precede authentication may
+have no actor, so use the authenticated browser deployment event to correlate
+stale actions where available.
+
+`event_loop_delay` records a delayed visible-page heartbeat: a callback scheduled
+every two seconds ran 3–30 seconds late. It works in Safari as well as Chromium
+and Firefox, without relying on the Long Tasks API. Visibility, focus and page
+lifecycle changes reset the baseline; longer gaps are treated as suspension or
+sleep. The only extra measurement is integer `delayMs`. This is evidence of
+main-thread delay, not proof of a crash or its cause. It shares the same
+redaction, deduplication and rate limits as exception capture.
+
+The browser endpoint accepts only authenticated JSON POSTs from the configured
+public origin (`PUBLIC_APP_URL`, `NEXT_PUBLIC_APP_URL`, then `APP_URL`). It
+requires a valid tenant context, validates a strict bounded schema, caps the
+streamed body at 4 KiB with a 10-second read deadline and uses the shared Redis limiter (30 events per actor
+and tenant per minute). Browser sending is separately bounded and deduplicated.
+Failures in logging, network delivery or optional monitoring never block an
+employee's work. Failed delivery is best-effort; a tab that cannot execute any
+JavaScript cannot send a browser event.
+
+After deployment, sign in, open the browser console and send this harmless
+verification event:
+
+```javascript
+await fetch('/api/diagnostics', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    kind: 'smoke',
+    routeFamily: 'other',
+    deviceId: crypto.randomUUID(),
+    errorType: 'Other',
+    positions: [],
+  }),
+})
+```
+
+Expect HTTP 204 and a retained `browser_diagnostic` log entry with `kind: smoke`,
+the authenticated actor and tenant, current release and a request ID. This
+checks capture and retention without crashing the app or creating tenant data.
+Check the same event after the next web deployment to prove retention survives
+container replacement. Keep access to these identity-bearing operational logs
+restricted to authorized operators. This capture path does not by itself
+provide an external alert destination; configure and verify an operator alert
+route separately if automated paging is required.

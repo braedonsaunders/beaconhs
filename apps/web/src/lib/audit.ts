@@ -1,3 +1,5 @@
+import { headers } from 'next/headers'
+import { diagnosticContext } from './diagnostic-context'
 import { auditLog, users as user } from '@beaconhs/db/schema'
 import type { Database } from '@beaconhs/db'
 import { and, asc, count, desc, eq, ilike, or } from 'drizzle-orm'
@@ -31,11 +33,23 @@ export async function recordAuditInTransaction(
   // activity), but we stamp the real actor into metadata + flag the summary so
   // the trail stays honest. Start/stop entries themselves are recorded by the
   // admin's own (non-impersonated) context, so this branch is skipped for them.
+  // Background work has no Next request. Only observer-minted live IDs may
+  // enrich an audit; never infer identity from incoming diagnostic headers.
+  let request
+  try {
+    request = diagnosticContext(await headers())
+  } catch {
+    // Worker/CLI audit writes intentionally have no HTTP metadata.
+  }
+  const requestMetadata = request
+    ? { requestId: request.requestId, actorIpSource: 'socket-peer', browser: request.browser }
+    : {}
   const imp = ctx.impersonation
   const isSyntheticApiActor = Boolean(ctx.apiKey && ctx.userId === `api_key:${ctx.apiKey.id}`)
   const metadata = imp
     ? {
         ...(evt.metadata ?? {}),
+        ...requestMetadata,
         ...(ctx.apiKey
           ? { actorKind: 'api_key', apiKeyId: ctx.apiKey.id, apiKeyName: ctx.apiKey.name }
           : {}),
@@ -44,6 +58,7 @@ export async function recordAuditInTransaction(
       }
     : {
         ...(evt.metadata ?? {}),
+        ...requestMetadata,
         ...(ctx.apiKey
           ? { actorKind: 'api_key', apiKeyId: ctx.apiKey.id, apiKeyName: ctx.apiKey.name }
           : {}),
@@ -54,6 +69,8 @@ export async function recordAuditInTransaction(
   const insert = tx.insert(auditLog).values({
     tenantId: ctx.tenantId,
     actorUserId,
+    actorIp: request?.actorIp,
+    actorUserAgent: request?.actorUserAgent,
     entityType: evt.entityType,
     entityId: evt.entityId,
     action: evt.action,

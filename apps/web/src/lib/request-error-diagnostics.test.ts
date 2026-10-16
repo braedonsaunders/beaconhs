@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { IncomingMessage, ServerResponse } from 'node:http'
+import { Socket } from 'node:net'
+import type { RequestContext } from '@beaconhs/tenant'
+import { beginDiagnosticRequest, annotateDiagnosticContext } from './diagnostic-context'
 import { requestErrorDiagnostic } from './request-error-diagnostics'
 
 const request = {
@@ -19,9 +23,16 @@ describe('request error diagnostics', () => {
       requestErrorDiagnostic(new Error('The destination stream closed early.'), request, context),
     ).toMatchObject({
       kind: 'response_stream_closed',
-      route: '/journals/[id]',
+      routeFamily: 'journals',
       method: 'POST',
     })
+    expect(
+      requestErrorDiagnostic(
+        Object.assign(new Error('cancelled'), { name: 'AbortError' }),
+        request,
+        context,
+      ).kind,
+    ).toBe('request_cancelled')
     expect(requestErrorDiagnostic(new Error('Database failed'), request, context).kind).toBe(
       'request_failed',
     )
@@ -40,4 +51,36 @@ describe('request error diagnostics', () => {
       '3917090666',
     )
   })
+})
+
+it('joins framework failures to the authenticated live request without trusting external IDs', () => {
+  const incoming = new IncomingMessage(new Socket())
+  const response = new ServerResponse(incoming)
+  beginDiagnosticRequest(incoming, response)
+  annotateDiagnosticContext(incoming.headers, {
+    userId: 'peter',
+    tenantId: 'external-training',
+  } as RequestContext)
+  const diagnostic = requestErrorDiagnostic(
+    new Error('private text'),
+    {
+      ...request,
+      headers: incoming.headers,
+    },
+    context,
+  )
+  expect(diagnostic).toMatchObject({
+    actorUserId: 'peter',
+    effectiveUserId: 'peter',
+    tenantId: 'external-training',
+  })
+  response.emit('close')
+  incoming.destroy()
+  expect(
+    requestErrorDiagnostic(
+      new Error('private text'),
+      { ...request, headers: incoming.headers },
+      context,
+    ).actorUserId,
+  ).toBeUndefined()
 })
