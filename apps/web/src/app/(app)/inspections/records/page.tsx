@@ -14,6 +14,7 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -170,46 +171,71 @@ export default async function InspectionRecordsPage({
                   : desc(inspectionRecords.occurredAt),
               ]
 
+    // Break ties deterministically so paging does not repeat or skip records.
+    orderBy.push(params.dir === 'asc' ? asc(inspectionRecords.id) : desc(inspectionRecords.id))
+
     const [tot] = await tx
       .select({ c: count() })
       .from(inspectionRecords)
       .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+      .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
       .where(whereClause)
 
     const data = await tx
       .select({
-        record: inspectionRecords,
-        type: inspectionTypes,
-        site: orgUnits,
+        record: {
+          id: inspectionRecords.id,
+          reference: inspectionRecords.reference,
+          occurredAt: inspectionRecords.occurredAt,
+          status: inspectionRecords.status,
+          foremanPersonIds: inspectionRecords.foremanPersonIds,
+          foremanText: inspectionRecords.foremanText,
+        },
+        type: { name: inspectionTypes.name },
+        site: { name: orgUnits.name },
         inspectorName: user.name,
-        passCount:
-          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(
-            Number,
-          ),
-        failCount:
-          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'fail' then 1 else 0 end), 0)`.mapWith(
-            Number,
-          ),
-        naCount:
-          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'n_a' then 1 else 0 end), 0)`.mapWith(
-            Number,
-          ),
-        totalCount: sql<number>`count(${inspectionRecordCriteria.id})`.mapWith(Number),
       })
       .from(inspectionRecords)
       .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
       .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .leftJoin(
-        inspectionRecordCriteria,
-        eq(inspectionRecordCriteria.recordId, inspectionRecords.id),
-      )
       .where(whereClause)
-      .groupBy(inspectionRecords.id, inspectionTypes.id, orgUnits.id, user.id)
       .orderBy(...orderBy)
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
+
+    // Aggregate only the displayed records. Joining every answer before LIMIT
+    // made the first page scan hundreds of thousands of criteria and group
+    // wide record rows, even though the caller needs just 25 summaries.
+    const counts = data.length
+      ? await tx
+          .select({
+            recordId: inspectionRecordCriteria.recordId,
+            passCount:
+              sql<number>`count(*) filter (where ${inspectionRecordCriteria.answer} = 'pass')`.mapWith(
+                Number,
+              ),
+            failCount:
+              sql<number>`count(*) filter (where ${inspectionRecordCriteria.answer} = 'fail')`.mapWith(
+                Number,
+              ),
+            naCount:
+              sql<number>`count(*) filter (where ${inspectionRecordCriteria.answer} = 'n_a')`.mapWith(
+                Number,
+              ),
+            totalCount: count(),
+          })
+          .from(inspectionRecordCriteria)
+          .where(
+            inArray(
+              inspectionRecordCriteria.recordId,
+              data.map((r) => r.record.id),
+            ),
+          )
+          .groupBy(inspectionRecordCriteria.recordId)
+      : []
+    const countsByRecord = new Map(counts.map((r) => [r.recordId, r]))
 
     const ss = await tx
       .select({ s: inspectionRecords.status, c: count() })
@@ -220,7 +246,16 @@ export default async function InspectionRecordsPage({
     for (const r of ss) sc[r.s] = Number(r.c)
 
     return {
-      rows: data,
+      rows: data.map((row) => {
+        const counts = countsByRecord.get(row.record.id)
+        return {
+          ...row,
+          passCount: counts?.passCount ?? 0,
+          failCount: counts?.failCount ?? 0,
+          naCount: counts?.naCount ?? 0,
+          totalCount: counts?.totalCount ?? 0,
+        }
+      }),
       total: Number(tot?.c ?? 0),
       statusCounts: sc,
     }
