@@ -126,3 +126,41 @@ describe('training assessment PDF', () => {
     }
   }, 180000)
 })
+
+describe('journal pagination', () => {
+  it('starts a long entry below its details and continues it without losing text', async () => {
+    const journal = MODULE_PDF_TEMPLATE_SEEDS.find((seed) => seed.subjectKey === 'journals')!
+    const paragraphs = Array.from(
+      { length: 18 },
+      (_, i) =>
+        `Observation ${i + 1}: ` +
+        'The crew reviewed the work, site conditions and equipment before continuing. '.repeat(2),
+    )
+    const html = renderTemplate(
+      expandRepeatMarkers(journal.html),
+      {
+        reference: 'JRN-PAGINATION',
+        entry_date: 'October 19, 2026',
+        author_name: 'Example author',
+        supervisor_name: 'Example supervisor',
+        site_name: 'Main shop',
+        body_text: paragraphs.join('\n\n'),
+      },
+      { escapeHtml: true },
+    )
+    const pdf = await renderHtmlDocumentPdf({
+      bodyHtml: html,
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 16,
+    })
+    const result = await extractText(new Uint8Array(pdf), { mergePages: false })
+    expect(result.totalPages).toBeGreaterThan(1)
+    expect(result.text[0]).toContain('Example author')
+    expect(result.text[0]).toContain('Observation 5:')
+    expect(result.text[0]).not.toContain('Observation 18:')
+    const allText = result.text.join('\n')
+    for (let i = 1; i <= paragraphs.length; i++) expect(allText).toContain(`Observation ${i}:`)
+    expect(result.text.at(-1)).toContain('Observation 18:')
+  }, 180_000)
+})

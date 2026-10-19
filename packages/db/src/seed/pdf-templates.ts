@@ -179,13 +179,13 @@ function collection(
   )
 }
 
-/** A narrative block (heading + pre-wrap prose), hidden when empty. */
+/** Flow long prose across pages; keep only its heading with the first lines. */
 function narrative(title: string, token: string, gate = ''): string {
   const g = gate || token.replace(/[{}]/g, '')
   return (
     `<table style="width:100%;border-collapse:collapse;margin:0 0 10px;">` +
-    `<tr data-if="${g}" style="${ROW}"><td style="border:none;padding:12px 0 0;">` +
-    `<div style="${H2}">${title}</div>` +
+    `<tr data-if="${g}" style="page-break-inside:auto;"><td style="border:none;padding:12px 0 0;">` +
+    `<div style="${H2}break-after:avoid;page-break-after:avoid;">${title}</div>` +
     `<div style="${NARR}margin-top:6px;">${token}</div>` +
     `</td></tr></table>`
   )

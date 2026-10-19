@@ -498,6 +498,13 @@
       "when": 1792092236503,
       "tag": "0071_people_location",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792437243367,
+      "tag": "0072_pdf_narrative_flow",
+      "breakpoints": true
     }
   ]
 }

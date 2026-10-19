@@ -74,6 +74,10 @@ BeaconHS leaves your original words in place until the AI response finishes. If 
 
 Older imported entries can also show an **Attached files** list below the photos. Tap a file name to open or download the original PDF or email file.
 
+## Printing a journal
+
+Open the entry and tap **Print / PDF**. Long entries continue onto the next page, using the space below the details on the first page. Photos follow the entry text. Your administrator can change the layout under **PDF templates**.
+
 ## Tags
 
 Tags help people find entries later (for example a tag for concrete pours). Tap the **Tags** chip in the bar above the text to add or change up to 20 tags. If your company has AI assist turned on, tags are often added for you.
