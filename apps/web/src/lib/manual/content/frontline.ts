@@ -76,7 +76,7 @@ Older imported entries can also show an **Attached files** list below the photos
 
 ## Printing a journal
 
-Open the entry and tap **Print / PDF**. Long entries continue onto the next page, using the space below the details on the first page. Photos follow the entry text. Your administrator can change the layout under **PDF templates**.
+Open the entry, then choose **PDF** from the three-dot menu. Long entries continue onto the next page, using the space below the details on the first page. Photos follow the entry text. Your administrator can change the layout under **PDF templates**.
 
 ## Tags
 
