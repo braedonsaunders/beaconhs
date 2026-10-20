@@ -154,7 +154,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips
 
-- The **Assigned** tab in [My training](/my/training) reads the same requirements as **My compliance**. It shows courses, assessments, and certification requirements you still owe, with due dates and current course progress. Choose **Open** to continue the item. For an assessment, use this assigned link so your attempt is credited to that exact requirement. Anything marked overdue needs attention first.
+- The **Assigned** tab in [My training](/my/training) reads the same requirements as **My compliance**. It shows courses, assessments, and certificate requirements you still owe, including **Booked** classes. Choose **Open** to continue an item. A passed quiz of the same type counts within the requirement’s completion window even when taken outside the assignment. **Rolling 12 months** follows each person’s completion date. A booking is a remediation plan and does not count as a completed certificate. Anything marked overdue needs attention first.
 - The **Training compliance** dashboard card counts these same training and certification requirements. It does not count the number of certificates in your history.
 - Lessons marked **opt** are optional. Everything else must be completed.`,
   },

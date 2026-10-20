@@ -43,7 +43,11 @@ export async function loadApplicableFormObligation(
   const obligation = await loadFormObligation(tx, input)
   if (!obligation || obligation.status !== 'active' || obligation.deletedAt !== null) return null
   const audience = await tx
-    .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+    .select({
+      kind: complianceAudience.kind,
+      entityKey: complianceAudience.entityKey,
+      excluded: complianceAudience.excluded,
+    })
     .from(complianceAudience)
     .where(
       and(
@@ -54,7 +58,7 @@ export async function loadApplicableFormObligation(
   const members = await resolveObligationAudience(
     tx,
     input.tenantId,
-    audience.map((row) => ({ kind: row.kind, entityKey: row.entityKey })),
+    audience.map((row) => ({ kind: row.kind, entityKey: row.entityKey, excluded: row.excluded })),
   )
   if (!members.some((member) => member.personId === input.personId)) return null
   const [actionable] = await tx

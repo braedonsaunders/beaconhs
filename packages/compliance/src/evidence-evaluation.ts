@@ -1,8 +1,11 @@
 import type { ComplianceRecurrence } from '@beaconhs/db/schema'
 import {
   complianceDate,
+  rollingEvidenceBoundary,
+  shiftCompletionDate,
   type ComplianceClock,
   resolveCronWindow,
+  resolveCompletionCalendarWindow,
   resolveFrequencyWindow,
 } from './schedule'
 
@@ -58,6 +61,39 @@ export function resolveEvidenceEvaluationWindow(
       dueOn,
       deadlinePassed: Boolean(dueOn && dueOn < today),
       nextDueAt: null,
+    }
+  }
+
+  if (recurrence.kind === 'frequency' && recurrence.deadline) {
+    const window = resolveCompletionCalendarWindow(recurrence, clock)
+    return {
+      kind: recurrence.kind,
+      evidenceStartAt: window.periodStartAt,
+      evidenceEndAt: new Date(Math.min(window.periodEndAt.getTime(), clock.now.getTime() + 1)),
+      evidenceStartOn: window.periodStart,
+      evidenceEndOn: complianceDate(clock),
+      periodStart: window.periodStart,
+      periodEnd: window.periodEnd,
+      dueOn: window.dueOn,
+      deadlinePassed: clock.now.getTime() > window.dueAt.getTime(),
+      nextDueAt: window.nextDueAt,
+    }
+  }
+
+  if (recurrence.kind === 'frequency' && recurrence.evidenceWindow === 'rolling') {
+    if (!recurrence.frequency) throw new Error('A rolling requirement must declare its frequency')
+    const boundary = rollingEvidenceBoundary(clock, recurrence.frequency)
+    return {
+      kind: recurrence.kind,
+      evidenceStartAt: boundary.startAt,
+      evidenceEndAt: new Date(clock.now.getTime() + 1),
+      evidenceStartOn: boundary.startOn,
+      evidenceEndOn: complianceDate(clock),
+      periodStart: null,
+      periodEnd: null,
+      dueOn: null,
+      deadlinePassed: true,
+      nextDueAt: boundary.nextDayAt,
     }
   }
 
@@ -150,6 +186,22 @@ export function trainingEvidenceOutcome(args: {
       status,
       dueOn,
       completedOn: status === 'completed' || status === 'expiring' ? evidence.completedOn : null,
+    }
+  }
+
+  if (
+    recurrence.kind === 'frequency' &&
+    recurrence.evidenceWindow === 'rolling' &&
+    recurrence.frequency
+  ) {
+    let dueOn = evidence ? shiftCompletionDate(evidence.completedOn, recurrence.frequency, 1) : null
+    if (evidence?.expiresOn && (!dueOn || evidence.expiresOn < dueOn)) dueOn = evidence.expiresOn
+    const valid =
+      evidence && !evidence.expired && evidence.completedOn <= today && dueOn && dueOn >= today
+    return {
+      status: valid ? 'completed' : 'overdue',
+      dueOn,
+      completedOn: valid ? evidence.completedOn : null,
     }
   }
 

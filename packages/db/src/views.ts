@@ -218,6 +218,7 @@ export const REPORT_VIEWS_SQL: string[] = [
           ON cl.id = ta.class_id AND cl.tenant_id = ta.tenant_id
        WHERE ta.tenant_id = p.tenant_id
          AND ta.person_id = p.id
+         AND ta.status IN ('registered', 'attended')
          AND cl.course_id = c.id
          AND cl.cancelled_at IS NULL
          AND cl.completed_at IS NULL

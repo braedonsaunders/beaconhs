@@ -37,7 +37,7 @@ import type { PickerLookup, PickerOption } from '@/lib/picker-options'
 export type AudienceType =
   'everyone' | 'role' | 'trade' | 'department' | 'person' | 'org_unit' | 'person_group' | 'crew'
 
-export type AudienceItem = { type: AudienceType; entityKey: string }
+export type AudienceItem = { type: AudienceType; entityKey: string; excluded?: boolean }
 
 export type AudienceOptions = {
   roles: { key: string; name: string }[]
@@ -94,7 +94,7 @@ function lookupFor(type: Exclude<AudienceType, 'everyone'>): PickerLookup {
   }
 }
 
-export function AudiencePicker({
+function AudienceSelection({
   value,
   onChange,
   options,
@@ -103,7 +103,9 @@ export function AudiencePicker({
   onPendingTypeChange,
   pendingValue,
   onPendingValueChange,
+  excluded = false,
 }: {
+  excluded?: boolean
   value: AudienceItem[]
   onChange: (next: AudienceItem[]) => void
   options: AudienceOptions
@@ -188,21 +190,28 @@ export function AudiencePicker({
       <CardHeader>
         <CardTitle>
           <span className="flex items-center gap-2">
-            <Users size={16} /> <GeneratedText id="m_1d6e21e94d2295" />
+            <Users size={16} />{' '}
+            <GeneratedValue value={excluded ? 'Exclude from audience' : 'Audience'} />
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          <GeneratedText id="m_0b49aaed2d4b1b" />
+          <GeneratedValue
+            value={
+              excluded
+                ? 'Remove anyone matching these targets, even if they match the audience above.'
+                : 'Include anyone matching any target below. Exclusions are applied afterwards.'
+            }
+          />
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[180px_1fr_auto] sm:items-end">
           <div className="space-y-1.5">
-            <Label htmlFor="aud-type">
+            <Label htmlFor={excluded ? 'aud-exclude-type' : 'aud-type'}>
               <GeneratedText id="m_074ba2f160c506" />
             </Label>
             <Select
-              id="aud-type"
+              id={excluded ? 'aud-exclude-type' : 'aud-type'}
               value={pendingType}
               onChange={(e) => {
                 onPendingTypeChange(e.target.value as AudienceType)
@@ -217,21 +226,21 @@ export function AudiencePicker({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="aud-value">
+            <Label htmlFor={excluded ? 'aud-exclude-value' : 'aud-value'}>
               <GeneratedText id="m_12ef8453778e3d" />
             </Label>
             <GeneratedValue
               value={
                 pendingType === 'everyone' ? (
                   <Input
-                    id="aud-value"
+                    id={excluded ? 'aud-exclude-value' : 'aud-value'}
                     value="All active people"
                     disabled
                     className="bg-slate-50 dark:bg-slate-900"
                   />
                 ) : (
                   <RemoteSearchSelect
-                    id="aud-value"
+                    id={excluded ? 'aud-exclude-value' : 'aud-value'}
                     lookup={lookupFor(pendingType)}
                     value={pendingValue}
                     onChange={onPendingValueChange}
@@ -262,7 +271,13 @@ export function AudiencePicker({
           value={
             value.length === 0 ? (
               <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                <GeneratedText id="m_17cdd0f4ce49be" />
+                <GeneratedValue
+                  value={
+                    excluded
+                      ? 'No exclusions. Everyone in the audience above is included.'
+                      : 'Add an audience target.'
+                  }
+                />
               </div>
             ) : (
               <ul className="space-y-2 text-sm">
@@ -316,4 +331,38 @@ function audienceLabel(row: AudienceItem, options: AudienceOptions): string {
   if (row.type === 'crew')
     return options.crews.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
   return options.people.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
+}
+
+/** Includes are a union; subtract the exclusion union once at the end. */
+export function AudiencePicker(props: Omit<Parameters<typeof AudienceSelection>[0], 'excluded'>) {
+  const [pendingType, setPendingType] = useState<AudienceType>('person')
+  const [pendingValue, setPendingValue] = useState('')
+  return (
+    <div className="space-y-4">
+      <AudienceSelection
+        {...props}
+        value={props.value.filter((row) => !row.excluded)}
+        onChange={(rows) => props.onChange([...rows, ...props.value.filter((row) => row.excluded)])}
+      />
+      <AudienceSelection
+        {...props}
+        excluded
+        value={props.value.filter((row) => row.excluded)}
+        onChange={(rows) =>
+          props.onChange([
+            ...props.value.filter((row) => !row.excluded),
+            ...rows.map((row) => ({ ...row, excluded: true })),
+          ])
+        }
+        pendingType={
+          (props.allowedTypes ?? ALL_AUDIENCE_TYPES).includes(pendingType)
+            ? pendingType
+            : (props.allowedTypes?.[0] ?? 'person')
+        }
+        onPendingTypeChange={setPendingType}
+        pendingValue={pendingValue}
+        onPendingValueChange={setPendingValue}
+      />
+    </div>
+  )
 }

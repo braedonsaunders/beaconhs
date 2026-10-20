@@ -4,6 +4,7 @@ import { kindLabel, type ObligationKind } from './obligations/_meta'
 export const PERSON_STATUS_FILTERS = [
   { value: 'urgent', label: 'Overdue / expiring' },
   { value: 'outstanding', label: 'Outstanding' },
+  { value: 'booked', label: 'Booked' },
   { value: 'completed', label: 'Completed' },
 ] as const
 
@@ -20,6 +21,7 @@ export function personRowMatchesStatus(
 ): boolean {
   if (!filter) return true
   if (filter === 'urgent') return row.status === 'overdue' || row.status === 'expiring'
+  if (filter === 'booked') return row.status === 'booked'
   if (filter === 'outstanding') return row.status !== 'completed'
   return row.status === 'completed'
 }

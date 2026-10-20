@@ -319,7 +319,11 @@ export async function executeFlowPlan(
         .limit(1)
       if (!obligation) return false
       const audience = await tx
-        .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+        .select({
+          kind: complianceAudience.kind,
+          entityKey: complianceAudience.entityKey,
+          excluded: complianceAudience.excluded,
+        })
         .from(complianceAudience)
         .where(
           and(

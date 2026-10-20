@@ -40,6 +40,7 @@ const SORTS = ['subject', 'status', 'due', 'completed', 'count'] as const
 const STATUS_OPTIONS = [
   { value: 'overdue', label: 'Overdue' },
   { value: 'expiring', label: 'Expiring' },
+  { value: 'booked', label: 'Booked' },
   { value: 'pending', label: 'Pending' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'completed', label: 'Completed' },
@@ -71,10 +72,16 @@ export default async function ObligationDetailPage({
         ? 'Sign-off'
         : 'Person'
 
-  const audienceLabel =
-    audience.length === 0 || audience.some((a) => a.kind === 'everyone')
-      ? 'Everyone'
-      : `${audience.length} audience target${audience.length === 1 ? '' : 's'}`
+  const includedAudience = audience.filter((row) => !row.excluded)
+  const audienceLabelBase =
+    includedAudience.length === 0
+      ? 'No audience'
+      : includedAudience.some((a) => a.kind === 'everyone')
+        ? 'Everyone'
+        : `${includedAudience.length} audience target${includedAudience.length === 1 ? '' : 's'}`
+
+  const exclusions = audience.filter((row) => row.excluded).length
+  const audienceLabel = `${audienceLabelBase}${exclusions ? ` · ${exclusions} excluded target(s)` : ''}`
 
   const canManage = can(ctx, 'compliance.manage')
   // Only kinds the unified form can author are editable (rules out future
@@ -139,6 +146,7 @@ export default async function ObligationDetailPage({
   if (editable && pickString(sp.drawer) === 'edit') {
     const initialAudience: AudienceItem[] = audience.map((a) => ({
       type: a.kind as AudienceItem['type'],
+      excluded: a.excluded,
       entityKey: a.kind === 'everyone' ? EVERYONE_KEY : a.entityKey,
     }))
     const { targets, audienceOptions } = await loadObligationFormOptions(ctx, {
@@ -167,7 +175,7 @@ export default async function ObligationDetailPage({
           back={{ href: '/compliance/obligations', label: 'Back to obligations' }}
           title={tGeneratedValue(ob.title)}
           subtitle={tGeneratedValue(
-            `${kindLabel(ob.sourceModule)} · ${cadenceLabel(ob.recurrence)}${
+            `${kindLabel(ob.sourceModule)} · ${cadenceLabel(ob.recurrence, tGeneratedValue)}${
               ob.subjectKind === 'per_person' ? ` · ${audienceLabel}` : ''
             }`,
           )}
@@ -322,6 +330,12 @@ export default async function ObligationDetailPage({
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={r.status} />
+                          {r.subjectRef?.bookedFor ? (
+                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              <GeneratedValue value="Class date" />:{' '}
+                              <GeneratedValue value={r.subjectRef.bookedFor} />
+                            </div>
+                          ) : null}
                         </TableCell>
                         <TableCell className="text-slate-700 dark:text-slate-300">
                           <GeneratedValue value={r.dueOn ?? '—'} />

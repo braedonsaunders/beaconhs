@@ -18,6 +18,7 @@
 
 import { relations, sql } from 'drizzle-orm'
 import {
+  boolean,
   check,
   date,
   foreignKey,
@@ -85,6 +86,7 @@ export const complianceObligationStatus = pgEnum('compliance_obligation_status',
 
 export const complianceStatusValue = pgEnum('compliance_status_value', [
   'pending',
+  'booked',
   'in_progress',
   'completed',
   'overdue',
@@ -117,6 +119,8 @@ export type ComplianceTargetRef = {
 
 export type ComplianceRecurrence = {
   kind: 'one_time' | 'frequency' | 'cron' | 'expiry' | 'event'
+  evidenceWindow?: 'calendar' | 'rolling'
+  deadline?: { month?: number; day?: number; weekday?: number; time: string }
   frequency?: 'day' | 'week' | 'month' | 'quarter' | 'year'
   quantity?: number
   cron?: string
@@ -185,6 +189,7 @@ export const complianceAudience = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     obligationId: uuid('obligation_id').notNull(),
     kind: complianceAudienceKind('kind').notNull(),
+    excluded: boolean('excluded').default(false).notNull(),
     // person→people.id, trade→trades.id, department→departments.id,
     // org_unit→org_units.id (uuid as text), role→roles.key, everyone→'' sentinel.
     entityKey: text('entity_key').default('').notNull(),
@@ -198,6 +203,7 @@ export const complianceAudience = pgTable(
       t.obligationId,
       t.kind,
       t.entityKey,
+      t.excluded,
     ),
     obligationFk: foreignKey({
       name: 'compliance_audience_tenant_obligation_fk',
@@ -227,7 +233,7 @@ export const complianceDispatches = pgTable(
         personId: string | null
         userId?: string | null
         label: string
-        to: 'completed' | 'overdue' | 'pending' | 'in_progress' | 'expiring'
+        to: 'completed' | 'overdue' | 'pending' | 'booked' | 'in_progress' | 'expiring'
         dueOn: string | null
       }>
     } | null>(),

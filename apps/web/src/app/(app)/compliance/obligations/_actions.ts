@@ -29,7 +29,11 @@ import {
 } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
-import { type RecurrenceValue, frequencyToCron } from '@/components/recurrence'
+import {
+  type RecurrenceValue,
+  frequencyToCron,
+  defaultCompletionDeadline,
+} from '@/components/recurrence'
 import { parseObligationInput, type ObligationInput } from './_input'
 import { KIND_META, type ObligationKind, kindLabel } from './_meta'
 import { obligationSemanticConfigChanged } from './_semantic-config'
@@ -133,9 +137,14 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
       : {
           kind: 'frequency',
           frequency: r.frequency ?? 'week',
-          cron: cronFor(),
+          cron: kind === 'training' ? undefined : cronFor(),
+          deadline:
+            kind === 'training' && r.evidenceWindow === 'calendar'
+              ? (r.deadline ?? defaultCompletionDeadline(r.frequency ?? 'week'))
+              : undefined,
+          evidenceWindow: kind === 'training' ? (r.evidenceWindow ?? 'rolling') : undefined,
           remindBeforeDays: r.remindBeforeDays ?? 7,
-          dueOffsetMinutes: r.dueOffsetMinutes,
+          dueOffsetMinutes: kind === 'training' ? undefined : r.dueOffsetMinutes,
         }
   // Inspection / journal / hazard assessment → frequency.
   return {
@@ -162,17 +171,22 @@ function assertValidRecurrence(
 
 // Audience rows (per_person only). Journal with no picks ⇒ everyone.
 function buildAudienceRows(input: ObligationInput): {
-  rows: { kind: ObligationInput['audience'][number]['type']; entityKey: string }[]
+  rows: {
+    kind: ObligationInput['audience'][number]['type']
+    entityKey: string
+    excluded: boolean
+  }[]
   error?: string
 } {
   if (!KIND_META[input.kind].audience) return { rows: [] }
   const rows = input.audience.map((a) => ({
     kind: a.type,
     entityKey: a.type === 'everyone' ? '' : a.entityKey,
+    excluded: a.excluded ?? false,
   }))
-  if (rows.length === 0) {
+  if (!rows.some((row) => !row.excluded)) {
     if (input.kind === 'journal' || input.kind === 'hazard_assessment')
-      return { rows: [{ kind: 'everyone', entityKey: '' }] }
+      return { rows: [{ kind: 'everyone', entityKey: '', excluded: false }, ...rows] }
     return { rows, error: 'Add at least one audience target' }
   }
   return { rows }
@@ -288,6 +302,7 @@ export async function createObligation(rawInput: ObligationInput): Promise<Oblig
             obligationId: row.id,
             kind: a.kind as never,
             entityKey: a.entityKey,
+            excluded: a.excluded ?? false,
           })),
         )
       }
@@ -297,6 +312,12 @@ export async function createObligation(rawInput: ObligationInput): Promise<Oblig
         entityId: row.id,
         action: 'create',
         summary: `Created ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
+        after: {
+          title: row.title,
+          targetRef: row.targetRef,
+          recurrence: row.recurrence,
+          audience: audienceRows,
+        },
       })
       return row.id
     })
@@ -353,7 +374,11 @@ export async function updateObligation(
         assertValidRecurrence(recurrence, clock)
       }
       const previousAudience = await tx
-        .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+        .select({
+          kind: complianceAudience.kind,
+          entityKey: complianceAudience.entityKey,
+          excluded: complianceAudience.excluded,
+        })
         .from(complianceAudience)
         .where(
           and(
@@ -404,6 +429,7 @@ export async function updateObligation(
             obligationId: id,
             kind: a.kind as never,
             entityKey: a.entityKey,
+            excluded: a.excluded ?? false,
           })),
         )
       }
@@ -430,6 +456,18 @@ export async function updateObligation(
         entityId: id,
         action: 'update',
         summary: `Updated ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
+        before: {
+          title: existing.title,
+          targetRef: existing.targetRef,
+          recurrence: existing.recurrence,
+          audience: previousAudience,
+        },
+        after: {
+          title: updated.title,
+          targetRef: updated.targetRef,
+          recurrence: updated.recurrence,
+          audience: audienceRows,
+        },
       })
     })
   } catch (err) {
@@ -461,7 +499,11 @@ export async function setObligationEnabled(
           .limit(1)
         if (!snapshot) expectedError('Obligation not found')
         const audience = await tx
-          .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+          .select({
+            kind: complianceAudience.kind,
+            entityKey: complianceAudience.entityKey,
+            excluded: complianceAudience.excluded,
+          })
           .from(complianceAudience)
           .where(
             and(

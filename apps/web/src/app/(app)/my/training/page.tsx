@@ -265,7 +265,7 @@ export default async function MyTrainingPage({
     const assignedScope = and(
       eq(complianceStatus.tenantId, ctx.tenantId),
       eq(complianceStatus.personId, personId),
-      inArray(complianceStatus.status, ['pending', 'in_progress', 'overdue', 'expiring']),
+      inArray(complianceStatus.status, ['pending', 'booked', 'in_progress', 'overdue', 'expiring']),
       inArray(complianceObligations.sourceModule, [
         'training',
         'cert_requirement',

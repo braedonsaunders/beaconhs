@@ -84,7 +84,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     subjectKind: 'per_person',
     audience: true,
     audienceTypes: PERSON_AUD,
-    recurrence: { oneTime: true, recurring: true, remind: true },
+    recurrence: { oneTime: true, recurring: true, remind: true, rolling: true },
     target: 'trainingItem',
     hint: 'These people must complete this course or assessment.',
   },

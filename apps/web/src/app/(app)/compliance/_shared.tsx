@@ -22,6 +22,12 @@ export function StatusBadge({ status }: { status: string }) {
         <GeneratedText id="m_101200f48a3e75" />
       </Badge>
     )
+  if (status === 'booked')
+    return (
+      <Badge variant="warning">
+        <GeneratedValue value="Booked" />
+      </Badge>
+    )
   if (status === 'in_progress')
     return (
       <Badge variant="warning">

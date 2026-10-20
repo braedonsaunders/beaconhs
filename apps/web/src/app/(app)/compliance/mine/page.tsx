@@ -96,7 +96,9 @@ export default async function MyCompliancePage({
     total: allRows.length,
     completed: allRows.filter((r) => r.status === 'completed').length,
     overdue: allRows.filter((r) => isOverdue(r.status)).length,
-    pending: allRows.filter((r) => r.status === 'pending' || r.status === 'in_progress').length,
+    pending: allRows.filter(
+      (r) => r.status === 'pending' || r.status === 'in_progress' || r.status === 'booked',
+    ).length,
   }
   const percent = totals.total === 0 ? 0 : Math.round((totals.completed / totals.total) * 100)
   const filtered = filterAndSortPersonRows(allRows, {

@@ -41,6 +41,8 @@ import {
   ppeTypes,
   tenantUsers,
   trainingAssessments,
+  trainingClassAttendees,
+  trainingClasses,
   trainingEnrollments,
   trainingRecords,
   trainingSkillAssignments,
@@ -62,7 +64,7 @@ import {
 
 export type ComplianceObligation = typeof complianceObligations.$inferSelect
 
-export type EvalStatus = 'completed' | 'overdue' | 'pending' | 'in_progress' | 'expiring'
+export type EvalStatus = 'completed' | 'overdue' | 'pending' | 'booked' | 'in_progress' | 'expiring'
 
 export type EvalSubjectRow = {
   key: string
@@ -202,17 +204,44 @@ async function evalTraining(
   const window = resolveEvidenceEvaluationWindow(ob.recurrence, clock, ob.createdAt)
   const done = new Map<string, TrainingEvidence>()
   const inProgress = new Set<string>()
+  const bookings = new Map<string, string>()
+  const rolling = ob.recurrence.evidenceWindow === 'rolling'
 
   const remember = (personId: string, evidence: TrainingEvidence) => {
+    if (evidence.completedOn > today) return
     // Outside expiry mode an expired credential cannot satisfy an assignment.
     if (
       ob.recurrence.kind !== 'expiry' &&
+      !rolling &&
       (evidence.expired || (evidence.expiresOn && evidence.expiresOn < today))
     )
       return
     const prior = done.get(personId)
     if (!prior) {
       done.set(personId, evidence)
+      return
+    }
+    if (rolling) {
+      const priorOutcome = trainingEvidenceOutcome({
+        recurrence: ob.recurrence,
+        window,
+        today,
+        evidence: prior,
+        hasProgress: false,
+      })
+      const nextOutcome = trainingEvidenceOutcome({
+        recurrence: ob.recurrence,
+        window,
+        today,
+        evidence,
+        hasProgress: false,
+      })
+      const priorValid = priorOutcome.status === 'completed'
+      const nextValid = nextOutcome.status === 'completed'
+      if (priorValid !== nextValid) {
+        if (nextValid) done.set(personId, evidence)
+      } else if ((nextOutcome.dueOn ?? '') > (priorOutcome.dueOn ?? ''))
+        done.set(personId, evidence)
       return
     }
     if (ob.recurrence.kind === 'expiry') {
@@ -249,12 +278,11 @@ async function evalTraining(
         and(
           eq(trainingAssessments.tenantId, tid),
           eq(trainingAssessments.typeId, ref.assessmentTypeId),
-          eq(trainingAssessments.complianceObligationId, ob.id),
           inArray(trainingAssessments.personId, ids),
           eq(trainingAssessments.passed, true),
           eq(trainingAssessments.status, 'submitted'),
           isNull(trainingAssessments.deletedAt),
-          window.evidenceStartAt
+          !rolling && window.evidenceStartAt
             ? gte(trainingAssessments.completedAt, window.evidenceStartAt)
             : undefined,
           window.evidenceEndAt
@@ -263,7 +291,7 @@ async function evalTraining(
         ),
       )
     for (const r of rows) {
-      if (!r.completedAt || !evidenceInWindow(r.completedAt, window)) continue
+      if (!r.completedAt || (!rolling && !evidenceInWindow(r.completedAt, window))) continue
       remember(r.personId, {
         completedOn: complianceDate({ now: r.completedAt, timezone: clock.timezone }),
         expiresOn: null,
@@ -277,11 +305,10 @@ async function evalTraining(
         and(
           eq(trainingAssessments.tenantId, tid),
           eq(trainingAssessments.typeId, ref.assessmentTypeId),
-          eq(trainingAssessments.complianceObligationId, ob.id),
           inArray(trainingAssessments.personId, ids),
           eq(trainingAssessments.status, 'in_progress'),
           isNull(trainingAssessments.deletedAt),
-          window.evidenceStartAt
+          !rolling && window.evidenceStartAt
             ? gte(trainingAssessments.startedAt, window.evidenceStartAt)
             : undefined,
           window.evidenceEndAt
@@ -306,7 +333,7 @@ async function evalTraining(
           eq(trainingRecords.courseId, ref.courseId),
           inArray(trainingRecords.personId, ids),
           isNull(trainingRecords.deletedAt),
-          window.evidenceStartOn
+          !rolling && window.evidenceStartOn
             ? gte(trainingRecords.completedOn, window.evidenceStartOn)
             : undefined,
           window.evidenceEndOn ? lte(trainingRecords.completedOn, window.evidenceEndOn) : undefined,
@@ -315,8 +342,37 @@ async function evalTraining(
     for (const r of rows) {
       // personId is nullable (blank drafts); the inArray filter already excludes
       // nulls, so this guard only narrows the type.
-      if (!r.personId || !evidenceInWindow(r.completedOn, window)) continue
+      if (!r.personId || (!rolling && !evidenceInWindow(r.completedOn, window))) continue
       remember(r.personId, { completedOn: r.completedOn, expiresOn: r.expiresOn })
+    }
+
+    if (ob.sourceModule === 'cert_requirement') {
+      const classes = await tx
+        .select({ personId: trainingClassAttendees.personId, startsAt: trainingClasses.startsAt })
+        .from(trainingClassAttendees)
+        .innerJoin(
+          trainingClasses,
+          and(
+            eq(trainingClasses.tenantId, trainingClassAttendees.tenantId),
+            eq(trainingClasses.id, trainingClassAttendees.classId),
+          ),
+        )
+        .where(
+          and(
+            eq(trainingClassAttendees.tenantId, tid),
+            inArray(trainingClassAttendees.personId, ids),
+            inArray(trainingClassAttendees.status, ['registered', 'attended']),
+            eq(trainingClasses.courseId, ref.courseId),
+            isNull(trainingClasses.cancelledAt),
+            isNull(trainingClasses.completedAt),
+            gte(trainingClasses.startsAt, clock.now),
+          ),
+        )
+      for (const booking of classes) {
+        const date = complianceDate({ now: booking.startsAt, timezone: clock.timezone })
+        if (!bookings.has(booking.personId) || date < bookings.get(booking.personId)!)
+          bookings.set(booking.personId, date)
+      }
     }
 
     const enrollments = await tx
@@ -381,12 +437,15 @@ async function evalTraining(
         evidence,
         hasProgress: inProgress.has(pid),
       })
-      return personRow(pid, names.get(pid) ?? '(unnamed)', outcome.status, {
+      const bookedFor = bookings.get(pid)
+      const status = bookedFor && outcome.status !== 'completed' ? 'booked' : outcome.status
+      return personRow(pid, names.get(pid) ?? '(unnamed)', status, {
+        subjectRef: bookedFor ? { bookedFor } : null,
         dueOn: outcome.dueOn,
         completedOn: outcome.completedOn,
-        count: outcome.status === 'completed' ? 1 : 0,
+        count: status === 'completed' ? 1 : 0,
         expected: 1,
-        percent: outcome.status === 'completed' ? 100 : 0,
+        percent: status === 'completed' ? 100 : 0,
         periodStart: window.periodStart,
         periodEnd: window.periodEnd,
       })

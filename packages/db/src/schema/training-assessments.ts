@@ -190,8 +190,8 @@ export const trainingAssessments = pgTable(
     status: trainingAssessmentStatus('status').default('in_progress').notNull(),
     reviewStatus: trainingAssessmentReviewStatus('review_status').default('not_required').notNull(),
     // Exact canonical requirement that launched this attempt. Standalone and
-    // lesson-quiz attempts remain null; assigned assessment evidence is never
-    // inferred from another attempt against the same assessment type.
+    // lesson-quiz attempts remain null. This is assignment provenance; successful
+    // completions can satisfy other requirements for the same assessment type.
     complianceObligationId: uuid('compliance_obligation_id'),
     startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
     submittedAt: timestamp('submitted_at', { withTimezone: true }),

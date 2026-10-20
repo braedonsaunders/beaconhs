@@ -57,3 +57,18 @@ describe('obligation semantic configuration', () => {
     ).toBe(true)
   })
 })
+
+it('invalidates targeting when an include becomes an exclusion', () => {
+  expect(
+    obligationSemanticConfigChanged(BASE, {
+      ...BASE,
+      audience: BASE.audience.map((row) => ({ ...row, excluded: true })),
+    }),
+  ).toBe(true)
+  expect(
+    obligationSemanticConfigChanged(BASE, {
+      ...BASE,
+      audience: BASE.audience.map((row) => ({ ...row, excluded: false })),
+    }),
+  ).toBe(false)
+})

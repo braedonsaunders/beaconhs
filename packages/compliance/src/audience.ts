@@ -21,17 +21,40 @@ import {
 export type AudienceKind =
   'everyone' | 'person' | 'role' | 'trade' | 'department' | 'org_unit' | 'crew' | 'person_group'
 
-export type AudienceItem = { kind: AudienceKind; entityKey: string }
+export type AudienceItem = { kind: AudienceKind; entityKey: string; excluded?: boolean }
 
 export type ResolvedMember = { personId: string; userId: string | null }
 
 /**
  * Resolve an obligation's audience rows to a deduplicated set of people
- * (id + linked user id). `everyone` short-circuits to all active people.
+ * (id + linked user id). Exclusions always win over the union of inclusions.
  * Callers apply RLS (web `ctx.db`, worker `withTenant`), but every query still
  * pins tenantId explicitly as defense-in-depth against a future bypass-RLS tx.
  */
 export async function resolveObligationAudience(
+  tx: Database,
+  tenantId: string,
+  audience: AudienceItem[],
+): Promise<ResolvedMember[]> {
+  const included = await resolveAudienceUnion(
+    tx,
+    tenantId,
+    audience.filter((row) => !row.excluded),
+  )
+  if (!included.length || !audience.some((row) => row.excluded)) return included
+  const excluded = new Set(
+    (
+      await resolveAudienceUnion(
+        tx,
+        tenantId,
+        audience.filter((row) => row.excluded),
+      )
+    ).map((row) => row.personId),
+  )
+  return included.filter((row) => !excluded.has(row.personId))
+}
+
+async function resolveAudienceUnion(
   tx: Database,
   tenantId: string,
   audience: AudienceItem[],
@@ -107,7 +130,13 @@ export async function resolveObligationAudience(
       await tx
         .select({ id: people.id, userId: people.userId })
         .from(people)
-        .innerJoin(personGroupMemberships, eq(personGroupMemberships.personId, people.id))
+        .innerJoin(
+          personGroupMemberships,
+          and(
+            eq(personGroupMemberships.tenantId, people.tenantId),
+            eq(personGroupMemberships.personId, people.id),
+          ),
+        )
         .where(and(baseActive, inArray(personGroupMemberships.groupId, personGroupIds))),
     )
   }
@@ -117,9 +146,21 @@ export async function resolveObligationAudience(
       await tx
         .select({ id: people.id, userId: people.userId })
         .from(people)
-        .innerJoin(tenantUsers, eq(tenantUsers.userId, people.userId))
-        .innerJoin(roleAssignments, eq(roleAssignments.tenantUserId, tenantUsers.id))
-        .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+        .innerJoin(
+          tenantUsers,
+          and(eq(tenantUsers.tenantId, people.tenantId), eq(tenantUsers.userId, people.userId)),
+        )
+        .innerJoin(
+          roleAssignments,
+          and(
+            eq(roleAssignments.tenantId, tenantUsers.tenantId),
+            eq(roleAssignments.tenantUserId, tenantUsers.id),
+          ),
+        )
+        .innerJoin(
+          roles,
+          and(eq(roles.tenantId, roleAssignments.tenantId), eq(roles.id, roleAssignments.roleId)),
+        )
         .where(and(baseActive, eq(tenantUsers.status, 'active'), inArray(roles.key, roleKeys))),
     )
   }

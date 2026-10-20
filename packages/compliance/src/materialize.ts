@@ -354,7 +354,11 @@ export async function loadAudience(
   obligationId: string,
 ): Promise<AudienceItem[]> {
   const rows = await tx
-    .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+    .select({
+      kind: complianceAudience.kind,
+      entityKey: complianceAudience.entityKey,
+      excluded: complianceAudience.excluded,
+    })
     .from(complianceAudience)
     .where(
       and(
@@ -362,7 +366,11 @@ export async function loadAudience(
         eq(complianceAudience.obligationId, obligationId),
       ),
     )
-  return rows.map((r) => ({ kind: r.kind as AudienceItem['kind'], entityKey: r.entityKey }))
+  return rows.map((r) => ({
+    kind: r.kind as AudienceItem['kind'],
+    entityKey: r.entityKey,
+    excluded: r.excluded,
+  }))
 }
 
 /**

@@ -143,11 +143,9 @@ export async function startAssessmentAttempt(formData: FormData) {
         after: { typeId, personId, complianceObligationId },
       })
     }
-    if (complianceObligationId) {
-      await materializeEvidenceTargetsObligations(tx, tenantId, [
-        { sourceModule: 'training', targetRef: { assessmentTypeId: typeId } },
-      ])
-    }
+    await materializeEvidenceTargetsObligations(tx, tenantId, [
+      { sourceModule: 'training', targetRef: { assessmentTypeId: typeId } },
+    ])
     return attempt
   })
   redirect(`/training/assessments/${result.attempt.id}`)
@@ -225,13 +223,9 @@ async function finalizeAssessmentAttempt(
     occurrenceKey: attempt.id,
   })
 
-  const targets: ComplianceEvidenceTarget[] = []
-  if (attempt.complianceObligationId) {
-    targets.push({
-      sourceModule: 'training',
-      targetRef: { assessmentTypeId: attempt.typeId },
-    })
-  }
+  const targets: ComplianceEvidenceTarget[] = [
+    { sourceModule: 'training', targetRef: { assessmentTypeId: attempt.typeId } },
+  ]
   if (trainingRecordId && attempt.courseId) {
     targets.push({
       sourceModule: 'training',
@@ -341,14 +335,9 @@ export async function submitAssessmentAttempt(attemptId: string): Promise<Attemp
             submittedByTenantUserId: ctx.membership?.id ?? null,
           })
           .where(eq(trainingAssessments.id, attemptId))
-        if (attempt.complianceObligationId) {
-          await materializeEvidenceTargetsObligations(tx, tenantId, [
-            {
-              sourceModule: 'training',
-              targetRef: { assessmentTypeId: attempt.typeId },
-            },
-          ])
-        }
+        await materializeEvidenceTargetsObligations(tx, tenantId, [
+          { sourceModule: 'training', targetRef: { assessmentTypeId: attempt.typeId } },
+        ])
         await recordAuditInTransaction(tx, ctx, {
           entityType: 'training_assessment',
           entityId: attemptId,
@@ -514,13 +503,9 @@ export async function cancelAssessmentAttempt(attemptId: string) {
       .update(trainingAssessments)
       .set({ status: 'cancelled', completedAt: new Date() })
       .where(eq(trainingAssessments.id, attemptId))
-    const targets: ComplianceEvidenceTarget[] = []
-    if (attempt.complianceObligationId) {
-      targets.push({
-        sourceModule: 'training' as const,
-        targetRef: { assessmentTypeId: attempt.typeId },
-      })
-    }
+    const targets: ComplianceEvidenceTarget[] = [
+      { sourceModule: 'training', targetRef: { assessmentTypeId: attempt.typeId } },
+    ]
     if (revokedRecordId && revokedCourseId) {
       targets.push({
         sourceModule: 'training' as const,

@@ -774,7 +774,7 @@ Open **Compliance** in the left menu, or go to [Compliance](/compliance). Most p
 1. Open [Compliance](/compliance).
 2. Find a row that is not done. The button on the row tells you what to do — it changes with the kind of item:
    - **Acknowledge** — open the document reader, read the PDF, and confirm.
-   - **Go to training** — opens the assigned course or assessment. Start an assessment from this link so the result is credited to that exact requirement.
+   - **Go to training** — opens the assigned course or assessment. Successful quizzes of the same type also count when completed outside the assignment, within its required completion window. **Rolling 12 months** uses your own completion date. **Booked** means a future class is arranged; it does not mean your certificate is complete.
    - **Open app** — opens the form linked to that exact obligation. Submit it from this link so the required item is recorded as complete.
    - **Start inspection** — starts the required inspection.
    - **New assessment** — starts the required hazard assessment.

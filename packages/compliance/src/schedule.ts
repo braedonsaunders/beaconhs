@@ -396,11 +396,130 @@ export function frequencyProgress(
   return { status, required, percent }
 }
 
+/** Shift a civil date by a completion-validity period, clamping month ends. */
+export function shiftCompletionDate(value: string, frequency: Frequency, amount: number): string {
+  const date = toCalendar(new Date(`${value}T00:00:00Z`))
+  if (frequency === 'day' || frequency === 'week')
+    return dateKey(addCalendarDays(date, amount * (frequency === 'week' ? 7 : 1)))
+  const months = amount * (frequency === 'year' ? 12 : frequency === 'quarter' ? 3 : 1)
+  const start = new Date(Date.UTC(date.year, date.month - 1 + months, 1))
+  const lastDay = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0),
+  ).getUTCDate()
+  start.setUTCDate(Math.min(date.day, lastDay))
+  return dateKey(toCalendar(start))
+}
+
+/** Rolling windows follow local civil dates, including daylight-saving changes. */
+export function rollingEvidenceBoundary(clock: ComplianceClock, frequency: Frequency) {
+  const today = complianceDate(clock)
+  const startOn = shiftCompletionDate(today, frequency, -1)
+  return {
+    startOn,
+    startAt: zonedMidnight(toCalendar(new Date(`${startOn}T00:00:00Z`)), clock.timezone),
+    nextDayAt: zonedMidnight(
+      addCalendarDays(calendarDate(clock.now, clock.timezone), 1),
+      clock.timezone,
+    ),
+  }
+}
+
+/** A completion may happen anywhere in this calendar period, due by its chosen deadline. */
+export function resolveCompletionCalendarWindow(
+  recurrence: ComplianceRecurrence,
+  clock: ComplianceClock,
+) {
+  const { frequency, deadline } = recurrence
+  if (
+    !frequency ||
+    !deadline ||
+    recurrence.evidenceWindow !== 'calendar' ||
+    recurrence.kind !== 'frequency'
+  )
+    throw new Error('A fixed completion deadline requires a calendar frequency')
+  if (
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(deadline.time) ||
+    recurrence.cron ||
+    recurrence.dueOffsetMinutes ||
+    recurrence.dueOffsetDays
+  )
+    throw new Error('The completion deadline is invalid')
+  if (
+    (frequency !== 'week' && deadline.weekday !== undefined) ||
+    (!['year', 'quarter'].includes(frequency) && deadline.month !== undefined) ||
+    (['day', 'week'].includes(frequency) && deadline.day !== undefined)
+  )
+    throw new Error('The completion deadline is invalid')
+  const start = periodStartFor(calendarDate(clock.now, clock.timezone), frequency)
+  const nextStart = shiftPeriod(start, frequency, 1)
+  let due = { ...start }
+  if (frequency === 'week') {
+    if (!Number.isInteger(deadline.weekday) || deadline.weekday! < 1 || deadline.weekday! > 7)
+      throw new Error('Pick a deadline weekday')
+    due = addCalendarDays(start, deadline.weekday! - 1)
+  } else if (frequency !== 'day') {
+    const months = frequency === 'year' ? 12 : frequency === 'quarter' ? 3 : 1
+    const month = frequency === 'month' ? 1 : deadline.month
+    if (
+      !Number.isInteger(month) ||
+      month! < 1 ||
+      month! > months ||
+      !Number.isInteger(deadline.day) ||
+      deadline.day! < 1 ||
+      deadline.day! > 31
+    )
+      throw new Error('Pick a valid deadline month and day')
+    const first = new Date(Date.UTC(start.year, start.month - 1 + month! - 1, 1))
+    const lastDay = new Date(
+      Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
+    ).getUTCDate()
+    due = {
+      year: first.getUTCFullYear(),
+      month: first.getUTCMonth() + 1,
+      day: Math.min(deadline.day!, lastDay),
+    }
+  }
+  const periodStartAt = zonedMidnight(start, clock.timezone)
+  const periodEndAt = zonedMidnight(nextStart, clock.timezone)
+  const [hour, minute] = deadline.time.split(':').map(Number)
+  const dueAt = nextCronOccurrence(
+    `${minute} ${hour} ${due.day} ${due.month} *`,
+    new Date(periodStartAt.getTime() - 1),
+    clock.timezone,
+  )
+  return {
+    periodStart: dateKey(start),
+    periodEnd: dateKey(addCalendarDays(nextStart, -1)),
+    periodStartAt,
+    periodEndAt,
+    dueAt,
+    dueOn: dateKey(due),
+    nextDueAt: dueAt > clock.now ? dueAt : periodEndAt,
+  }
+}
+
 /** Validate cron/cadence/offset compatibility without writing anything. */
 export function validateFrequencyRecurrence(
   recurrence: ComplianceRecurrence,
   clock: ComplianceClock,
 ): void {
+  if (recurrence.deadline) {
+    resolveCompletionCalendarWindow(recurrence, clock)
+    return
+  }
+  if (recurrence.evidenceWindow === 'rolling') {
+    if (
+      !recurrence.frequency ||
+      recurrence.cron ||
+      recurrence.dueOffsetMinutes ||
+      recurrence.dueOffsetDays
+    )
+      throw new Error(
+        'Rolling completion windows require a frequency and do not use calendar deadlines',
+      )
+    rollingEvidenceBoundary(clock, recurrence.frequency)
+    return
+  }
   resolveFrequencyWindow(recurrence, clock, clock.now)
 }
 

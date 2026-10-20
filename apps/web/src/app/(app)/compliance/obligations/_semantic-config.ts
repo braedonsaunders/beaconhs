@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util'
 import type { ComplianceRecurrence, ComplianceTargetRef } from '@beaconhs/db/schema'
 
-type AudienceTarget = { kind: string; entityKey: string }
+type AudienceTarget = { kind: string; entityKey: string; excluded?: boolean }
 
 export type ObligationSemanticConfig = {
   targetRef: ComplianceTargetRef
@@ -11,10 +11,11 @@ export type ObligationSemanticConfig = {
 
 function canonicalAudience(audience: readonly AudienceTarget[]): AudienceTarget[] {
   return audience
-    .map(({ kind, entityKey }) => ({ kind, entityKey }))
+    .map(({ kind, entityKey, excluded }) => ({ kind, entityKey, excluded: excluded ?? false }))
     .sort((left, right) =>
       left.kind === right.kind
-        ? left.entityKey.localeCompare(right.entityKey)
+        ? left.entityKey.localeCompare(right.entityKey) ||
+          Number(left.excluded) - Number(right.excluded)
         : left.kind.localeCompare(right.kind),
     )
 }

@@ -304,7 +304,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       {
         path: '/my/training',
         title: 'My training',
-        body: 'The Courses tab shows training you can take or review. The Assigned tab uses the same requirements as My compliance, puts overdue work first, and opens assigned assessments with the correct requirement attached.',
+        body: 'The Courses tab shows training you can take or review. Assigned includes booked classes and overdue requirements. Rolling yearly training accepts a successful completion in the previous 12 months. Booked means a future class is arranged, not a completed certificate.',
       },
       {
         title: 'Take a course',

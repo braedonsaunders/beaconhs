@@ -20,6 +20,7 @@ import {
   trainingClasses,
   trainingCourses,
 } from '@beaconhs/db/schema'
+import { materializeEvidenceTargetsObligations } from '@beaconhs/compliance'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { datetimeLocalValue } from '@/lib/datetime'
 import type { RecordSyncPatch } from '@/lib/offline-drafts/protocol'
@@ -180,8 +181,19 @@ function trainingClassSpec(reminderEmailProblem: string | null) {
     },
     resolve: (tx, ctx, row, op) =>
       isField(op) ? classOp(tx, ctx, row, op, reminderEmailProblem) : null,
-    afterWrites: (tx, ctx, row, changes) =>
-      auditFieldChanges(tx, ctx, { entityType: 'training_class', entityId: row.id }, changes),
+    afterWrites: async (tx, ctx, row, changes) => {
+      await auditFieldChanges(tx, ctx, { entityType: 'training_class', entityId: row.id }, changes)
+      const changedCourse = changes.find((change) => change.op === 'courseId')
+      if (changedCourse || changes.some((change) => change.op === 'schedule')) {
+        const courseIds = new Set([row.courseId])
+        if (typeof changedCourse?.before === 'string') courseIds.add(changedCourse.before)
+        await materializeEvidenceTargetsObligations(
+          tx,
+          ctx.tenantId,
+          [...courseIds].map((courseId) => ({ sourceModule: 'training', targetRef: { courseId } })),
+        )
+      }
+    },
     revalidate: (classId) => [`/training/classes/${classId}`, '/training/classes'],
   })
 }

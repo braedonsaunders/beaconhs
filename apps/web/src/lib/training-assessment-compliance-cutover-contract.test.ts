@@ -34,9 +34,13 @@ describe('training assessment compliance cutover contract', () => {
     expect(myTraining).toContain('obligationId: obligation.id')
   })
 
-  it('counts only attempts linked to the obligation being evaluated', () => {
+  it('accepts matching quiz evidence independently of assignment provenance', () => {
     const evaluator = source('../../../../packages/compliance/src/evaluate.ts')
     const exactLink = 'eq(trainingAssessments.complianceObligationId, ob.id)'
-    expect(evaluator.split(exactLink)).toHaveLength(3)
+    expect(evaluator).not.toContain(exactLink)
+    expect(evaluator).toContain('eq(trainingAssessments.tenantId, tid)')
+    expect(evaluator).toContain('eq(trainingAssessments.typeId, ref.assessmentTypeId)')
+    expect(evaluator).toContain('eq(trainingAssessments.passed, true)')
+    expect(evaluator).toContain("eq(trainingAssessments.status, 'submitted')")
   })
 })

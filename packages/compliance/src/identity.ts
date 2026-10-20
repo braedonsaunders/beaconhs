@@ -5,6 +5,7 @@ import {
   complianceObligations,
   complianceStatus,
   people,
+  personGroupMemberships,
   roleAssignments,
   roles,
   tenantUsers,
@@ -73,6 +74,7 @@ export async function materializeIdentityAudienceObligations(
       userId: people.userId,
       departmentId: people.departmentId,
       tradeId: people.tradeId,
+      crewId: people.crewId,
       locationOrgUnitId: people.locationOrgUnitId,
     })
     .from(people)
@@ -80,7 +82,6 @@ export async function materializeIdentityAudienceObligations(
     .orderBy(people.id)
     .for('update')
 
-  const currentPersonIds = currentPeople.map((person) => person.id)
   const departmentIds = [
     ...new Set(currentPeople.map((person) => person.departmentId).filter((id) => id !== null)),
   ]
@@ -121,6 +122,18 @@ export async function materializeIdentityAudienceObligations(
     roleKeys = rows.map((row) => row.key)
   }
 
+  const crewIds = currentPeople.map((person) => person.crewId).filter((id) => id !== null)
+  const groups = await tx
+    .select({ groupId: personGroupMemberships.groupId })
+    .from(personGroupMemberships)
+    .where(
+      and(
+        eq(personGroupMemberships.tenantId, tenantId),
+        inArray(personGroupMemberships.personId, personIds),
+      ),
+    )
+  const groupIds = [...new Set(groups.map((row) => row.groupId))]
+
   const activeObligation = and(
     eq(complianceObligations.tenantId, tenantId),
     eq(complianceObligations.status, 'active'),
@@ -130,6 +143,17 @@ export async function materializeIdentityAudienceObligations(
     eq(complianceAudience.kind, 'everyone'),
     and(eq(complianceAudience.kind, 'person'), inArray(complianceAudience.entityKey, personIds))!,
   ]
+  if (crewIds.length)
+    currentMatches.push(
+      and(eq(complianceAudience.kind, 'crew'), inArray(complianceAudience.entityKey, crewIds))!,
+    )
+  if (groupIds.length)
+    currentMatches.push(
+      and(
+        eq(complianceAudience.kind, 'person_group'),
+        inArray(complianceAudience.entityKey, groupIds),
+      )!,
+    )
   if (departmentIds.length > 0) {
     currentMatches.push(
       and(

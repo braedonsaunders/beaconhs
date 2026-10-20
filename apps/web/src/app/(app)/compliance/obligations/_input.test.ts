@@ -24,7 +24,9 @@ describe('parseObligationInput', () => {
     )
     expect(result).toEqual({
       ok: true,
-      value: expect.objectContaining({ audience: [{ type: 'everyone', entityKey: '' }] }),
+      value: expect.objectContaining({
+        audience: [{ type: 'everyone', entityKey: '', excluded: false }],
+      }),
     })
   })
 
@@ -59,4 +61,34 @@ describe('parseObligationInput', () => {
       error: 'This obligation kind does not accept an audience',
     })
   })
+})
+
+it('preserves independent include and exclude targets, and rejects rolling activity rules', () => {
+  const entityKey = '10000000-0000-4000-8000-000000000001'
+  const parsed = parseObligationInput(
+    validInput({
+      audience: [
+        { type: 'person', entityKey },
+        { type: 'person', entityKey, excluded: true },
+        { type: 'person', entityKey, excluded: true },
+      ],
+    }),
+  )
+  expect(parsed).toMatchObject({
+    ok: true,
+    value: {
+      audience: [
+        { type: 'person', entityKey, excluded: false },
+        { type: 'person', entityKey, excluded: true },
+      ],
+    },
+  })
+  expect(
+    parseObligationInput(
+      validInput({
+        kind: 'journal',
+        recurrence: { kind: 'frequency', frequency: 'year', evidenceWindow: 'rolling' },
+      }),
+    ).ok,
+  ).toBe(false)
 })

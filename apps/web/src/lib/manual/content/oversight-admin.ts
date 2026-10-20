@@ -538,7 +538,29 @@ Recurring periods use the compliance scan timezone under **Admin** → **Notific
 - Each person's own view lives on the **Mine** tab and on their profile, so they can see the same list you see.
 - Requiring people to fill a custom form is also done here — see [Builder (custom forms & apps)](/help/builder) for how the two connect.
 - A setup record used by an active obligation cannot be deleted, deactivated, or unpublished. Turn off or delete the obligation first, then retire the inspection type, assessment, document, equipment type, or PPE type.
-- Turning an obligation off keeps its history. Edit the obligation and disable it instead of deleting it.`,
+- Turning an obligation off keeps its history. Edit the obligation and disable it instead of deleting it.
+
+## Audience exclusions and training validity
+
+In the obligation drawer, build **Audience** first. Then use **Exclude from audience** to remove a person, group, department, crew, role, trade, or site. Exclusions always win. For example, include a **Group**, then exclude one **Person** to require everyone in that group except that person. Excluded people do not receive that obligation's task or compliance alerts.
+
+For recurring training, choose **Completion window** → **Rolling period since completion**. **Yearly** means a successful completion within the previous 12 months. A matching passed quiz counts even if it was completed outside that assignment. Each person's next due date follows their own completion date. Failed, deleted, future, or expired evidence does not count. Use **Calendar schedule** only when a fresh completion is required in each calendar period. Document acknowledgements and activity schedules keep their calendar periods.
+
+A missing, expired, or expiring certificate requirement shows **Booked** when the person is registered for an upcoming, unfinished class for that course. The class date appears beside the status. Booking uses the same active class roster as **Training — Missing**. It is a remediation plan and does not count as a completed certificate in the compliance percentage. A person with a current certificate keeps **Completed**, their compliance percentage, and the upcoming class date. Removing the booking, cancelling the class, or moving it to a different course updates the status. A cancelled attendee or no-show is not booked.
+
+## Fixed calendar deadlines
+
+Use **Calendar schedule** when everyone must finish in the same calendar period by a particular date. For example, to require a quiz annually by December 31:
+
+1. Choose **Recurring (cadence)**.
+2. Set **Completion window** to **Calendar schedule**.
+3. Set **Cadence** to **Yearly**.
+4. Under **Due by**, choose **Month**, **Day of month**, and **Deadline time**.
+5. Save the obligation. A successful completion anywhere in the current year counts. A missing completion becomes overdue after that deadline. The new calendar year starts a new requirement.
+
+**Monthly** can be due by the 15th or the last day. **Quarterly** lets you choose month 1, 2, or 3 of each quarter and a day. **Weekly** lets you pick the weekday. **Daily** lets you pick the time. Days beyond the end of a short month use its last day, including February 29 deadlines in non-leap years. All deadlines use the compliance timezone under **Admin → Notifications**.
+
+Choose **Rolling period since completion** instead when a qualification must remain current. The supported periods are one day, one week, one calendar month, three calendar months, and 12 calendar months. Each person’s next due date follows their own last successful completion. A monthly completion on January 31 is valid through February 28 in a non-leap year. Choose **One-time (single due date)** for a requirement with one specific due date that does not repeat.`,
   },
   {
     slug: 'builder',

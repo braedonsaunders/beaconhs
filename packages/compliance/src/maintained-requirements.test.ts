@@ -10,6 +10,7 @@ import {
   people,
   tenantNotificationPolicy,
   trainingEnrollments,
+  trainingClassAttendees,
   trainingRecords,
   trainingSkillAssignments,
 } from '@beaconhs/db/schema'
@@ -62,6 +63,7 @@ function database(rows: Map<unknown, unknown[]>) {
       from: (table: unknown) => {
         if (!rows.has(table)) throw new Error('Unexpected compliance evidence table')
         const query = Promise.resolve(rows.get(table)!) as Promise<unknown[]> & {
+          innerJoin: () => unknown
           where: (clause: SQL) => unknown
           orderBy: () => unknown
           limit: () => unknown
@@ -70,6 +72,7 @@ function database(rows: Map<unknown, unknown[]>) {
           predicates.push(clause)
           return query
         }
+        query.innerJoin = () => query
         query.orderBy = () => query
         query.limit = () => query
         return query
@@ -80,7 +83,10 @@ function database(rows: Map<unknown, unknown[]>) {
 }
 
 function personRows(): Map<unknown, unknown[]> {
-  return new Map([[people, [{ id: personId, userId: null, first: 'Alex', last: 'Worker' }]]])
+  return new Map<unknown, unknown[]>([
+    [trainingClassAttendees, []],
+    [people, [{ id: personId, userId: null, first: 'Alex', last: 'Worker' }]],
+  ])
 }
 
 afterEach(() => vi.useRealTimers())

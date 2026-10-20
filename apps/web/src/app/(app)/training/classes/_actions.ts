@@ -175,6 +175,7 @@ export async function addClassAttendee(formData: FormData): Promise<void> {
     const [cls] = await tx
       .select({
         capacity: trainingClasses.capacity,
+        courseId: trainingClasses.courseId,
         completedAt: trainingClasses.completedAt,
         cancelledAt: trainingClasses.cancelledAt,
       })
@@ -220,6 +221,10 @@ export async function addClassAttendee(formData: FormData): Promise<void> {
       })
       .returning({ id: trainingClassAttendees.id })
     if (!created) throw new Error('Attendee could not be added.')
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'training',
+      targetRef: { courseId: cls.courseId },
+    })
   })
 
   await recordAudit(ctx, {
@@ -241,6 +246,7 @@ export async function removeClassAttendee(formData: FormData): Promise<void> {
   await ctx.db(async (tx) => {
     const [cls] = await tx
       .select({
+        courseId: trainingClasses.courseId,
         completedAt: trainingClasses.completedAt,
         cancelledAt: trainingClasses.cancelledAt,
       })
@@ -262,6 +268,10 @@ export async function removeClassAttendee(formData: FormData): Promise<void> {
       )
       .returning({ id: trainingClassAttendees.id })
     if (!deleted) throw new Error('Roster attendee not found.')
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'training',
+      targetRef: { courseId: cls.courseId },
+    })
   })
 
   await recordAudit(ctx, {
@@ -293,6 +303,7 @@ export async function saveClassCompletionPage(formData: FormData): Promise<void>
   await ctx.db(async (tx) => {
     const [cls] = await tx
       .select({
+        courseId: trainingClasses.courseId,
         completedAt: trainingClasses.completedAt,
         cancelledAt: trainingClasses.cancelledAt,
       })
@@ -538,6 +549,7 @@ export async function cancelClass(id: string, _formData: FormData): Promise<void
   await ctx.db(async (tx) => {
     const [cls] = await tx
       .select({
+        courseId: trainingClasses.courseId,
         completedAt: trainingClasses.completedAt,
         cancelledAt: trainingClasses.cancelledAt,
       })
@@ -554,6 +566,10 @@ export async function cancelClass(id: string, _formData: FormData): Promise<void
       .where(and(eq(trainingClasses.id, id), isNull(trainingClasses.completedAt)))
       .returning({ id: trainingClasses.id })
     if (!updated) throw new Error('Class could not be cancelled.')
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'training',
+      targetRef: { courseId: cls.courseId },
+    })
     await recordModuleFlowEvent(tx, ctx, {
       subjectId: id,
       moduleKey: 'training-classes',
@@ -579,6 +595,7 @@ export async function reopenClass(id: string, _formData: FormData): Promise<void
   await ctx.db(async (tx) => {
     const [cls] = await tx
       .select({
+        courseId: trainingClasses.courseId,
         completedAt: trainingClasses.completedAt,
         cancelledAt: trainingClasses.cancelledAt,
       })
@@ -595,6 +612,10 @@ export async function reopenClass(id: string, _formData: FormData): Promise<void
       .where(and(eq(trainingClasses.id, id), isNull(trainingClasses.completedAt)))
       .returning({ id: trainingClasses.id })
     if (!updated) throw new Error('Class could not be reopened.')
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'training',
+      targetRef: { courseId: cls.courseId },
+    })
     await recordModuleFlowEvent(tx, ctx, {
       subjectId: id,
       moduleKey: 'training-classes',
@@ -621,7 +642,7 @@ export async function deleteClass(id: string, _formData: FormData): Promise<void
   id = requireTrainingClassId(id)
   await ctx.db(async (tx) => {
     const [cls] = await tx
-      .select({ completedAt: trainingClasses.completedAt })
+      .select({ completedAt: trainingClasses.completedAt, courseId: trainingClasses.courseId })
       .from(trainingClasses)
       .where(eq(trainingClasses.id, id))
       .limit(1)
@@ -641,6 +662,10 @@ export async function deleteClass(id: string, _formData: FormData): Promise<void
       .where(eq(trainingClasses.id, id))
       .returning({ id: trainingClasses.id })
     if (!deleted) throw new Error('Class could not be deleted.')
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'training',
+      targetRef: { courseId: cls.courseId },
+    })
   })
   await recordAudit(ctx, {
     entityType: 'training_class',

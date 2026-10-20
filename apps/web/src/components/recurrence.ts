@@ -1,3 +1,5 @@
+import type { ComplianceRecurrence } from '@beaconhs/db/schema'
+
 // Pure recurrence model + helpers shared by the RecurrencePicker (client), the
 // obligation server actions, and the obligation edit page (server). Keep this
 // module free of 'use client' — server components must be able to CALL these.
@@ -8,6 +10,8 @@ export type RecurrenceKind = 'one_time' | 'frequency' | 'cron'
 
 export type RecurrenceValue = {
   kind: RecurrenceKind
+  evidenceWindow?: 'calendar' | 'rolling'
+  deadline?: ComplianceRecurrence['deadline']
   frequency?: Frequency
   cron?: string
   quantity?: number
@@ -31,6 +35,7 @@ export function frequencyToCron(f: Frequency): string {
 
 export type RecurrenceFields = {
   /** Allow a one-time (single due date) cadence. */
+  rolling?: boolean
   oneTime?: boolean
   /** Allow a recurring (frequency/cron) cadence. */
   recurring?: boolean
@@ -53,6 +58,8 @@ export type RecurrenceFields = {
  */
 export function recurrenceValueFromStored(rec: {
   kind: string
+  evidenceWindow?: 'calendar' | 'rolling'
+  deadline?: ComplianceRecurrence['deadline']
   frequency?: Frequency
   cron?: string
   quantity?: number
@@ -70,6 +77,8 @@ export function recurrenceValueFromStored(rec: {
     const isPresetCron = Boolean(rec.cron) && rec.cron === frequencyToCron(frequency)
     return {
       kind: 'frequency',
+      evidenceWindow: rec.evidenceWindow ?? 'calendar',
+      deadline: rec.deadline,
       frequency,
       cron: isPresetCron ? undefined : rec.cron,
       quantity: rec.quantity ?? 1,
@@ -87,3 +96,36 @@ export function recurrenceValueFromStored(rec: {
     remindBeforeDays: rec.remindBeforeDays ?? 7,
   }
 }
+
+export function defaultCompletionDeadline(
+  frequency: Frequency,
+): NonNullable<ComplianceRecurrence['deadline']> {
+  if (frequency === 'day') return { time: '23:59' }
+  if (frequency === 'week') return { weekday: 7, time: '23:59' }
+  if (frequency === 'month') return { day: 31, time: '23:59' }
+  return { month: frequency === 'year' ? 12 : 3, day: 31, time: '23:59' }
+}
+
+export const CALENDAR_MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const
+export const CALENDAR_WEEKDAYS = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+] as const

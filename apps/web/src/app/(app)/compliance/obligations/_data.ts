@@ -2,6 +2,8 @@
 // over `compliance_obligations` (+ audience counts), and live compliance via the
 // evaluation adapters. The old per-module UNION is gone.
 
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+import { CALENDAR_MONTHS, CALENDAR_WEEKDAYS, FREQUENCIES } from '@/components/recurrence'
 import { and, count, desc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { complianceAudience, complianceObligations } from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
@@ -20,8 +22,36 @@ type ObligationRow = {
   enabled: boolean
 }
 
-export function cadenceLabel(rec: ComplianceRecurrence | null | undefined): string {
+export function cadenceLabel(
+  rec: ComplianceRecurrence | null | undefined,
+  translate: (value: string) => string = (value) => value,
+): string {
   if (!rec) return '—'
+  if (rec.kind === 'frequency' && rec.deadline) {
+    const deadline = rec.deadline
+    const frequency = rec.frequency ?? 'year'
+    const date =
+      frequency === 'year'
+        ? `${translate(CALENDAR_MONTHS[(deadline.month ?? 1) - 1] ?? 'January')} ${deadline.day}`
+        : frequency === 'quarter'
+          ? `${translate('Month of quarter')} ${deadline.month}, ${translate('Day of month')} ${deadline.day}`
+          : frequency === 'month'
+            ? `${translate('Day of month')} ${deadline.day}`
+            : frequency === 'week'
+              ? translate(CALENDAR_WEEKDAYS[(deadline.weekday ?? 1) - 1] ?? 'Monday')
+              : ''
+    return `${translate(FREQUENCIES.find((item) => item.value === frequency)?.label ?? 'Calendar schedule')} · ${translate('Due by')} ${date} ${deadline.time}`
+  }
+  if (rec.kind === 'frequency' && rec.evidenceWindow === 'rolling') {
+    const labels = {
+      day: 'Rolling 1 day',
+      week: 'Rolling 1 week',
+      month: 'Rolling 1 month',
+      quarter: 'Rolling 3 months',
+      year: 'Rolling 12 months',
+    }
+    return translate(labels[rec.frequency ?? 'year'])
+  }
   if (rec.kind === 'frequency') return `${rec.quantity ?? 1}/${rec.frequency ?? 'week'}`
   if (rec.kind === 'cron') return rec.cron ? `cron ${rec.cron}` : '—'
   if (rec.kind === 'one_time') return rec.dueOn ? `due ${rec.dueOn}` : 'one-off'
@@ -35,6 +65,7 @@ export async function listObligations(
   ctx: Ctx,
   opts: { kind?: ObligationKind; q?: string; page?: number; perPage?: number } = {},
 ): Promise<ObligationListResult> {
+  const translate = await getGeneratedValueTranslations()
   const perPage = opts.perPage ?? 25
   const page = Math.max(1, opts.page ?? 1)
   return ctx.db(async (tx) => {
@@ -58,18 +89,23 @@ export async function listObligations(
       .offset((page - 1) * perPage)
 
     const ids = obs.map((o) => o.id)
-    const counts = new Map<string, { n: number; everyone: boolean }>()
+    const counts = new Map<string, { n: number; everyone: boolean; excluded: number }>()
     if (ids.length > 0) {
       const ac = await tx
         .select({
           id: complianceAudience.obligationId,
-          n: sql<number>`count(*)`.mapWith(Number),
-          everyone: sql<boolean>`bool_or(${complianceAudience.kind} = 'everyone')`,
+          n: sql<number>`count(*) filter (where not ${complianceAudience.excluded})`.mapWith(
+            Number,
+          ),
+          excluded: sql<number>`count(*) filter (where ${complianceAudience.excluded})`.mapWith(
+            Number,
+          ),
+          everyone: sql<boolean>`bool_or(${complianceAudience.kind} = 'everyone' and not ${complianceAudience.excluded})`,
         })
         .from(complianceAudience)
         .where(inArray(complianceAudience.obligationId, ids))
         .groupBy(complianceAudience.obligationId)
-      for (const r of ac) counts.set(r.id, { n: r.n, everyone: r.everyone })
+      for (const r of ac) counts.set(r.id, { n: r.n, everyone: r.everyone, excluded: r.excluded })
     }
 
     const rows = obs.map((o) => {
@@ -83,10 +119,12 @@ export async function listObligations(
             ? 'Records'
             : o.subjectKind === 'per_task'
               ? 'Title holders'
-              : !audienceInfo || audienceInfo.everyone || audienceInfo.n === 0
-                ? 'Everyone'
-                : `${audienceInfo.n} target${audienceInfo.n === 1 ? '' : 's'}`,
-        cadence: cadenceLabel(o.recurrence),
+              : !audienceInfo || audienceInfo.n === 0
+                ? 'No audience'
+                : audienceInfo.everyone
+                  ? `Everyone${audienceInfo?.excluded ? ` · ${audienceInfo.excluded} exclusions` : ''}`
+                  : `${audienceInfo.n} target${audienceInfo.n === 1 ? '' : 's'}${audienceInfo.excluded ? ` · ${audienceInfo.excluded} exclusions` : ''}`,
+        cadence: cadenceLabel(o.recurrence, translate),
         enabled: o.status === 'active',
       }
     })
@@ -103,12 +141,17 @@ async function getObligationWithAudience(ctx: Ctx, id: string) {
       .limit(1)
     if (!ob || ob.deletedAt) return null
     const aud = await tx
-      .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+      .select({
+        kind: complianceAudience.kind,
+        entityKey: complianceAudience.entityKey,
+        excluded: complianceAudience.excluded,
+      })
       .from(complianceAudience)
       .where(eq(complianceAudience.obligationId, id))
     const audience: AudienceItem[] = aud.map((a) => ({
       kind: a.kind as AudienceItem['kind'],
       entityKey: a.entityKey,
+      excluded: a.excluded,
     }))
     return { ob, audience }
   })

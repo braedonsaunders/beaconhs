@@ -66,6 +66,7 @@ function defaultRecurrence(kind: ObligationKind): RecurrenceValue {
   const f = KIND_META[kind].recurrence
   return {
     kind: kind === 'document' ? 'one_time' : f.recurring ? 'frequency' : 'one_time',
+    evidenceWindow: kind === 'training' ? 'rolling' : undefined,
     frequency: 'week',
     quantity: 1,
     compliantPercentage: 100,
@@ -420,6 +421,7 @@ export function ObligationForm({
         value={
           meta.audience ? (
             <AudiencePicker
+              key={kind}
               value={audience}
               onChange={setAudience}
               options={audienceOptions}

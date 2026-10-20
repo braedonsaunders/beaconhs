@@ -16,6 +16,16 @@ const uuid = z.string().uuid()
 const recurrenceSchema = z
   .object({
     kind: z.enum(['one_time', 'frequency', 'cron']),
+    evidenceWindow: z.enum(['calendar', 'rolling']).optional(),
+    deadline: z
+      .object({
+        month: z.number().int().min(1).max(12).optional(),
+        day: z.number().int().min(1).max(31).optional(),
+        weekday: z.number().int().min(1).max(7).optional(),
+        time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      })
+      .strict()
+      .optional(),
     frequency: z.enum(['day', 'week', 'month', 'quarter', 'year']).optional(),
     cron: z.string().trim().min(1).max(256).optional(),
     quantity: z.number().int().min(1).max(10_000).optional(),
@@ -43,6 +53,7 @@ const obligationInputSchema = z
         z
           .object({
             type: audienceKind,
+            excluded: z.boolean().default(false),
             entityKey: z.string().trim().max(256),
           })
           .strict(),
@@ -62,7 +73,7 @@ const obligationInputSchema = z
   })
   .strict()
 
-export type ObligationInput = z.infer<typeof obligationInputSchema>
+export type ObligationInput = z.input<typeof obligationInputSchema>
 
 type ObligationInputParseResult =
   { ok: true; value: ObligationInput } | { ok: false; error: string }
@@ -88,11 +99,31 @@ export function parseObligationInput(raw: unknown): ObligationInputParseResult {
     if (item.type !== 'everyone' && !entityKey) {
       return { ok: false, error: 'Every audience row must have a target' }
     }
-    const key = `${item.type}\u0000${entityKey}`
+    const key = `${item.type}\u0000${entityKey}\u0000${item.excluded}`
     if (seen.has(key)) continue
     seen.add(key)
-    normalizedAudience.push({ type: item.type, entityKey })
+    normalizedAudience.push({ type: item.type, entityKey, excluded: item.excluded })
   }
+
+  if (
+    input.recurrence.evidenceWindow === 'rolling' &&
+    (input.kind !== 'training' || input.recurrence.kind !== 'frequency')
+  )
+    return {
+      ok: false,
+      error: 'Rolling completion windows are only available for recurring training',
+    }
+
+  if (
+    input.recurrence.deadline &&
+    (input.kind !== 'training' ||
+      input.recurrence.kind !== 'frequency' ||
+      input.recurrence.evidenceWindow !== 'calendar')
+  )
+    return {
+      ok: false,
+      error: 'Fixed completion deadlines are only available for recurring calendar training',
+    }
 
   return { ok: true, value: { ...input, audience: normalizedAudience } }
 }

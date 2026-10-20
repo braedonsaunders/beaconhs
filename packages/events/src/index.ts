@@ -387,7 +387,7 @@ export type ComplianceTransitionEvent = {
   // (e.g. a corrective action), bypassing the personId→people.userId bridge.
   userId?: string | null
   label: string
-  to: 'completed' | 'overdue' | 'pending' | 'in_progress' | 'expiring'
+  to: import('@beaconhs/compliance').EvalStatus
   dueOn: string | null
 }
 
