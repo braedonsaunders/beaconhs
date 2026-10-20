@@ -297,7 +297,7 @@ it('keeps saved ink read-only and clears only the selected signer before allowin
   })
   expect(roster.rows[1]!.signedAt).not.toBeNull()
   expect(container.textContent).toContain('Signed 1/2')
-  await act(async () => button('Awaiting signature').click())
+  await act(async () => button('Tap to sign').click())
   expect(container.querySelector('[data-signature-pad]')).not.toBeNull()
 })
 it('removes a signed crew slot after confirmation without clearing the other signatures', async () => {
@@ -349,5 +349,5 @@ it('runs no crew or signature step without signal and closes the signature drawe
   // The only add was the fixture's direct call.
   expect(mocks.add).toHaveBeenCalledTimes(1)
   expect(mocks.runOnline).toHaveBeenCalledWith('finish', expect.any(Function))
-  expect(container.textContent).not.toContain('Worker 06Awaiting signature')
+  expect(container.textContent).not.toContain('Worker 06Tap to sign')
 })

@@ -6,7 +6,7 @@
 // somehow present, is reported as unsupported rather than crashing the run.
 
 import type { ActionData, EvalContext } from '@beaconhs/forms-core'
-import type { RecordSummaryPdfJobData } from '@beaconhs/jobs'
+import type { PdfJobData, RecordSummaryPdfJobData } from '@beaconhs/jobs'
 
 export type FlowActorRef = {
   tenantUserId: string | null
@@ -64,4 +64,6 @@ export type FlowSubjectAdapter = {
    * template and use this only when none is configured. Null ⇒ no PDF.
    */
   pdfJob?(values: Record<string, unknown>): RecordSummaryPdfJobData | null
+  /** Full attached plans, rendered with their own templates and page setup. */
+  pdfAppendices?(): Promise<Extract<PdfJobData, { kind: 'document_bundle' }>['parts']>
 }

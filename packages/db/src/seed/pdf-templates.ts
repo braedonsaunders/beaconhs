@@ -270,7 +270,10 @@ const HAZID = wrap(
       ['#', '{{@number}}', 'width:4%;'],
       ['Hazard', '{{name}}'],
       ['Standard controls', '{{standard_controls}}'],
-      ['Specific controls', '{{specific_controls}}'],
+      [
+        'Specific controls',
+        '{{specific_controls}}{{#if controls}}<div style="margin-top:4px;"><strong>Controls:</strong> {{controls}}</div>{{/if}}',
+      ],
       ['Pre L/S (risk)', '{{pre_likelihood}} / {{pre_severity}} ({{pre_risk}})', 'width:9%;'],
       ['Post L/S (risk)', '{{post_likelihood}} / {{post_severity}} ({{post_risk}})', 'width:9%;'],
       ['Applies', '{{applicable}}', 'width:6%;'],
@@ -281,7 +284,10 @@ const HAZID = wrap(
       ['Hazard', '{{name}}'],
       ['Applies', '{{applicable}}', 'width:8%;'],
       ['Standard controls', '{{standard_controls}}'],
-      ['Specific controls', '{{specific_controls}}'],
+      [
+        'Specific controls',
+        '{{specific_controls}}{{#if controls}}<div style="margin-top:4px;"><strong>Controls:</strong> {{controls}}</div>{{/if}}',
+      ],
     ]) +
     '{{/if}}' +
     collection('PPE manifest', 'ppe', [

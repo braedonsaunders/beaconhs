@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { unstable_rethrow } from 'next/navigation'
 import { flushRecordSaves } from '@/lib/pending-record-saves'
 import { toast } from '@/lib/toast'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Button } from '@beaconhs/ui'
 import { DownloadLink } from '@/components/download-link'
@@ -80,25 +80,89 @@ function CopySubmit({
   label,
   className,
   iconSize,
+  offerPhotoCopy = false,
 }: {
   label: string
   className?: string
   iconSize: number
+  offerPhotoCopy?: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
   const { pending } = useFormStatus()
+  const [preparing, setPreparing] = useState(false)
+  const busy = useRef(false)
+  async function prepare(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    if (busy.current || pending) return
+    busy.current = true
+    setPreparing(true)
+    const button = event.currentTarget
+    let includePhotos = false
+    try {
+      if (
+        offerPhotoCopy &&
+        !(await confirmDialog({
+          title: tGeneratedValue('Copy assessment'),
+          confirmLabel: tGeneratedValue('Create copy'),
+          message: (
+            <div className="space-y-3">
+              <p>
+                {tGeneratedValue(
+                  'Job content, answers, plans and crew names carry forward. The copy starts as a new draft with a new date. Everyone must sign again. Review attached plans before submitting them.',
+                )}
+              </p>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  onChange={(event) => {
+                    includePhotos = event.target.checked
+                  }}
+                />
+                <span>
+                  {tGeneratedValue(
+                    'Include existing photos. These are from the original assessment, not new site evidence.',
+                  )}
+                </span>
+              </label>
+            </div>
+          ),
+        }))
+      )
+        return
+      if (!navigator.onLine)
+        throw new Error(
+          tGeneratedValue(
+            'You need signal to copy this record. Your answers are saved on this device.',
+          ),
+        )
+      await flushRecordSaves()
+      const photoInput = button.form?.elements.namedItem('includePhotos')
+      if (photoInput instanceof HTMLInputElement) photoInput.value = includePhotos ? '1' : '0'
+      button.form?.requestSubmit(button)
+    } catch (error) {
+      unstable_rethrow(error)
+      toast.error(
+        error instanceof Error ? error.message : tGeneratedValue('Save failed. Please retry.'),
+      )
+    } finally {
+      busy.current = false
+      setPreparing(false)
+    }
+  }
   const content = (
     <>
-      <Copy size={iconSize} /> {pending ? tGenerated('m_17f0584a533f66') : tGeneratedValue(label)}
+      <Copy size={iconSize} />{' '}
+      {pending || preparing ? tGenerated('m_17f0584a533f66') : tGeneratedValue(label)}
     </>
   )
   return className ? (
-    <button type="submit" className={className} disabled={pending}>
+    <button type="submit" className={className} disabled={pending || preparing} onClick={prepare}>
       {content}
     </button>
   ) : (
-    <Button variant="outline" type="submit" disabled={pending}>
+    <Button variant="outline" type="submit" disabled={pending || preparing} onClick={prepare}>
       {content}
     </Button>
   )
@@ -118,6 +182,7 @@ export function RecordHeaderActions({
   deleteHref,
   copyAction,
   copyLabel = 'Copy assessment',
+  offerPhotoCopy = false,
   lockAction,
   unlockAction,
   lockLabel = 'Submit & lock',
@@ -137,6 +202,7 @@ export function RecordHeaderActions({
   copyAction: FormAction
   /** Module wording for the copy control, e.g. "Copy inspection". */
   copyLabel?: string
+  offerPhotoCopy?: boolean
   lockAction: LockAction
   unlockAction: LockAction
   lockLabel?: string
@@ -242,7 +308,13 @@ export function RecordHeaderActions({
       {canCopy ? (
         <form action={copyAction}>
           <input type="hidden" name="id" value={id} />
-          <CopySubmit label={copyLabel} className={menuItem} iconSize={15} />
+          <input type="hidden" name="includePhotos" defaultValue="0" />
+          <CopySubmit
+            label={copyLabel}
+            className={menuItem}
+            iconSize={15}
+            offerPhotoCopy={offerPhotoCopy}
+          />
         </form>
       ) : null}
       {canDelete ? (
@@ -283,7 +355,8 @@ export function RecordHeaderActions({
         {canCopy ? (
           <form action={copyAction}>
             <input type="hidden" name="id" value={id} />
-            <CopySubmit label={copyLabel} iconSize={14} />
+            <input type="hidden" name="includePhotos" defaultValue="0" />
+            <CopySubmit label={copyLabel} iconSize={14} offerPhotoCopy={offerPhotoCopy} />
           </form>
         ) : null}
         {canLock ? lockForm : null}

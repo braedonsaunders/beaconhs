@@ -34,7 +34,7 @@ describe('record header actions mobile sheet contract', () => {
     const sheet = sheetSource()
 
     expect(sheet).toContain('<form action={copyAction}>')
-    expect(sheet).toContain('<CopySubmit label={copyLabel} className={menuItem} iconSize={15} />')
+    expect(sheet).toContain('offerPhotoCopy={offerPhotoCopy}')
     expect(source).toContain('const { pending } = useFormStatus()')
     expect(source).toContain("tGenerated('m_17f0584a533f66')")
   })

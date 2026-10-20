@@ -287,7 +287,7 @@ export function SigningRoster({
                 className="flex h-20 w-full items-center justify-center rounded border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-600"
               >
                 <GeneratedValue
-                  value={row.active ? 'Awaiting signature' : 'Person inactive — remove from crew'}
+                  value={row.active ? 'Tap to sign' : 'Person inactive — remove from crew'}
                 />
               </button>
             ) : (

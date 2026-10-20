@@ -200,14 +200,21 @@ describe('hazard-assessment transactional locking contract', () => {
       '// ------------------------------------------------------------------\n// Tasks\n',
     )
 
-    expect(create).toContain('if (copyFromId) await lockVisibleAssessment(ctx, tx, copyFromId)')
+    expect(create).not.toContain('copyFromId')
     expect(openApp).toContain(
       'const lockedAssessment = await lockVisibleAssessment(ctx, tx, assessmentId)',
     )
     expect(openApp.indexOf('await lockVisibleAssessment')).toBeLessThan(
       openApp.indexOf('await createAssessmentAppResponse'),
     )
-    expect(copy).toContain('await lockVisibleAssessment(ctx, tx, sourceId)')
+    expect(copy).toMatch(
+      /await copyAssessmentInTransaction\(\s*tx,\s*ctx,\s*sourceId,\s*includePhotos,\s*files,?\s*\)/u,
+    )
+    const copyWriter = readFileSync(
+      new URL('../app/(app)/hazard-assessments/_copy-assessment.ts', import.meta.url),
+      'utf8',
+    )
+    expect(copyWriter).toContain('await lockVisibleAssessment(ctx, tx, sourceId)')
     for (const mutation of [create, openApp, copy]) {
       expect(mutation).toContain('await recordAuditInTransaction(tx, ctx')
       expect(mutation).not.toContain('await recordAudit(ctx')

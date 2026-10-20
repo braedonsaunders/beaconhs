@@ -29,6 +29,7 @@ import { fmtDateTime, personName, yesBlank, yesNo } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { photoDocumentUrl } from '@/lib/photo-document-url'
+import { loadHazidPdfAppendices } from '@/lib/hazid-pdf-apps'
 
 function riskScore(l: number | null, s: number | null): number | string {
   return l != null && s != null ? l * s : ''
@@ -46,6 +47,7 @@ export function createHazidFlowAdapter(
     notifyCategory: 'hazid',
     auditEntityType: 'hazid_assessment',
     deepLink: () => `/hazard-assessments/${assessmentId}`,
+    pdfAppendices: () => loadHazidPdfAppendices(ctx, assessmentId),
     pdfJob: (values) =>
       buildRecordSummaryPdfJob({
         tenantId: ctx.tenantId,

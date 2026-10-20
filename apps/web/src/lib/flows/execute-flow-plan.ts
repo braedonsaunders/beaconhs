@@ -35,12 +35,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { resolveGroupEmails, resolveGroupUserIds } from '@beaconhs/events'
 import { resolveObligationAudience } from '@beaconhs/compliance'
 import { secureFetch } from '@beaconhs/sync/egress'
-import {
-  interpolate,
-  renderEmail,
-  renderTemplate,
-  type RenderableEmail,
-} from '@beaconhs/email-render'
+import { interpolate, renderEmail, type RenderableEmail } from '@beaconhs/email-render'
 import {
   loadTenantPdfTemplate,
   resolveSubjectDefaultPdfTemplate,
@@ -49,7 +44,7 @@ import {
 import { loadTenantEmailTemplate } from '@/lib/email-templates'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { recordAudit } from '@/lib/audit'
-import { buildRecordSummaryPdfJob } from './pdf-summary'
+import { buildSubjectPdfJob } from './pdf-document'
 import { recordFlowGate } from './gate-store'
 import type { FlowActorRef, FlowSubjectAdapter } from './types'
 import { describeFlowWebhookError } from './webhook-policy'
@@ -687,50 +682,11 @@ export async function executeFlowPlan(
             if (!tpl && action.pdfFormat !== 'summary') {
               tpl = await resolveSubjectDefaultPdfTemplate(ctx, adapter)
             }
-            if (tpl) {
-              // Merge here (cheap) and hand the worker pre-rendered HTML + page
-              // setup to print. {{page}}/{{pages}} are preserved for the printer.
-              const headerVals = { ...values, page: '{{page}}', pages: '{{pages}}' }
-              await enqueuePdfEmail(
-                {
-                  kind: 'template_pdf',
-                  tenantId: ctx.tenantId,
-                  html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
-                  paperSize: tpl.paperSize,
-                  orientation: tpl.orientation,
-                  marginMm: tpl.marginMm,
-                  headerHtml: tpl.headerHtml
-                    ? renderTemplate(tpl.headerHtml, headerVals, { escapeHtml: false })
-                    : null,
-                  footerHtml: tpl.footerHtml
-                    ? renderTemplate(tpl.footerHtml, headerVals, { escapeHtml: false })
-                    : null,
-                  entityType: adapter.auditEntityType,
-                  entityId: adapter.subjectId,
-                  filename: pdfFilename,
-                },
-                emailPayload,
-                jobId(nodeId, 'pdf-email'),
-              )
-              ran.push(`send_email+pdfdoc→${to.length}`)
-              break
-            }
-            // No template ⇒ the generic field-summary PDF, rendered in the
-            // worker then emailed (non-blocking — the submit never waits on
-            // Chromium).
-            const pdfJob =
-              adapter.pdfJob?.(values) ??
-              buildRecordSummaryPdfJob({
-                tenantId: ctx.tenantId,
-                subjectId: adapter.subjectId,
-                entityType: adapter.auditEntityType,
-                heading: adapter.auditEntityType
-                  .replace(/_/g, ' ')
-                  .replace(/\b\w/g, (c) => c.toUpperCase()),
-                reference: values.reference,
-                subtitle: values.title,
-                values,
-              })
+            const pdfJob = await buildSubjectPdfJob(adapter, values, {
+              tenantId: ctx.tenantId,
+              template: tpl,
+              filename: pdfFilename,
+            })
             await enqueuePdfEmail(pdfJob, emailPayload, jobId(nodeId, 'pdf-email'))
             ran.push(`send_email+pdf→${to.length}`)
             break

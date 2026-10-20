@@ -259,7 +259,20 @@ You need signal to add, edit, move, or delete tasks, hazards, PPE, and questions
 - Conditions change. If the job changes, update the assessment (use **Unlock** first if submitted), or start a new one.
 - **Completed by** on the record and on the assessment list is the person who filled the assessment in. BeaconHS records it when the assessment is started — there is nothing to type, and it cannot be edited. It is the **Completed by** line on the printed PDF too.
 - **Print blank** on the assessment list prints a paper copy to fill in by hand — for a job where a phone is not practical. Pick the assessment type first: the sheet carries that type's real hazards, PPE and questions, with the **Specific controls**, **Applies**, and answer columns left empty and a ruled sign-on block at the end. Key it into BeaconHS afterwards so the record is the system of record.
-- **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work. On a phone it lives under **More actions**. The button reads **Copying…** while the new assessment is built, then opens it — tap it once and wait.`,
+- **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work. On a phone it lives under **More actions**. The button reads **Copying…** while the new assessment is built, then opens it — tap it once and wait.
+
+## Copying an assessment
+
+1. Choose **Copy assessment**. On a phone, open **More actions** first.
+2. Leave **Include existing photos** unchecked for a fresh set of site photos. Check it only when you want the original photos carried forward.
+3. Tap **Create copy**. BeaconHS saves pending edits first, then opens the new draft.
+4. Review the new date, job details, PPE answers, question answers, controls, attached plans and crew names. These carry forward so you do not have to retype the job. Open each copied plan and submit it again after reviewing it.
+5. Collect new signatures. Previous signatures and safety approvals never carry forward. Confined-space atmospheric readings, entry logs and the all-entrants-out confirmation must be recorded again.
+
+**Print / PDF** and **Send email** include the assessment and its applicable attached plans in one PDF. Unfinished plans are marked **DRAFT** or **NOT STARTED**. Email delivery includes the same complete PDF as an attachment.
+
+Tap a crew member’s **Tap to sign** space to open their signature pad. Draw and tap **Done**; the next unsigned person appears in the same drawer.
+`,
   },
   {
     slug: 'inspections',

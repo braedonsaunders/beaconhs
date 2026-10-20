@@ -21,6 +21,9 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { recordAudit } from '@/lib/audit'
+import { createHazidFlowAdapter } from '@/lib/flows/adapters/hazid'
+import { buildSubjectPdfJob } from '@/lib/flows/pdf-document'
+import { getModuleDefaultTemplate } from '@/lib/pdf-templates'
 import { formatDateTime } from '@/lib/datetime'
 
 export async function sendHazidEmail(
@@ -247,17 +250,22 @@ export async function sendHazidEmail(
   // Enqueue via BullMQ so the worker captures email_log + retries on
   // failure. The worker stamps meta.tenantId + meta.category onto the
   // email_log row so this send is queryable from /admin/email-log.
-  const { enqueueEmail } = await import('@beaconhs/jobs')
-  await enqueueEmail({
+  const { enqueuePdfEmail } = await import('@beaconhs/jobs')
+  const adapter = createHazidFlowAdapter(ctx, assessmentId)
+  const pdf = await buildSubjectPdfJob(adapter, await adapter.loadValues(), {
+    tenantId: ctx.tenantId,
+    template: await getModuleDefaultTemplate(ctx, 'hazid'),
+    filename: `${data.a.reference}.pdf`,
+  })
+  await enqueuePdfEmail(pdf, {
     to,
     subject,
     html,
     text,
-    meta: {
-      tenantId: ctx.tenantId,
-      category: 'hazid_assessment_send',
-      userId: ctx.userId,
-    },
+    filename: `${data.a.reference}.pdf`,
+    tenantId: ctx.tenantId,
+    category: 'hazid_assessment_send',
+    deliverAsSingleMessage: true,
   })
 
   await recordAudit(ctx, {

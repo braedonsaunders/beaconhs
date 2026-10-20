@@ -249,6 +249,7 @@ export async function renderHtmlDocumentPdf(input: {
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     *{box-sizing:border-box;} body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;}
     table{page-break-inside:auto;} tr{page-break-inside:avoid;}
+    th,td{overflow-wrap:anywhere;}
   </style></head><body>${input.bodyHtml}</body></html>`
   const pageCounters = (s?: string | null): string =>
     s
@@ -321,7 +322,7 @@ export async function renderRecordSummaryPdf(input: RecordSummaryRenderInput): P
   })
 }
 
-function renderRecordSummaryHtml(input: RecordSummaryRenderInput): string {
+export function renderRecordSummaryHtml(input: RecordSummaryRenderInput): string {
   const rows =
     input.fields.length === 0
       ? `<tr><td style="padding:8px 10px;border:1px solid #e2e8f0;color:#94a3b8;">No details captured.</td></tr>`

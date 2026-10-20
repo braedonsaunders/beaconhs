@@ -79,6 +79,7 @@ describe('generic form-response parent-lock contract', () => {
       'app/(app)/apps/_lib/draft-persistence.ts',
       'app/(app)/apps/_lib/form-flow-adapter.ts',
       'app/(app)/hazard-assessments/_assessment-rules.ts',
+      'app/(app)/hazard-assessments/_copy-apps.ts',
       'lib/forms/form-response-lifecycle.ts',
     ])
     expect(
@@ -98,6 +99,13 @@ describe('generic form-response parent-lock contract', () => {
     expect(draftPersistence).toContain("status: 'draft'")
     expect(hazardAppResponses.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
     expect(hazardAppResponses).toContain("status: 'draft'")
+    const copiedApps = source('../../app/(app)/hazard-assessments/_copy-apps.ts')
+    expect(copiedApps.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
+    expect(copiedApps).toContain("status: 'draft'")
+    const copyOwner = source('../../app/(app)/hazard-assessments/_copy-assessment.ts')
+    expect(copyOwner.indexOf('await lockVisibleAssessment(')).toBeLessThan(
+      copyOwner.indexOf('await copyAssessmentApps('),
+    )
 
     expect(submitLifecycle.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
     expect(submitLifecycle).toContain('status: finalStatus')

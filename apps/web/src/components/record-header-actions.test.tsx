@@ -83,3 +83,57 @@ describe('inspection submit feedback', () => {
     expect(container.textContent).not.toContain('Internal database failure')
   })
 })
+
+describe('copy save barrier', () => {
+  async function renderCopy(copy: (data: FormData) => Promise<void>, photos = false) {
+    await act(async () =>
+      root.render(
+        <RecordHeaderActions
+          id="source"
+          locked={false}
+          canDelete={false}
+          canLock={false}
+          canEmail={false}
+          pdfHref="/pdf"
+          emailHref="/email"
+          deleteHref="/delete"
+          copyAction={copy}
+          lockAction={async () => {}}
+          unlockAction={async () => {}}
+          offerPhotoCopy={photos}
+        />,
+      ),
+    )
+  }
+  it('waits for all pending edits before asking the server to copy', async () => {
+    let finish!: () => void
+    mocks.flush.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        }),
+    )
+    const copy = vi.fn(async () => {})
+    await renderCopy(copy)
+    const button = [...container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Copy assessment'),
+    )!
+    await act(async () => button.click())
+    expect(mocks.flush).toHaveBeenCalledOnce()
+    expect(copy).not.toHaveBeenCalled()
+    await act(async () => finish())
+    expect(copy).toHaveBeenCalledOnce()
+  })
+  it('cancelling the photo/content confirmation leaves the source untouched', async () => {
+    mocks.confirm.mockResolvedValue(false)
+    const copy = vi.fn(async () => {})
+    await renderCopy(copy, true)
+    await act(async () =>
+      [...container.querySelectorAll('button')]
+        .find((b) => b.textContent?.includes('Copy assessment'))!
+        .click(),
+    )
+    expect(copy).not.toHaveBeenCalled()
+    expect(mocks.flush).not.toHaveBeenCalled()
+  })
+})

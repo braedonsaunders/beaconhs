@@ -13,10 +13,10 @@ import 'server-only'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { formResponses, formTemplates, pdfTemplates } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { renderTemplate } from '@beaconhs/email-render'
 import type { OnDemandPdfJobData } from '@beaconhs/jobs'
 import { buildFlowAdapter } from '@/lib/flows/registry'
 import { buildRecordSummaryPdfJob } from '@/lib/flows/pdf-summary'
+import { buildSubjectPdfJob, buildTemplatePdfPart } from '@/lib/flows/pdf-document'
 import {
   getFormTemplateDefaultTemplate,
   getModuleDefaultTemplate,
@@ -79,20 +79,10 @@ function templatePdfResponse(
   tpl: PdfTemplateRenderConfig,
   args: { values: Record<string, unknown>; entityType: string; entityId: string; filename: string },
 ): Promise<Response> {
-  const headerVals = { ...args.values, page: '{{page}}', pages: '{{pages}}' }
   return renderOnDemandPdfResponse({
     kind: 'template_pdf',
     tenantId: ctx.tenantId,
-    html: renderTemplate(tpl.compiledHtml, args.values, { escapeHtml: true }),
-    paperSize: tpl.paperSize,
-    orientation: tpl.orientation,
-    marginMm: tpl.marginMm,
-    headerHtml: tpl.headerHtml
-      ? renderTemplate(tpl.headerHtml, headerVals, { escapeHtml: false })
-      : null,
-    footerHtml: tpl.footerHtml
-      ? renderTemplate(tpl.footerHtml, headerVals, { escapeHtml: false })
-      : null,
+    ...buildTemplatePdfPart(tpl, args.values),
     entityType: args.entityType,
     entityId: args.entityId,
     filename: args.filename,
@@ -118,39 +108,27 @@ export async function renderModulePdfResponse(
 
   const tpl = await getModuleDefaultTemplate(ctx, args.moduleKey)
 
-  let values: Record<string, unknown> = {}
   try {
-    values = await adapter.loadValues()
-  } catch {
-    values = {}
-  }
-
-  if (tpl && Object.keys(values).length > 0) {
+    const values = await adapter.loadValues()
+    if (!tpl && args.fallback) return renderOnDemandPdfResponse(args.fallback)
     const ref =
       typeof values.reference === 'string' && values.reference
         ? values.reference
         : args.recordId.slice(0, 8)
-    return templatePdfResponse(ctx, tpl, {
-      values,
-      entityType: args.moduleKey,
-      entityId: args.recordId,
-      filename: `${args.moduleKey}-${ref}.pdf`,
-    })
+    return renderOnDemandPdfResponse(
+      await buildSubjectPdfJob(adapter, values, {
+        tenantId: ctx.tenantId,
+        template: tpl,
+        filename: `${args.moduleKey}-${ref}.pdf`,
+      }),
+    )
+  } catch (error) {
+    console.error('[pdf] record content could not be loaded', error)
+    return Response.json(
+      { error: 'Could not load the complete record for PDF. Try again.' },
+      { status: 500 },
+    )
   }
-
-  const fallback: OnDemandPdfJobData =
-    args.fallback ??
-    adapter.pdfJob?.(values) ??
-    buildRecordSummaryPdfJob({
-      tenantId: ctx.tenantId,
-      subjectId: adapter.subjectId,
-      entityType: adapter.auditEntityType,
-      heading: adapter.auditEntityType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-      reference: values.reference,
-      subtitle: values.title,
-      values,
-    })
-  return renderOnDemandPdfResponse(fallback)
 }
 
 // Render a Builder form response's PDF: the form template's OWN PDF template

@@ -1,6 +1,6 @@
 'use server'
 
-import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
+import { activePeopleWhere } from '@beaconhs/db'
 
 // All server actions used by the HazID detail page and its sub-sections.
 // Keep these co-located so the detail page wiring is straightforward and the
@@ -34,7 +34,6 @@ import {
   hazidLocationTasks,
   hazidTasks,
   people,
-  tenantUsers,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
@@ -68,6 +67,8 @@ import {
   type AssessmentHazardUpdate,
   type HazidCtx,
 } from './_assessment-rules'
+import { copyAssessmentInTransaction } from './_copy-assessment'
+import { withCopiedAttachments } from '@/lib/copy-attachments'
 import { nullableText, postedFlag } from './_assessment-inputs'
 
 // All HazID server actions assume a tenant is active (see HazidCtx).
@@ -154,19 +155,13 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
   // jobScope is rich-text HTML; sanitize it and treat an empty editor
   // (`<p></p>`) as null.
   const jobScope = nullableRichText(formData.get('jobScope'))
-  const copyFromId = String(formData.get('copyFromId') ?? '').trim() || null
 
   // datetime-local values are wall-clock strings — parse them in the user's
   // timezone, not the server's.
   const occurredAt = occurredAtRaw ? parseDatetimeLocal(occurredAtRaw, ctx.timezone) : new Date()
   if (!occurredAt) throw new Error('Invalid occurred date/time')
 
-  // Re-scope the copy source: a self/site-tier user must not be able to
-  // exfiltrate an assessment they cannot see by replaying its id.
-  if (copyFromId) await assertCanSeeAssessment(ctx, copyFromId)
-
   const created = await ctx.db(async (tx) => {
-    if (copyFromId) await lockVisibleAssessment(ctx, tx, copyFromId)
     if (supervisorPersonId) {
       if (!isUuid(supervisorPersonId)) throw new Error('Choose an active supervisor')
       const [supervisor] = await tx
@@ -294,106 +289,6 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
               })),
             )
           }
-        }
-      }
-    }
-
-    // Optionally copy from an existing assessment.
-    if (copyFromId) {
-      const [src] = await tx
-        .select()
-        .from(hazidAssessments)
-        .where(eq(hazidAssessments.id, copyFromId))
-        .limit(1)
-      if (src) {
-        await tx
-          .update(hazidAssessments)
-          .set({
-            // Re-sanitize on copy so payloads stored before write-time
-            // sanitization existed cannot propagate into new records.
-            jobScope: src.jobScope ? sanitizeDocumentHtml(src.jobScope) : null,
-            locationOnSite: src.locationOnSite,
-          })
-          .where(eq(hazidAssessments.id, row.id))
-
-        // Copy children (tasks, hazards, ppe, questions). Skip signatures
-        // and photos.
-        const srcTasks = await tx
-          .select()
-          .from(hazidAssessmentTasks)
-          .where(eq(hazidAssessmentTasks.assessmentId, src.id))
-        if (srcTasks.length > 0) {
-          await tx.delete(hazidAssessmentTasks).where(eq(hazidAssessmentTasks.assessmentId, row.id))
-          await tx.insert(hazidAssessmentTasks).values(
-            srcTasks.map((t) => ({
-              tenantId: ctx.tenantId,
-              assessmentId: row.id,
-              taskId: t.taskId,
-              description: t.description,
-              hazardIds: t.hazardIds,
-              controls: t.controls,
-              entityOrder: t.entityOrder,
-            })),
-          )
-        }
-        const srcHaz = await tx
-          .select()
-          .from(hazidAssessmentHazards)
-          .where(eq(hazidAssessmentHazards.assessmentId, src.id))
-        if (srcHaz.length > 0) {
-          await tx
-            .delete(hazidAssessmentHazards)
-            .where(eq(hazidAssessmentHazards.assessmentId, row.id))
-          await tx.insert(hazidAssessmentHazards).values(
-            srcHaz.map((h) => ({
-              tenantId: ctx.tenantId,
-              assessmentId: row.id,
-              hazardId: h.hazardId,
-              name: h.name,
-              standardControls: h.standardControls,
-              specificControls: h.specificControls,
-              applicable: h.applicable,
-              entityOrder: h.entityOrder,
-            })),
-          )
-        }
-        const srcPPE = await tx
-          .select()
-          .from(hazidAssessmentPPE)
-          .where(eq(hazidAssessmentPPE.assessmentId, src.id))
-        if (srcPPE.length > 0) {
-          await tx.delete(hazidAssessmentPPE).where(eq(hazidAssessmentPPE.assessmentId, row.id))
-          await tx.insert(hazidAssessmentPPE).values(
-            srcPPE.map((p) => ({
-              tenantId: ctx.tenantId,
-              assessmentId: row.id,
-              name: p.name,
-              description: p.description,
-              required: p.required,
-              entityOrder: p.entityOrder,
-            })),
-          )
-        }
-        const srcQ = await tx
-          .select()
-          .from(hazidAssessmentQuestions)
-          .where(eq(hazidAssessmentQuestions.assessmentId, src.id))
-        if (srcQ.length > 0) {
-          await tx
-            .delete(hazidAssessmentQuestions)
-            .where(eq(hazidAssessmentQuestions.assessmentId, row.id))
-          await tx.insert(hazidAssessmentQuestions).values(
-            srcQ.map((q) => ({
-              tenantId: ctx.tenantId,
-              assessmentId: row.id,
-              sourceTypeQuestionId: q.sourceTypeQuestionId,
-              question: q.question,
-              questionType: q.questionType,
-              answers: q.answers,
-              requiresYes: q.requiresYes,
-              entityOrder: q.entityOrder,
-            })),
-          )
         }
       }
     }
@@ -831,187 +726,30 @@ export async function deleteAssessment(formData: FormData) {
   redirect('/hazard-assessments')
 }
 
-// Duplicate an existing assessment as a fresh draft. Common workflow when the
-// next job is similar to the previous one — copy the prior assessment, rename,
-// tweak. We copy:
-//   • the assessment row (new id, new reference, fresh occurred_at = now,
-//     unlocked, job-scope suffixed with "(copy)" if non-empty)
-//   • all hazards (with their pre/post risk ratings + controls)
-//   • all tasks
-//   • all PPE rows (without the user's prior yes/no/na answers)
-//   • all questions (without the user's prior answer)
-// We deliberately do NOT copy:
-//   • signatures (every assessment needs its own sign-off)
-//   • photos / file attachments (those are job-specific evidence)
-//   • CS atmospheric readings / entry log (job-specific data points)
-//   • signed-report bundles (different lifecycle)
-// After the copy we redirect to the new detail page.
+// Copy job content into a fresh draft; signatures and approval state never carry forward.
 export async function copyAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.create')
   const sourceId = String(formData.get('id') ?? '')
-  if (!sourceId) throw new Error('Missing id')
-  // Re-scope the source: a self/site-tier user must be able to see the
-  // assessment they are copying from.
-  await assertCanSeeAssessment(ctx, sourceId)
-
-  const created = await ctx.db(async (tx) => {
-    await lockVisibleAssessment(ctx, tx, sourceId)
-    const [src] = await tx
-      .select()
-      .from(hazidAssessments)
-      .where(eq(hazidAssessments.id, sourceId))
-      .limit(1)
-    if (!src) throw new Error('Source assessment not found')
-
-    // Reuse the same numbering scheme as createAssessment so references stay
-    // consistent: HAZ-<year>-<counter>.
-    const reference = await nextReference(tx, ctx.tenantId, 'hazid')
-
-    const [supervisor] = src.supervisorPersonId
-      ? await tx
-          .select({ id: people.id })
-          .from(people)
-          .where(and(eq(people.id, src.supervisorPersonId), activePeopleWhere()))
-          .limit(1)
-      : []
-    const [supervisorAccount] = src.supervisorTenantUserId
-      ? await tx
-          .select({ id: tenantUsers.id })
-          .from(tenantUsers)
-          .where(and(eq(tenantUsers.id, src.supervisorTenantUserId), activeTenantUsersWhere()))
-          .limit(1)
-      : []
-    const jobScope = src.jobScope ? `${src.jobScope} (copy)` : '(copy)'
-
-    const [row] = await tx
-      .insert(hazidAssessments)
-      .values({
-        tenantId: ctx.tenantId,
-        reference,
-        occurredAt: new Date(),
-        siteOrgUnitId: src.siteOrgUnitId,
-        projectOrgUnitId: src.projectOrgUnitId,
-        locationOnSite: src.locationOnSite,
-        supervisorPersonId: supervisor?.id ?? null,
-        supervisorTenantUserId: supervisorAccount?.id ?? null,
-        reportedByTenantUserId: ctx.membership?.id ?? null,
-        assessmentTypeId: src.assessmentTypeId,
-        jobScope,
-        // Lock state — always start as draft / in-progress.
-        inProgress: true,
-        locked: false,
-      })
-      .returning()
-    if (!row) throw new Error('Failed to insert copied assessment')
-
-    // Hazards — include pre/post risk ratings + controls.
-    const srcHazards = await tx
-      .select()
-      .from(hazidAssessmentHazards)
-      .where(eq(hazidAssessmentHazards.assessmentId, src.id))
-      .orderBy(asc(hazidAssessmentHazards.entityOrder))
-    if (srcHazards.length > 0) {
-      await tx.insert(hazidAssessmentHazards).values(
-        srcHazards.map((h) => ({
-          tenantId: ctx.tenantId,
-          assessmentId: row.id,
-          hazardId: h.hazardId,
-          name: h.name,
-          standardControls: h.standardControls,
-          specificControls: h.specificControls,
-          applicable: h.applicable,
-          entityOrder: h.entityOrder,
-          preLikelihood: h.preLikelihood,
-          preSeverity: h.preSeverity,
-          controls: h.controls,
-          postLikelihood: h.postLikelihood,
-          postSeverity: h.postSeverity,
-        })),
-      )
-    }
-
-    // Tasks
-    const srcTasks = await tx
-      .select()
-      .from(hazidAssessmentTasks)
-      .where(eq(hazidAssessmentTasks.assessmentId, src.id))
-      .orderBy(asc(hazidAssessmentTasks.entityOrder))
-    if (srcTasks.length > 0) {
-      await tx.insert(hazidAssessmentTasks).values(
-        srcTasks.map((t) => ({
-          tenantId: ctx.tenantId,
-          assessmentId: row.id,
-          taskId: t.taskId,
-          description: t.description,
-          hazardIds: t.hazardIds,
-          controls: t.controls,
-          entityOrder: t.entityOrder,
-        })),
-      )
-    }
-
-    // PPE — clear any prior yes/no/na answers; the new job re-answers.
-    const srcPPE = await tx
-      .select()
-      .from(hazidAssessmentPPE)
-      .where(eq(hazidAssessmentPPE.assessmentId, src.id))
-      .orderBy(asc(hazidAssessmentPPE.entityOrder))
-    if (srcPPE.length > 0) {
-      await tx.insert(hazidAssessmentPPE).values(
-        srcPPE.map((p) => ({
-          tenantId: ctx.tenantId,
-          assessmentId: row.id,
-          name: p.name,
-          description: p.description,
-          required: p.required,
-          entityOrder: p.entityOrder,
-          answer: null,
-        })),
-      )
-    }
-
-    // Questions — clear any prior text answers.
-    const srcQ = await tx
-      .select()
-      .from(hazidAssessmentQuestions)
-      .where(eq(hazidAssessmentQuestions.assessmentId, src.id))
-      .orderBy(asc(hazidAssessmentQuestions.entityOrder))
-    if (srcQ.length > 0) {
-      await tx.insert(hazidAssessmentQuestions).values(
-        srcQ.map((q) => ({
-          tenantId: ctx.tenantId,
-          assessmentId: row.id,
-          sourceTypeQuestionId: q.sourceTypeQuestionId,
-          question: q.question,
-          questionType: q.questionType,
-          answers: q.answers,
-          requiresYes: q.requiresYes,
-          entityOrder: q.entityOrder,
-          answer: null,
-        })),
-      )
-    }
-
-    await createAutoAssessmentApps(tx, {
+  if (!isUuid(sourceId)) throw new Error('Missing assessment')
+  const includePhotos = formData.get('includePhotos') === '1'
+  const created = await withCopiedAttachments(ctx, async (tx, files) => {
+    const { source, copy } = await copyAssessmentInTransaction(
+      tx,
       ctx,
-      tenantId: ctx.tenantId,
-      assessmentId: row.id,
-      assessmentTypeId: src.assessmentTypeId,
-      submittedBy: ctx.membership?.id ?? null,
-    })
-
+      sourceId,
+      includePhotos,
+      files,
+    )
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'hazid_assessment',
-      entityId: row.id,
+      entityId: copy.id,
       action: 'copy',
-      summary: `Copied from ${src.reference} as ${row.reference}`,
-      after: { copiedFrom: src.id, copiedFromReference: src.reference },
+      summary: `Copied from ${source.reference} as ${copy.reference}`,
+      after: { copiedFrom: source.id, copiedFromReference: source.reference, includePhotos },
     })
-
-    return row
+    return copy
   })
-
   revalidatePath('/hazard-assessments')
   revalidatePath(`/hazard-assessments/${created.id}`)
   redirect(`/hazard-assessments/${created.id}` as any)

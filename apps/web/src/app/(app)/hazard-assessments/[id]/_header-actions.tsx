@@ -74,6 +74,7 @@ export function AssessmentHeaderActions({
       review={canReview ? { href: reviewHref } : null}
       deleteHref={deleteHref}
       copyAction={copyAction}
+      offerPhotoCopy
       lockAction={lockAction}
       unlockAction={unlockAction}
       lockDisabledReason={lockDisabledReason}

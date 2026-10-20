@@ -119,7 +119,7 @@ describe('immediate compliance evidence lifecycle', () => {
     const remove = between(
       hazardActions,
       'export async function deleteAssessment',
-      '// Duplicate an existing assessment',
+      'export async function copyAssessment',
     )
 
     for (const mutation of [lock, unlock, remove]) {

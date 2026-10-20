@@ -47,6 +47,7 @@ import { buildRecordSummaryPdfJob } from '@/lib/flows/pdf-summary'
 import type { ExtraActionHelpers, FlowSubjectAdapter } from '@/lib/flows/types'
 import { isUuid } from '@/lib/list-params'
 import { materializeFormResponseEvidenceChange } from '@/lib/forms/form-response-evidence'
+import { responsePayload } from './response-payload'
 
 const SEVERITY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 }
 
@@ -130,6 +131,8 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
         tx
           .select({
             data: formResponses.data,
+            draftData: formResponses.draftData,
+            responseStatus: formResponses.status,
             score: formResponses.complianceScore,
             status: formResponses.complianceStatus,
             schema: formTemplateVersions.schema,
@@ -143,7 +146,12 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           .limit(1),
       )
       const schema = resp?.schema as FormSchemaV1 | undefined
-      const storedData = (resp?.data as Record<string, unknown> | null) ?? {}
+      const storedData = responsePayload(
+        resp?.data ?? {},
+        resp?.responseStatus === 'draft' || resp?.responseStatus === 'in_progress'
+          ? resp.draftData
+          : null,
+      )
       const data = schema ? normalizeFormResponseData(schema, storedData) : storedData
       const attachmentIds = new Set<string>()
       collectAttachmentIds(data, attachmentIds)
