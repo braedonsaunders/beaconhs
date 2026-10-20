@@ -1,3 +1,4 @@
+import { inspectionForemanMatches } from '@/lib/inspection-foremen'
 import type { NextRequest } from 'next/server'
 import {
   and,
@@ -91,6 +92,7 @@ export async function GET(req: NextRequest) {
         ilike(orgUnits.name, term),
         ilike(inspectionRecords.locationOnSite, term),
         ilike(inspectionRecords.foremanText, term),
+        inspectionForemanMatches(term),
       )
       if (c) filters.push(c)
     }

@@ -56,7 +56,13 @@ import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { PremiumSection as Section } from '@/components/premium-section'
 import { SectionNav, type SectionNavItem } from '@/components/section-nav'
-import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
+import {
+  LiveDateTime,
+  LiveField,
+  LiveRemoteSelect,
+  LiveRemoteMultiSelect,
+} from '@/components/live-field'
+import { inspectionForemanNames } from '@/lib/inspection-foremen'
 import { OnlineActionForm } from '@/components/online-action-form'
 import {
   OfflineRecordProvider,
@@ -1058,6 +1064,10 @@ export default async function InspectionRecordDetailPage({
   const canDelete =
     canManage || canDeleteOwnRecord(ctx, 'inspections.delete.own', record.inspectorTenantUserId)
 
+  const foremanNames = await ctx.db((tx) =>
+    inspectionForemanNames(tx, ctx.tenantId, record.foremanPersonIds),
+  )
+
   const supervisor = record.supervisorTenantUserId
     ? await ctx.db(async (tx) => {
         const [row] = await tx
@@ -1431,13 +1441,23 @@ export default async function InspectionRecordDetailPage({
                   disabled={!editable}
                 />
                 <div className="sm:col-span-2">
-                  <LiveField
-                    field="foremanText"
+                  <LiveRemoteMultiSelect
+                    field="foremanPersonIds"
                     label={tGenerated('m_184fa8d9234543')}
-                    initialValue={record.foremanText}
-                    placeholder={tGenerated('m_075c37024b0c8f')}
+                    initialValue={record.foremanPersonIds}
+                    initialOptions={record.foremanPersonIds.map((id) => ({
+                      value: id,
+                      label: foremanNames.get(id) || tGeneratedValue('Unavailable person'),
+                    }))}
+                    lookup="inspection-people"
                     disabled={!editable}
                   />
+                  {record.foremanText && record.foremanPersonIds.length === 0 ? (
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={tGeneratedValue('Previously entered foreman')} />:{' '}
+                      <GeneratedValue value={record.foremanText} />
+                    </p>
+                  ) : null}
                 </div>
                 <div className="sm:col-span-2">
                   <LiveField

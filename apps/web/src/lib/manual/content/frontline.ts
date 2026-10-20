@@ -311,7 +311,9 @@ Inspecting a unit or tool instead of a site? Those live separately — see [Equi
 
 1. Tap **New inspection**.
 2. Use the search box to find the inspection type and tap it. The list shows how many checks each type has.
-3. A new draft record opens. Choose the **Location**, enter the more specific **Location on site**, then select the **Supervisor** and fill in the foreman and notes. Fields save as you go.
+3. A new draft record opens. Choose the **Location**, enter the more specific **Location on site**, select the **Supervisor**, then use **Foreman** to search for and select every foreman from People. Tap the × on a name to remove it. Add any notes. Fields save as you go.
+
+You can select up to 20 foremen. Older typed names appear as **Previously entered foreman** until you replace them with selections. If the inspection requires a foreman, choose at least one person before submitting. Selected names appear in the list and PDF, and you can search records by a selected foreman’s name. Company email flows can send the attached PDF to every selected foreman as well as the supervisor and other configured recipients. Foremen need an email address in People or a linked user account to receive email. Searching People needs signal. If names cannot load after reopening the page, the selections stay saved. Reconnect and tap **Could not load selected names. Reconnect and tap to retry.**
 
 ## Answering the criteria
 

@@ -5,7 +5,12 @@ import { useGeneratedValueTranslations } from '@/i18n/generated'
 import { useEffect, useMemo, useState, type ComponentProps } from 'react'
 import { useRouter } from 'next/navigation'
 import { SearchSelect, type SelectOption } from '@beaconhs/ui'
-import { isPickerOptionsResponse, type PickerLookup, type PickerOption } from '@/lib/picker-options'
+import {
+  fetchPickerOptions,
+  isPickerOptionsResponse,
+  type PickerLookup,
+  type PickerOption,
+} from '@/lib/picker-options'
 import { mergeHref } from '@/lib/list-params'
 
 const DEBOUNCE_MS = 250
@@ -89,17 +94,10 @@ export function RemoteSearchSelect({
           })
         } else {
           if (!lookup) throw new Error('Picker lookup is not configured')
-          const params = new URLSearchParams({ lookup, q: query })
-          if (contextId) params.set('contextId', contextId)
-          if (value) params.set('selected', value)
-          if (includeInactive) params.set('includeInactive', '1')
-          const response = await fetch(`/api/picker-options?${params.toString()}`, {
-            credentials: 'same-origin',
-            cache: 'no-store',
-            signal: controller.signal,
-          })
-          if (!response.ok) throw new Error(`Picker lookup failed (${response.status})`)
-          payload = await response.json()
+          payload = await fetchPickerOptions(
+            { lookup, query, selected: value || undefined, contextId, includeInactive },
+            controller.signal,
+          )
         }
         if (controller.signal.aborted) return
         if (!isPickerOptionsResponse(payload)) {

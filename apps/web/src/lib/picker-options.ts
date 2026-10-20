@@ -157,6 +157,33 @@ export type PickerOptionsResponse = {
   hasMore: boolean
 }
 
+/** Shared transport for authenticated, purpose-scoped picker searches. */
+export async function fetchPickerOptions(
+  input: {
+    lookup: PickerLookup
+    query?: string
+    selected?: string
+    contextId?: string
+    includeInactive?: boolean
+  },
+  signal: AbortSignal,
+): Promise<PickerOptionsResponse> {
+  const params = new URLSearchParams({ lookup: input.lookup, q: input.query ?? '' })
+  if (input.selected) params.set('selected', input.selected)
+  if (input.contextId) params.set('contextId', input.contextId)
+  if (input.includeInactive) params.set('includeInactive', '1')
+  const response = await fetch(`/api/picker-options?${params.toString()}`, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    signal,
+  })
+  if (!response.ok) throw new Error(`Picker lookup failed (${response.status})`)
+  const payload: unknown = await response.json()
+  if (!isPickerOptionsResponse(payload))
+    throw new Error('Picker lookup returned an invalid response')
+  return payload
+}
+
 export const PICKER_RESULT_LIMIT = 30
 
 export function isPickerLookup(value: string | null): value is PickerLookup {

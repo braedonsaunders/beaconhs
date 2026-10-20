@@ -50,6 +50,7 @@ function record(overrides: Partial<RecordRow> = {}): RecordRow {
     locationOnSite: null,
     supervisorTenantUserId: null,
     foremanText: null,
+    foremanPersonIds: [],
     notes: null,
     ...overrides,
   } as RecordRow
@@ -82,11 +83,16 @@ function criterion(overrides: Partial<CriterionRow> = {}): CriterionRow {
 }
 
 /** Records every UPDATE's patch; the criterion/record rows come from the mocked locks. */
-function harness(row: RecordRow, criterionRow: CriterionRow | null) {
+function harness(
+  row: RecordRow,
+  criterionRow: CriterionRow | null,
+  selected: { id: string }[] = [],
+) {
   const writes: Array<Record<string, unknown>> = []
   const done = { then: (resolve: (value: unknown) => unknown) => resolve(undefined) }
   const tx = {
     execute: async () => undefined,
+    select: () => ({ from: () => ({ where: async () => selected }) }),
     update: () => ({
       set: (patch: Record<string, unknown>) => {
         writes.push(patch)
@@ -310,6 +316,76 @@ describe('inspection record saver — criterion answers and findings', () => {
 })
 
 describe('inspection record saver — record fields and lifecycle', () => {
+  it('saves multiple directory foremen, clears typed names and audits the replacement', async () => {
+    const second = 'f40ff143-34e2-4bb7-805f-e5ac1e83efc7'
+    const { ctx, writes } = harness(record({ foremanText: 'Typed name' }), null, [
+      { id: PERSON_ID },
+      { id: second },
+    ])
+    expect(
+      await inspectionRecordSaver(ctx, RECORD_ID, [
+        { fieldId: 'foremanPersonIds', value: [PERSON_ID, second], base: [] },
+      ]),
+    ).toMatchObject({
+      applied: [{ fieldId: 'foremanPersonIds', stored: [PERSON_ID, second] }],
+      rejected: [],
+    })
+    expect(writes).toEqual([{ foremanPersonIds: [PERSON_ID, second], foremanText: null }])
+    expect(mocks.recordAuditInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      ctx,
+      expect.objectContaining({
+        before: { foremanText: 'Typed name' },
+        after: { foremanText: null },
+      }),
+    )
+  })
+
+  it('rejects invalid, duplicate and unavailable new foremen without writes', async () => {
+    for (const value of [
+      'Name',
+      ['not-a-uuid'],
+      [PERSON_ID, PERSON_ID],
+      [PERSON_ID],
+      Array.from({ length: 21 }, () => PERSON_ID),
+    ]) {
+      const { ctx, writes } = harness(record(), null)
+      const result = await inspectionRecordSaver(ctx, RECORD_ID, [
+        { fieldId: 'foremanPersonIds', value, base: [] },
+      ])
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error(result.error)
+      expect(result.rejected).toHaveLength(1)
+      expect(writes).toEqual([])
+    }
+  })
+
+  it('allows removing historical inactive foremen and detects competing edits', async () => {
+    const { ctx, writes } = harness(record({ foremanPersonIds: [PERSON_ID] }), null)
+    expect(
+      await inspectionRecordSaver(ctx, RECORD_ID, [
+        { fieldId: 'foremanPersonIds', value: [], base: [] },
+      ]),
+    ).toMatchObject({ conflicts: [{ fieldId: 'foremanPersonIds', current: [PERSON_ID] }] })
+    expect(writes).toEqual([])
+    expect(
+      await inspectionRecordSaver(ctx, RECORD_ID, [
+        { fieldId: 'foremanPersonIds', value: [], base: [PERSON_ID] },
+      ]),
+    ).toMatchObject({ applied: [{ fieldId: 'foremanPersonIds', stored: [] }] })
+    expect(writes).toEqual([{ foremanPersonIds: [], foremanText: null }])
+  })
+
+  it('does not accept free text foreman edits', async () => {
+    const { ctx, writes } = harness(record(), null)
+    expect(
+      await inspectionRecordSaver(ctx, RECORD_ID, [
+        { fieldId: 'foremanText', value: 'Somebody', base: '' },
+      ]),
+    ).toMatchObject({ rejected: [{ fieldId: 'foremanText' }] })
+    expect(writes).toEqual([])
+  })
+
   it('reads occurred-at as wall-clock time in the worker’s timezone and re-materializes', async () => {
     const row = record()
     const { ctx, writes } = harness(row, null)
@@ -343,13 +419,9 @@ describe('inspection record saver — record fields and lifecycle', () => {
     expect(
       await inspectionRecordSaver(ctx, RECORD_ID, [
         { fieldId: 'notes', value: '  Wet deck  ', base: 'Old' },
-        { fieldId: 'foremanText', value: '   ', base: '' },
       ]),
     ).toMatchObject({
-      applied: [
-        { fieldId: 'notes', stored: 'Wet deck' },
-        { fieldId: 'foremanText', stored: '' },
-      ],
+      applied: [{ fieldId: 'notes', stored: 'Wet deck' }],
     })
     expect(writes).toEqual([{ notes: 'Wet deck' }])
     expect(mocks.materialize).not.toHaveBeenCalled()

@@ -688,9 +688,9 @@ export async function assertInspectionStatusTransitionInTx(
       'Cannot submit: this inspection type requires a customer signature.',
     )
   }
-  if (type.requiresForeman && !record.foremanText && (record.foremanPersonIds ?? []).length === 0) {
+  if (type.requiresForeman && record.foremanPersonIds.length === 0) {
     throw new InspectionTransitionError(
-      'Cannot submit: this inspection type requires a foreman on the record.',
+      'Cannot submit: select at least one foreman from People for this inspection.',
     )
   }
 }

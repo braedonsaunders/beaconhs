@@ -333,10 +333,10 @@ export async function executeFlowPlan(
   }
 
   const resolveEmails = async (targets: EmailTarget[]): Promise<string[]> => {
-    const out = new Set<string>()
+    const out = new Map<string, string>()
     const add = (e: string | null | undefined) => {
       const v = e?.trim()
-      if (v && v.includes('@')) out.add(v)
+      if (v && v.includes('@') && !out.has(v.toLowerCase())) out.set(v.toLowerCase(), v)
     }
     for (const t of targets) {
       if (t.type === 'literal') {
@@ -347,18 +347,15 @@ export async function executeFlowPlan(
       } else if (t.type === 'role') {
         for (const u of await getRoleUsers(t.role)) add(u.email)
       } else if (t.type === 'field') {
-        const v = values[t.field]
-        if (typeof v === 'string' && v.trim()) {
-          if (v.includes('@')) {
-            // One address OR a comma/semicolon/space-separated list (e.g. a
-            // subject's `attendee_emails` roster field).
-            for (const part of v.split(/[,;\s]+/)) add(part)
+        // Fields may carry one id, a delimited roster, or an array. A
+        // supervisor account need not have a linked People record.
+        for (const id of fieldIds(t.field)) {
+          if (id.includes('@')) {
+            add(id)
           } else {
-            // Not an address — resolve one or more person / tenant-user ids.
-            for (const id of fieldIds(t.field)) {
-              const identity = await personIdentity(id)
-              if (identity) add(await personEmail(identity.personId))
-            }
+            const identity = await personIdentity(id)
+            if (identity) add(await personEmail(identity.personId))
+            else if (await verifyTenantUser(id)) add(await personEmail(id))
           }
         }
       } else if (t.type === 'person') {
@@ -420,7 +417,7 @@ export async function executeFlowPlan(
         }
       }
     }
-    return Array.from(out)
+    return Array.from(out.values())
   }
 
   // Map a person to their linked Better-Auth user id (for non-email channels).

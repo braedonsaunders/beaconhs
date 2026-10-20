@@ -1,3 +1,8 @@
+import {
+  inspectionForemanNames,
+  inspectionForemanLabel,
+  inspectionForemanMatches,
+} from '@/lib/inspection-foremen'
 import { inspectionCompliancePercent } from '@/lib/inspection-response-config'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -130,6 +135,7 @@ export default async function InspectionRecordsPage({
         ilike(orgUnits.name, term),
         ilike(inspectionRecords.locationOnSite, term),
         ilike(inspectionRecords.foremanText, term),
+        inspectionForemanMatches(term),
       )
       if (c) filters.push(c)
     }
@@ -236,6 +242,11 @@ export default async function InspectionRecordsPage({
           .groupBy(inspectionRecordCriteria.recordId)
       : []
     const countsByRecord = new Map(counts.map((r) => [r.recordId, r]))
+    const foremanNames = await inspectionForemanNames(
+      tx,
+      ctx.tenantId,
+      data.flatMap((r) => r.record.foremanPersonIds),
+    )
 
     const ss = await tx
       .select({ s: inspectionRecords.status, c: count() })
@@ -250,6 +261,7 @@ export default async function InspectionRecordsPage({
         const counts = countsByRecord.get(row.record.id)
         return {
           ...row,
+          foremanLabel: inspectionForemanLabel(row.record, foremanNames),
           passCount: counts?.passCount ?? 0,
           failCount: counts?.failCount ?? 0,
           naCount: counts?.naCount ?? 0,
@@ -596,15 +608,10 @@ export default async function InspectionRecordsPage({
                               <TableCell className="text-xs text-slate-600 dark:text-slate-400">
                                 <GeneratedValue
                                   value={
-                                    r.record.foremanText ? (
-                                      <span>
-                                        <GeneratedValue value={r.record.foremanText} />
+                                    r.foremanLabel ? (
+                                      <span className="line-clamp-2">
+                                        <GeneratedValue value={r.foremanLabel} />
                                       </span>
-                                    ) : r.record.foremanPersonIds.length > 0 ? (
-                                      <Badge variant="secondary">
-                                        <GeneratedValue value={r.record.foremanPersonIds.length} />{' '}
-                                        <GeneratedText id="m_1ad9a6529af849" />
-                                      </Badge>
                                     ) : (
                                       <span className="text-slate-400">—</span>
                                     )

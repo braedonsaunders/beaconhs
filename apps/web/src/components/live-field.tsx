@@ -21,14 +21,15 @@ import {
 // Shared primitive — used by every native record page (incidents, hazard
 // assessments, inspections, corrective actions, training, people, …).
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { htmlToText, normalizeDocumentHref, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { Input, SearchSelect, Select, Textarea, cn, type SelectOption } from '@beaconhs/ui'
 import { useRecordField, type FieldSaveState } from '@/lib/offline-drafts/offline-record'
 import { RecordFieldError } from './record-field-error'
 import { RemoteSearchSelect } from './remote-search-select'
+import { RemoteMultiSelect } from './remote-multi-select'
 import { toast } from '@/lib/toast'
-import type { PickerLookup } from '@/lib/picker-options'
+import { fetchPickerOptions, type PickerLookup, type PickerOption } from '@/lib/picker-options'
 
 export function SaveDot({
   state,
@@ -278,6 +279,97 @@ export function LiveRemoteSelect({
         emptyLabel={tGeneratedValue(emptyLabel)}
         disabled={disabled || f.paused}
       />
+      <RecordFieldError error={f.error} />
+    </div>
+  )
+}
+
+/** Local-first multi-select backed by the bounded, permission-scoped picker. */
+export function LiveRemoteMultiSelect({
+  field,
+  label,
+  initialValue,
+  initialOptions,
+  lookup,
+  disabled,
+}: {
+  field: string
+  label: string
+  initialValue: string[]
+  initialOptions: PickerOption[]
+  lookup: PickerLookup
+  disabled?: boolean
+}) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const f = useRecordField<string[]>(field, initialValue)
+  const [options, setOptions] = useState(initialOptions)
+  const [labelError, setLabelError] = useState(false)
+  const [retryLabels, setRetryLabels] = useState(0)
+  const names = new Map([...initialOptions, ...options].map((o) => [o.value, o]))
+  const missingIds = f.value
+    .filter((id) => !names.has(id))
+    .slice(0, 20)
+    .join(',')
+
+  // A reload may restore an edit that had not reached the server snapshot.
+  // Resolve its labels by selected id, even beyond the first picker page.
+  useEffect(() => {
+    if (!missingIds) return
+    const controller = new AbortController()
+    const reload = () => setRetryLabels((revision) => revision + 1)
+    window.addEventListener('online', reload)
+    void Promise.allSettled(
+      missingIds.split(',').map(async (id) => {
+        const payload = await fetchPickerOptions({ lookup, selected: id }, controller.signal)
+        const option = payload.options.find((candidate) => candidate.value === id)
+        if (!option) throw new Error('Selected person is unavailable')
+        return option
+      }),
+    )
+      .then((resolved) => {
+        if (controller.signal.aborted) return
+        const options = resolved.flatMap((result) =>
+          result.status === 'fulfilled' ? [result.value] : [],
+        )
+        if (options.length) setOptions((previous) => [...previous, ...options])
+        setLabelError(resolved.some((result) => result.status === 'rejected'))
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLabelError(true)
+      })
+    return () => {
+      controller.abort()
+      window.removeEventListener('online', reload)
+    }
+  }, [lookup, missingIds, retryLabels])
+  return (
+    <div className="space-y-1.5">
+      <FieldLabel label={label} state={f.saveState} error={f.error} onRetry={f.retry} />
+      <RemoteMultiSelect
+        lookup={lookup}
+        value={f.value.map(
+          (id) => names.get(id) ?? { value: id, label: tGeneratedValue('Selected person') },
+        )}
+        onChange={(next) => {
+          setOptions((previous) => [
+            ...previous,
+            ...next.filter((o) => !previous.some((p) => p.value === o.value)),
+          ])
+          f.commit(next.map((o) => o.value))
+        }}
+        sheetTitle={label}
+        ariaLabel={label}
+        disabled={disabled || f.paused}
+      />
+      {missingIds && labelError ? (
+        <button
+          type="button"
+          onClick={() => setRetryLabels((revision) => revision + 1)}
+          className="text-xs text-amber-700 underline dark:text-amber-300"
+        >
+          <GeneratedValue value="Could not load selected names. Reconnect and tap to retry." />
+        </button>
+      ) : null}
       <RecordFieldError error={f.error} />
     </div>
   )

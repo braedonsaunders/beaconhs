@@ -14,7 +14,7 @@
 // device, so whichever order a batch applies them in, each clear either
 // writes or finds the value already cleared — never a false conflict.
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { activePeopleWhere, activeTenantUsersWhere, type Database } from '@beaconhs/db'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import {
@@ -35,7 +35,7 @@ import {
   normalizeInspectionTextAnswer,
   parseInspectionNumberAnswer,
 } from '@/lib/inspection-response-config'
-import { optionalDateInput, optionalUuidInput } from '@/lib/mutation-input'
+import { optionalDateInput, optionalUuidInput, requireUuidArrayInput } from '@/lib/mutation-input'
 import {
   columnOps,
   optionalRef,
@@ -115,7 +115,6 @@ const FINDING_CLEARED = {
 
 const RECORD_TEXT_FIELDS = {
   locationOnSite: 'Location on site',
-  foremanText: 'Foreman',
   notes: 'Notes',
 } as const
 
@@ -177,6 +176,41 @@ function recordFieldOp(
       summary: `Updated ${field}`,
       before: { [field]: before },
       after: { [field]: after },
+    })
+  }
+
+  if (op === 'foremanPersonIds') {
+    return recordOp<string[]>({
+      current: record.foremanPersonIds,
+      parse: (wire) => requireUuidArrayInput(wire, 'Foreman selection', { min: 0, max: 20 }),
+      format: (ids) => ids,
+      write: async (ids) => {
+        // Existing inactive selections may be retained or removed, but only
+        // active people in this tenant can be newly added.
+        const added = ids.filter((id) => !record.foremanPersonIds.includes(id))
+        if (added.length) {
+          const valid = await tx
+            .select({ id: people.id })
+            .from(people)
+            .where(
+              and(
+                eq(people.tenantId, ctx.tenantId),
+                inArray(people.id, added),
+                activePeopleWhere(),
+              ),
+            )
+          if (valid.length !== added.length) {
+            throw new RecordEditRejection('Choose active foremen in this tenant.')
+          }
+        }
+        const before = record.foremanPersonIds
+        const previousText = record.foremanText
+        await update({ foremanPersonIds: ids, foremanText: null })
+        record.foremanPersonIds = ids
+        record.foremanText = null
+        audited('foremanPersonIds', before, ids)
+        if (previousText) audited('foremanText', previousText, null)
+      },
     })
   }
 

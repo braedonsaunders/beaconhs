@@ -18,6 +18,7 @@ import {
 } from '@beaconhs/db/schema'
 import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { inspectionForemanNames, inspectionForemanLabel } from '@/lib/inspection-foremen'
 import { inspectionCriterionDisplayAnswer } from '@/lib/inspection-response-config'
 import { photoDocumentUrl } from '@/lib/photo-document-url'
 import { spawnCorrectiveActionForSubject } from '../spawn'
@@ -133,7 +134,8 @@ export function createInspectionFlowAdapter(
       if (!head) return {}
       const r = head.r
 
-      const [criteria, photos] = await Promise.all([
+      const [foremanNames, criteria, photos] = await Promise.all([
+        ctx.db((tx) => inspectionForemanNames(tx, ctx.tenantId, r.foremanPersonIds)),
         ctx.db((tx) =>
           tx
             .select({
@@ -202,7 +204,7 @@ export function createInspectionFlowAdapter(
         site_name: head.siteName ?? '',
         inspector_name: head.inspectorName ?? '',
         supervisor_name: head.supervisorName ?? '',
-        foreman_text: r.foremanText ?? '',
+        foreman_text: inspectionForemanLabel(r, foremanNames),
         notes: r.notes ?? '',
         submitted_at: fmtDateTime(r.submittedAt),
         closed_at: fmtDateTime(r.closedAt),

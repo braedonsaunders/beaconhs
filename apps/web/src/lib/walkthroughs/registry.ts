@@ -191,7 +191,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
         path: '/inspections/records',
         target: 'a[href="/inspections/records?drawer=new"]',
         title: 'Start one',
-        body: 'Tap New inspection and pick the inspection type and the site.',
+        body: 'Tap New inspection and pick the inspection type and the site. In the record, select the Supervisor and use Foreman to choose every foreman from People.',
       },
       {
         title: 'Answer the checklist',

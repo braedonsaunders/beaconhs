@@ -59,9 +59,8 @@ export const inspectionRecords = pgTable(
     inspectorTenantUserId: uuid('inspector_tenant_user_id'),
     supervisorTenantUserId: uuid('supervisor_tenant_user_id'),
 
-    // Foreman — legacy stored a comma-separated list of person ids in a JSON
-    // string. We keep both: a structured array of person ids AND a freeform
-    // text field for when the foreman isn't in our people directory.
+    // Foremen selected from People. Historical typed names remain readable
+    // until selections replace them; new edits only write structured ids.
     foremanPersonIds: jsonb('foreman_person_ids').$type<string[]>().default([]).notNull(),
     foremanText: text('foreman_text'),
 
