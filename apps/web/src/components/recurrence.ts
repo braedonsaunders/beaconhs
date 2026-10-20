@@ -34,6 +34,8 @@ export function frequencyToCron(f: Frequency): string {
 }
 
 export type RecurrenceFields = {
+  /** Count submissions within calendar periods, with an explicit deadline. */
+  calendar?: boolean
   /** Allow a one-time (single due date) cadence. */
   rolling?: boolean
   oneTime?: boolean

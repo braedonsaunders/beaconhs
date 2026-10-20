@@ -116,13 +116,13 @@ export function parseObligationInput(raw: unknown): ObligationInputParseResult {
 
   if (
     input.recurrence.deadline &&
-    (input.kind !== 'training' ||
+    (!(input.kind === 'training' || meta.recurrence.calendar) ||
       input.recurrence.kind !== 'frequency' ||
       input.recurrence.evidenceWindow !== 'calendar')
   )
     return {
       ok: false,
-      error: 'Fixed completion deadlines are only available for recurring calendar training',
+      error: 'Fixed deadlines require a recurring calendar schedule',
     }
 
   return { ok: true, value: { ...input, audience: normalizedAudience } }

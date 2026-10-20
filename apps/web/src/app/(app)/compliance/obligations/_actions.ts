@@ -150,10 +150,15 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
   return {
     kind: 'frequency',
     frequency: r.frequency ?? 'week',
-    cron: cronFor(),
+    cron: kind === 'journal' ? undefined : cronFor(),
+    evidenceWindow: kind === 'journal' ? 'calendar' : undefined,
+    deadline:
+      kind === 'journal'
+        ? (r.deadline ?? defaultCompletionDeadline(r.frequency ?? 'week'))
+        : undefined,
     quantity: Math.max(1, r.quantity ?? 1),
     compliantPercentage: Math.max(0, Math.min(100, r.compliantPercentage ?? 100)),
-    dueOffsetMinutes: r.dueOffsetMinutes,
+    dueOffsetMinutes: kind === 'journal' ? undefined : r.dueOffsetMinutes,
   }
 }
 

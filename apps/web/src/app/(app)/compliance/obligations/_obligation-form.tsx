@@ -66,7 +66,7 @@ function defaultRecurrence(kind: ObligationKind): RecurrenceValue {
   const f = KIND_META[kind].recurrence
   return {
     kind: kind === 'document' ? 'one_time' : f.recurring ? 'frequency' : 'one_time',
-    evidenceWindow: kind === 'training' ? 'rolling' : undefined,
+    evidenceWindow: kind === 'training' ? 'rolling' : f.calendar ? 'calendar' : undefined,
     frequency: 'week',
     quantity: 1,
     compliantPercentage: 100,

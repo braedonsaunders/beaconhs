@@ -31,6 +31,9 @@ type RollupRow = {
   completed: number
   overdue: number
   percent: number
+  progressPercent: number
+  periodStart: string | null
+  periodEnd: string | null
 }
 
 type ObligationOverview = {
@@ -107,6 +110,9 @@ export async function obligationOverview(
         completed,
         overdue,
         percent,
+        progressPercent: sql<number>`coalesce(round(avg(${complianceStatus.percent}))::int,0)`,
+        periodStart: sql<string | null>`min(${complianceStatus.periodStart})`,
+        periodEnd: sql<string | null>`max(${complianceStatus.periodEnd})`,
       })
       .from(complianceObligations)
       .leftJoin(complianceStatus, eq(complianceStatus.obligationId, complianceObligations.id))
@@ -131,6 +137,9 @@ export async function obligationOverview(
         completed: Number(row.completed),
         overdue: Number(row.overdue),
         percent: Number(row.percent),
+        progressPercent: Number(row.progressPercent),
+        periodStart: row.periodStart,
+        periodEnd: row.periodEnd,
       })),
       total,
       page,

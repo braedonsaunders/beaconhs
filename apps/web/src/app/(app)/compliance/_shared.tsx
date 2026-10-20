@@ -47,8 +47,22 @@ export function StatusBadge({ status }: { status: string }) {
   )
 }
 
-export function PercentBar({ percent, large = false }: { percent: number; large?: boolean }) {
-  const tone = percent >= 80 ? 'bg-green-500' : percent >= 50 ? 'bg-amber-500' : 'bg-red-500'
+export function PercentBar({
+  percent,
+  large = false,
+  progress = false,
+}: {
+  percent: number
+  large?: boolean
+  progress?: boolean
+}) {
+  const tone = progress
+    ? 'bg-teal-500'
+    : percent >= 80
+      ? 'bg-green-500'
+      : percent >= 50
+        ? 'bg-amber-500'
+        : 'bg-red-500'
   return (
     <div
       className={`relative w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 ${large ? 'h-3' : 'h-2'}`}
@@ -65,10 +79,12 @@ export function SummaryStrip({
   percent,
   totals,
   title,
+  progress = false,
 }: {
   percent: number
   totals: { total: number; completed: number; overdue: number; pending: number }
   title: string
+  progress?: boolean
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -89,7 +105,7 @@ export function SummaryStrip({
           </div>
         </div>
         <div className="w-1/2 max-w-xl">
-          <PercentBar percent={percent} large />
+          <PercentBar percent={percent} large progress={progress} />
         </div>
       </div>
     </div>

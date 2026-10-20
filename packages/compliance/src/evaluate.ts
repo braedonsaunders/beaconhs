@@ -538,6 +538,7 @@ async function evalJournal(
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
   const window = resolveFrequencyWindow(ob.recurrence, clock, ob.createdAt)
+  if (window.periodEndAt <= ob.createdAt) return empty()
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
   const threshold = ob.recurrence?.compliantPercentage ?? 100
   const counts = await tx
@@ -575,6 +576,7 @@ async function evalJournal(
         percent: progress.percent,
         dueOn: window.dueOn,
         completedOn: progress.status === 'completed' ? (evidence?.completedOn ?? null) : null,
+        subjectRef: evidence?.completedOn ? { lastActivityOn: evidence.completedOn } : null,
         periodStart: window.periodStart,
         periodEnd: window.periodEnd,
       })

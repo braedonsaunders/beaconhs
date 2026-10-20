@@ -789,7 +789,9 @@ Opening the same app from the general Builder gallery creates an on-demand entry
 
 - Check this page once a week. Clearing items early beats explaining overdue ones.
 - Recurring items come back on schedule — a monthly item reappears every month. That is normal.
-- If an item looks wrong (not your job, wrong site), tell your supervisor instead of ignoring it.`,
+- If an item looks wrong (not your job, wrong site), tell your supervisor instead of ignoring it.
+
+Journal requirements show **2 / 5 submitted** and the period dates. A weekly target gives you Monday through Sunday, with a Sunday **23:59** deadline unless your manager chose another deadline. A draft does not count. **Minimum met** means you have reached the rule’s accepted minimum even if the displayed target is higher. Supervisors can open the requirement and use **Previous period** to check last week.`,
   },
   {
     slug: 'feed',

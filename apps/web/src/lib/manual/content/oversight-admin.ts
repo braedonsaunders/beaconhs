@@ -515,7 +515,7 @@ The **Overview** tab shows the big picture: total obligations, subjects tracked,
 2. Pick the **Kind**. Common kinds include **Training / assessment**, **Document acknowledgement**, **App (scheduled)** for a form people must fill on a cadence, **Certification requirement**, **Skill requirement**, and **Inspection**.
 3. Fill in the title and what to require for that kind — for example, which course or which document.
 4. Pick the audience: specific people, a role, a department, a **Group**, a **Crew**, a site, or everyone.
-5. For a recurring item, choose the **Cadence**. Inspections, journals, and hazard assessments also have **Quantity per period** and **Compliant threshold (%)**. Leave **Cron override (optional)** blank for the standard cadence time. For an inspection or scheduled app, **Due offset (minutes after fire)** moves the deadline later without changing when the next period starts.
+5. For a recurring item, choose the **Cadence**. Inspections, journals and hazard assessments have **Quantity per period** and **Compliant threshold (%)**. Journals use calendar periods: set **Due by** to choose the deadline. Other scheduled kinds keep **Cron override (optional)**; inspections and scheduled apps also offer **Due offset (minutes after fire)**.
 6. For a **Certification requirement**, pick a course. For a **Skill requirement**, pick a skill type. Set **Remind before (days)** for the expiry warning.
 7. Click **Create obligation**.
 
@@ -525,7 +525,7 @@ For a **Document acknowledgement**, choose **One-time (single due date)** or **R
 
 The system then tracks every person in the audience and creates their tasks automatically. Imported assignments keep their original audience: groups remain **Group** audiences, divisions become departments, and individual assignments remain specific people. Group and department membership is resolved automatically, so you can maintain the assignment by updating that group or department.
 
-Recurring periods use the compliance scan timezone under **Admin** → **Notifications**. A schedule must fire once in each selected cadence period. The current period stays visible until the next scheduled fire, so an overdue weekly item does not disappear at midnight before the new week actually starts.
+Schedules use the compliance timezone under **Admin** → **Notifications**. Journal calendar periods start at midnight on the first day of the period, independently of reminder delivery. Other cron-based obligations start at their scheduled fire; their previous period stays visible until the next fire.
 
 ## See who is overdue
 
@@ -560,7 +560,18 @@ Use **Calendar schedule** when everyone must finish in the same calendar period 
 
 **Monthly** can be due by the 15th or the last day. **Quarterly** lets you choose month 1, 2, or 3 of each quarter and a day. **Weekly** lets you pick the weekday. **Daily** lets you pick the time. Days beyond the end of a short month use its last day, including February 29 deadlines in non-leap years. All deadlines use the compliance timezone under **Admin → Notifications**.
 
-Choose **Rolling period since completion** instead when a qualification must remain current. The supported periods are one day, one week, one calendar month, three calendar months, and 12 calendar months. Each person’s next due date follows their own last successful completion. A monthly completion on January 31 is valid through February 28 in a non-leap year. Choose **One-time (single due date)** for a requirement with one specific due date that does not repeat.`,
+Choose **Rolling period since completion** instead when a qualification must remain current. The supported periods are one day, one week, one calendar month, three calendar months, and 12 calendar months. Each person’s next due date follows their own last successful completion. A monthly completion on January 31 is valid through February 28 in a non-leap year. Choose **One-time (single due date)** for a requirement with one specific due date that does not repeat.
+
+## Track journal targets
+
+A journal target such as **5 per week** counts submitted journals from Monday through Sunday. The default deadline is Sunday at **23:59** in the compliance timezone. It is not overdue on Monday morning. Drafts do not count; submitted journals still count after archiving.
+
+1. Give each requirement a clear audience name, such as **Foremen — Weekly journals**.
+2. Set **Quantity per period**, **Compliant threshold (%)** and **Due by**. A threshold of 80% with a target of 5 means a minimum of 4; the page shows that minimum separately.
+3. Open the requirement to see its dates, deadline, each person’s **2 / 5 submitted** progress and **Last journal** date. **Submission progress** averages individual progress; extra journals from one person do not cover another person’s missing work.
+4. Choose **Previous period** to check last week separately from the current week. Past periods use the current audience and target. Choose **Current period** to return.
+
+**Mine** and **By person** also show journal counts and period dates. In **Overview**, journal progress can rise during the week even before anyone has met the full target.`,
   },
   {
     slug: 'builder',

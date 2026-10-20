@@ -1,3 +1,4 @@
+import { JournalPeriod } from './_journal-progress'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
@@ -157,7 +158,7 @@ export default async function ComplianceOverviewPage({
                         <GeneratedText id="m_1e40bdcf2d1ba1" />
                       </TableHead>
                       <TableHead>
-                        <GeneratedText id="m_096d47f60747b3" />
+                        <GeneratedValue value="Progress" />
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -177,6 +178,15 @@ export default async function ComplianceOverviewPage({
                             >
                               <GeneratedValue value={r.title} />
                             </Link>
+                            {r.kind === 'journal' && r.periodStart && r.periodEnd ? (
+                              <div>
+                                <JournalPeriod
+                                  start={r.periodStart}
+                                  end={r.periodEnd}
+                                  locale={ctx.locale}
+                                />
+                              </div>
+                            ) : null}
                           </TableCell>
                           <TableCell className="text-slate-700 tabular-nums dark:text-slate-300">
                             <GeneratedValue value={r.completed.toLocaleString()} />
@@ -200,12 +210,23 @@ export default async function ComplianceOverviewPage({
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <div className="max-w-xs flex-1">
-                                <PercentBar percent={r.percent} />
+                                <PercentBar
+                                  percent={r.kind === 'journal' ? r.progressPercent : r.percent}
+                                  progress={r.kind === 'journal'}
+                                />
                               </div>
                               <span className="min-w-[3rem] text-right text-xs text-slate-600 tabular-nums dark:text-slate-400">
-                                <GeneratedValue value={r.percent} />%
+                                <GeneratedValue
+                                  value={r.kind === 'journal' ? r.progressPercent : r.percent}
+                                />
+                                %
                               </span>
                             </div>
+                            {r.kind === 'journal' ? (
+                              <div className="mt-1 text-xs text-slate-500">
+                                <GeneratedValue value="Submission progress" />
+                              </div>
+                            ) : null}
                           </TableCell>
                         </TableRow>
                       ))}

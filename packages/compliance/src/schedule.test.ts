@@ -136,3 +136,48 @@ describe('cron compliance schedule', () => {
     ).toThrow('must not extend beyond')
   })
 })
+
+describe('calendar quantity periods', () => {
+  const rec = {
+    kind: 'frequency' as const,
+    frequency: 'week' as const,
+    evidenceWindow: 'calendar' as const,
+    quantity: 5,
+    deadline: { weekday: 7, time: '23:59' },
+  }
+  it('gives the current week its full deadline and starts Monday before any morning reminder', () => {
+    const w = resolveFrequencyWindow(
+      rec,
+      { now: new Date('2026-10-19T05:00:00Z'), timezone: toronto },
+      new Date('2020-01-01'),
+    )
+    expect(w.periodStart).toBe('2026-10-19')
+    expect(w.periodEnd).toBe('2026-10-25')
+    expect(w.dueAt.toISOString()).toBe('2026-10-26T03:59:00.000Z')
+    expect(frequencyProgress(2, 5, 100, w.dueAt, new Date('2026-10-20T18:00:00Z')).status).toBe(
+      'in_progress',
+    )
+  })
+  it('views the previous week using the actual current time to determine overdue work', () => {
+    const clock = {
+      now: new Date('2026-10-20T18:00:00Z'),
+      periodAt: new Date('2026-10-19T03:59:59Z'),
+      timezone: toronto,
+    }
+    const w = resolveFrequencyWindow(rec, clock, new Date('2020-01-01'))
+    expect(w.periodStart).toBe('2026-10-12')
+    expect(w.periodEnd).toBe('2026-10-18')
+    expect(frequencyProgress(2, 5, 100, w.dueAt, clock.now).status).toBe('overdue')
+    expect(frequencyProgress(5, 5, 100, w.dueAt, clock.now).status).toBe('completed')
+  })
+  it('uses local midnight boundaries and deadlines across a DST transition', () => {
+    const w = resolveFrequencyWindow(
+      rec,
+      { now: new Date('2026-10-30T12:00:00Z'), timezone: toronto },
+      new Date('2020-01-01'),
+    )
+    expect(w.periodStartAt.toISOString()).toBe('2026-10-26T04:00:00.000Z')
+    expect(w.periodEndAt.toISOString()).toBe('2026-11-02T05:00:00.000Z')
+    expect(w.dueAt.toISOString()).toBe('2026-11-02T04:59:00.000Z')
+  })
+})

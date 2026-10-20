@@ -7,7 +7,13 @@ import { CALENDAR_MONTHS, CALENDAR_WEEKDAYS, FREQUENCIES } from '@/components/re
 import { and, count, desc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { complianceAudience, complianceObligations } from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
-import { type AudienceItem, evaluateObligation, resolveComplianceClock } from '@beaconhs/compliance'
+import {
+  type AudienceItem,
+  evaluateObligation,
+  resolveComplianceClock,
+  resolveFrequencyWindow,
+  type ComplianceClock,
+} from '@beaconhs/compliance'
 import type { ComplianceRecurrence } from '@beaconhs/db/schema'
 import type { ObligationKind } from './_meta'
 
@@ -157,12 +163,27 @@ async function getObligationWithAudience(ctx: Ctx, id: string) {
   })
 }
 
-export async function obligationCompliance(ctx: Ctx, id: string) {
+export async function obligationCompliance(
+  ctx: Ctx,
+  id: string,
+  options: { previousPeriod?: boolean } = {},
+) {
   const data = await getObligationWithAudience(ctx, id)
   if (!data) return null
-  const result = await ctx.db(async (tx) => {
-    const clock = await resolveComplianceClock(tx, ctx.tenantId)
-    return evaluateObligation(tx, ctx.tenantId, data.ob, data.audience, clock)
+  const evaluated = await ctx.db(async (tx) => {
+    const clock: ComplianceClock = await resolveComplianceClock(tx, ctx.tenantId)
+    const journal = data.ob.sourceModule === 'journal' && Boolean(data.ob.recurrence.deadline)
+    if (journal && options.previousPeriod) {
+      const current = resolveFrequencyWindow(data.ob.recurrence, clock, data.ob.createdAt)
+      clock.periodAt = new Date(current.periodStartAt.getTime() - 1)
+    }
+    const period = journal
+      ? resolveFrequencyWindow(data.ob.recurrence, clock, data.ob.createdAt)
+      : null
+    return {
+      result: await evaluateObligation(tx, ctx.tenantId, data.ob, data.audience, clock),
+      period,
+    }
   })
-  return { obligation: data.ob, audience: data.audience, result }
+  return { obligation: data.ob, audience: data.audience, ...evaluated }
 }

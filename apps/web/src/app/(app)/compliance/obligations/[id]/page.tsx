@@ -1,6 +1,9 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import Link from 'next/link'
+import { formatDate } from '@/lib/datetime'
+import { JournalProgress, JournalPeriod, journalProgressPercent } from '../../_journal-progress'
 import { notFound } from 'next/navigation'
 import {
   Badge,
@@ -61,9 +64,13 @@ export default async function ObligationDetailPage({
   const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
-  const data = await obligationCompliance(ctx, id)
+  const previousPeriod = pickString(sp.period) === 'previous'
+  const data = await obligationCompliance(ctx, id, { previousPeriod })
   if (!data) notFound()
-  const { obligation: ob, audience, result } = data
+  const { obligation: ob, audience, result, period } = data
+  const journal = ob.sourceModule === 'journal'
+  const quantity = Math.max(1, ob.recurrence.quantity ?? 1)
+  const minimum = Math.ceil((quantity * (ob.recurrence.compliantPercentage ?? 100)) / 100)
   const hasCounts = result.rows.some((r) => r.expected != null)
   const subjectNoun =
     ob.subjectKind === 'per_record'
@@ -100,7 +107,12 @@ export default async function ObligationDetailPage({
   const subjectRows = result.rows.filter((row) => {
     if (statusFilter && row.status !== statusFilter) return false
     if (!query) return true
-    return [row.label, row.status, row.dueOn ?? '', row.completedOn ?? '']
+    return [
+      row.label,
+      row.status,
+      row.dueOn ?? '',
+      (journal ? row.subjectRef?.lastActivityOn : row.completedOn) ?? '',
+    ]
       .join(' ')
       .toLowerCase()
       .includes(query)
@@ -123,7 +135,11 @@ export default async function ObligationDetailPage({
         : listParams.sort === 'due'
           ? (a.dueOn ?? '9999-12-31').localeCompare(b.dueOn ?? '9999-12-31')
           : listParams.sort === 'completed'
-            ? (a.completedOn ?? '9999-12-31').localeCompare(b.completedOn ?? '9999-12-31')
+            ? (
+                (journal ? a.subjectRef?.lastActivityOn : a.completedOn) ?? '9999-12-31'
+              ).localeCompare(
+                (journal ? b.subjectRef?.lastActivityOn : b.completedOn) ?? '9999-12-31',
+              )
             : listParams.sort === 'count'
               ? (a.count ?? 0) - (b.count ?? 0)
               : statusRank(a.status) - statusRank(b.status)
@@ -219,10 +235,71 @@ export default async function ObligationDetailPage({
           }
         />
 
+        {journal && period ? (
+          <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">
+                  <GeneratedValue value={previousPeriod ? 'Previous period' : 'Current period'} />
+                </p>
+                <JournalPeriod
+                  start={period.periodStart}
+                  end={period.periodEnd}
+                  locale={ctx.locale}
+                />
+              </div>
+              <div className="flex gap-3 text-sm">
+                <Link
+                  aria-current={!previousPeriod ? 'page' : undefined}
+                  className="text-teal-700 underline dark:text-teal-300"
+                  href={mergeHref(basePath, sp, {
+                    period: undefined,
+                    page: undefined,
+                    status: undefined,
+                  })}
+                >
+                  <GeneratedValue value="Current period" />
+                </Link>
+                <Link
+                  aria-current={previousPeriod ? 'page' : undefined}
+                  className="text-teal-700 underline dark:text-teal-300"
+                  href={mergeHref(basePath, sp, {
+                    period: 'previous',
+                    page: undefined,
+                    status: undefined,
+                  })}
+                >
+                  <GeneratedValue value="Previous period" />
+                </Link>
+              </div>
+            </div>
+            <p className="text-sm">
+              <GeneratedValue value="Target per person" />: {quantity} ·{' '}
+              <GeneratedValue value="Due by" />{' '}
+              {formatDate(new Date(`${period.dueOn}T00:00:00Z`), 'UTC', ctx.locale)}{' '}
+              {ob.recurrence.deadline?.time}
+            </p>
+            {minimum < quantity ? (
+              <p className="text-xs text-slate-500">
+                <GeneratedValue value="Minimum to meet this requirement" />: {minimum} / {quantity}{' '}
+                ({ob.recurrence.compliantPercentage}%)
+              </p>
+            ) : null}
+            <p className="text-xs text-slate-500">
+              <GeneratedValue value="Submitted journals count, including archived entries. Drafts do not count." />
+            </p>
+            {previousPeriod ? (
+              <p className="text-xs text-slate-500">
+                <GeneratedValue value="Past periods use the current audience and target." />
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <SummaryStrip
-          percent={result.percent}
+          percent={journal ? journalProgressPercent(result.rows) : result.percent}
+          progress={journal}
           totals={result.totals}
-          title={tGenerated('m_096d47f60747b3')}
+          title={journal ? tGeneratedValue('Submission progress') : tGenerated('m_096d47f60747b3')}
         />
 
         <TableToolbar>
@@ -247,7 +324,12 @@ export default async function ObligationDetailPage({
               <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
                 <GeneratedValue
                   value={
-                    result.rows.length === 0 ? (
+                    result.rows.length === 0 &&
+                    journal &&
+                    period &&
+                    ob.createdAt >= period.periodEndAt ? (
+                      <GeneratedValue value="This requirement was not active in this period." />
+                    ) : result.rows.length === 0 ? (
                       <GeneratedText id="m_0d2196aaf22a7a" />
                     ) : (
                       <GeneratedText id="m_10b5c83a6fc1d9" />
@@ -294,7 +376,7 @@ export default async function ObligationDetailPage({
                       column="completed"
                       active={listParams.sort === 'completed'}
                     >
-                      <GeneratedText id="m_0ba7a5e1b2fa32" />
+                      <GeneratedValue value={journal ? 'Last journal' : 'Completed'} />
                     </SortableTh>
                     <GeneratedValue
                       value={
@@ -307,11 +389,13 @@ export default async function ObligationDetailPage({
                               column="count"
                               active={listParams.sort === 'count'}
                             >
-                              <GeneratedText id="m_1842bc939bfcba" />
+                              <GeneratedValue value={journal ? 'Submission progress' : 'Count'} />
                             </SortableTh>
-                            <TableHead>
-                              <GeneratedText id="m_177b0d9a8ef383" />
-                            </TableHead>
+                            {!journal ? (
+                              <TableHead>
+                                <GeneratedText id="m_177b0d9a8ef383" />
+                              </TableHead>
+                            ) : null}
                           </>
                         ) : null
                       }
@@ -338,21 +422,47 @@ export default async function ObligationDetailPage({
                           ) : null}
                         </TableCell>
                         <TableCell className="text-slate-700 dark:text-slate-300">
-                          <GeneratedValue value={r.dueOn ?? '—'} />
+                          <GeneratedValue
+                            value={
+                              r.dueOn
+                                ? formatDate(new Date(`${r.dueOn}T00:00:00Z`), 'UTC', ctx.locale)
+                                : '—'
+                            }
+                          />
                         </TableCell>
                         <TableCell className="text-slate-700 dark:text-slate-300">
-                          <GeneratedValue value={r.completedOn ?? '—'} />
+                          <GeneratedValue
+                            value={
+                              journal && r.subjectRef?.lastActivityOn
+                                ? formatDate(
+                                    new Date(`${r.subjectRef.lastActivityOn}T00:00:00Z`),
+                                    'UTC',
+                                    ctx.locale,
+                                  )
+                                : (r.completedOn ?? '—')
+                            }
+                          />
                         </TableCell>
                         <GeneratedValue
                           value={
                             hasCounts ? (
                               <>
                                 <TableCell className="text-slate-700 dark:text-slate-300">
-                                  <GeneratedValue value={r.count ?? '—'} />
+                                  {journal ? (
+                                    <JournalProgress
+                                      count={r.count ?? 0}
+                                      expected={r.expected ?? quantity}
+                                      met={r.status === 'completed'}
+                                    />
+                                  ) : (
+                                    <GeneratedValue value={r.count ?? '—'} />
+                                  )}
                                 </TableCell>
-                                <TableCell className="text-slate-700 dark:text-slate-300">
-                                  <GeneratedValue value={r.expected ?? '—'} />
-                                </TableCell>
+                                {!journal ? (
+                                  <TableCell className="text-slate-700 dark:text-slate-300">
+                                    <GeneratedValue value={r.expected ?? '—'} />
+                                  </TableCell>
+                                ) : null}
                               </>
                             ) : null
                           }

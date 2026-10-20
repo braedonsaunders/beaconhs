@@ -103,3 +103,45 @@ it('preserves a stored fixed deadline when opening the editor', () => {
     }),
   ).toMatchObject({ kind: 'frequency', frequency: 'year', evidenceWindow: 'calendar', deadline })
 })
+
+it('offers a whole-period journal deadline without a technical cron override', async () => {
+  actGlobals.IS_REACT_ACT_ENVIRONMENT = true
+  vi.stubGlobal('matchMedia', () => ({
+    matches: true,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }))
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  function Journal() {
+    const [value, setValue] = useState<RecurrenceValue>({
+      kind: 'frequency',
+      frequency: 'week',
+      quantity: 5,
+      evidenceWindow: 'calendar',
+    })
+    current = value
+    return (
+      <RecurrencePicker
+        value={value}
+        onChange={setValue}
+        fields={{ recurring: true, quantity: true, threshold: true, calendar: true }}
+      />
+    )
+  }
+  await act(async () => root!.render(<Journal />))
+  expect(document.getElementById('rec-cron')).toBeNull()
+  expect(control('rec-deadline-weekday').value).toBe('7')
+  expect((document.getElementById('rec-deadline-time') as HTMLInputElement).value).toBe('23:59')
+  await select('rec-deadline-weekday', '5')
+  expect(current.deadline).toEqual({ weekday: 5, time: '23:59' })
+  expect(
+    parseObligationInput({
+      kind: 'journal',
+      title: 'Foremen — Weekly journals',
+      audience: [{ type: 'everyone', entityKey: '' }],
+      recurrence: current,
+    }).ok,
+  ).toBe(true)
+})

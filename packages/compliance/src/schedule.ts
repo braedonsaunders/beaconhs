@@ -6,6 +6,8 @@ const { parseExpression } = cronParser
 export type ComplianceClock = {
   now: Date
   timezone: string
+  /** Optional calendar-period anchor for history views; deadlines still use now. */
+  periodAt?: Date
 }
 
 export type Frequency = NonNullable<ComplianceRecurrence['frequency']>
@@ -321,6 +323,14 @@ export function resolveFrequencyWindow(
   if (!(activeFrom instanceof Date) || Number.isNaN(activeFrom.getTime())) {
     throw new Error('The obligation activation time is invalid')
   }
+  if (recurrence.deadline) {
+    const window = resolveCompletionCalendarWindow(recurrence, clock)
+    return {
+      ...window,
+      evidenceStartAt: new Date(Math.max(window.periodStartAt.getTime(), activeFrom.getTime())),
+      scheduledAt: window.periodStartAt,
+    }
+  }
   const currentStart = periodStartFor(calendarDate(clock.now, clock.timezone), frequency)
   const current = periodWindow(currentStart, frequency, recurrence, clock.timezone)
   const previous = periodWindow(
@@ -450,7 +460,7 @@ export function resolveCompletionCalendarWindow(
     (['day', 'week'].includes(frequency) && deadline.day !== undefined)
   )
     throw new Error('The completion deadline is invalid')
-  const start = periodStartFor(calendarDate(clock.now, clock.timezone), frequency)
+  const start = periodStartFor(calendarDate(clock.periodAt ?? clock.now, clock.timezone), frequency)
   const nextStart = shiftPeriod(start, frequency, 1)
   let due = { ...start }
   if (frequency === 'week') {

@@ -7,6 +7,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { createClient, withTenant } from '@beaconhs/db'
 import {
   tenants,
+  journalEntries,
   tenantNotificationPolicy,
   users,
   people,
@@ -556,5 +557,115 @@ it('reschedules waiting reminders and cancels them through the saved admin polic
     expect(row?.status).toBe('skipped')
     expect(row?.publishLeaseId).toBeNull()
     expect(row?.error).toBe('Compliance reminders are paused')
+  })
+})
+
+it('shows journal progress for the whole week, excludes drafts, and reviews the previous period separately', async () => {
+  await ctx.db(async (tx) => {
+    const id = randomUUID()
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        id,
+        tenantId,
+        title: 'Site team — Weekly journals',
+        sourceModule: 'journal',
+        subjectKind: 'per_person',
+        recurrenceKind: 'frequency',
+        recurrence: {
+          kind: 'frequency',
+          frequency: 'week',
+          quantity: 5,
+          compliantPercentage: 80,
+          evidenceWindow: 'calendar',
+          deadline: { weekday: 7, time: '23:59' },
+        },
+        createdAt: new Date('2026-01-01'),
+      })
+      .returning()
+    await tx.insert(complianceAudience).values(
+      [alex, blair].map((personId) => ({
+        tenantId,
+        obligationId: id,
+        kind: 'person' as const,
+        entityKey: personId,
+      })),
+    )
+    await tx.insert(journalEntries).values(
+      [
+        { personId: alex, entryDate: '2026-10-19', status: 'submitted' as const },
+        { personId: alex, entryDate: '2026-10-20', status: 'archived' as const },
+        { personId: alex, entryDate: '2026-10-20', status: 'draft' as const },
+        {
+          personId: alex,
+          entryDate: '2026-10-20',
+          status: 'submitted' as const,
+          deletedAt: new Date(),
+        },
+        { personId: alex, entryDate: '2026-10-12', status: 'submitted' as const },
+        { personId: alex, entryDate: '2026-10-14', status: 'submitted' as const },
+        { personId: alex, entryDate: '2026-10-16', status: 'submitted' as const },
+      ].map((row) => ({ ...row, tenantId, reference: randomUUID() })),
+    )
+    const current = await materializeObligation(tx, tenantId, ob!, clock)
+    expect(current.result.rows.find((row) => row.personId === alex)).toMatchObject({
+      status: 'in_progress',
+      count: 2,
+      expected: 5,
+      percent: 40,
+      dueOn: '2026-10-25',
+      periodStart: '2026-10-19',
+      periodEnd: '2026-10-25',
+      subjectRef: { lastActivityOn: '2026-10-20' },
+    })
+    expect(current.result.rows.find((row) => row.personId === blair)).toMatchObject({
+      status: 'pending',
+      count: 0,
+    })
+    const previous = await evaluateObligation(
+      tx,
+      tenantId,
+      ob!,
+      await loadAudience(tx, tenantId, id),
+      { ...clock, periodAt: new Date('2026-10-18T12:00:00Z') },
+    )
+    expect(previous.rows.find((row) => row.personId === alex)).toMatchObject({
+      status: 'overdue',
+      count: 3,
+      expected: 5,
+      dueOn: '2026-10-18',
+      periodStart: '2026-10-12',
+      periodEnd: '2026-10-18',
+    })
+    const [stored] = await tx
+      .select()
+      .from(complianceStatus)
+      .where(and(eq(complianceStatus.obligationId, id), eq(complianceStatus.personId, alex)))
+    expect(stored?.count).toBe(2)
+    expect(stored?.periodStart).toBe('2026-10-19')
+    await tx.insert(journalEntries).values(
+      [1, 2].map(() => ({
+        tenantId,
+        personId: alex,
+        reference: randomUUID(),
+        entryDate: '2026-10-20',
+        status: 'submitted' as const,
+      })),
+    )
+    const met = await materializeObligation(tx, tenantId, ob!, clock)
+    expect(met.result.rows.find((row) => row.personId === alex)).toMatchObject({
+      status: 'completed',
+      count: 4,
+      expected: 5,
+      percent: 80,
+    })
+    const early = await evaluateObligation(
+      tx,
+      tenantId,
+      { ...ob!, createdAt: new Date('2026-10-19T12:00:00Z') },
+      await loadAudience(tx, tenantId, id),
+      { ...clock, periodAt: new Date('2026-10-18T12:00:00Z') },
+    )
+    expect(early.rows).toEqual([])
   })
 })

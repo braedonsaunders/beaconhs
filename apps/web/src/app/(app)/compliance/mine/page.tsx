@@ -1,3 +1,4 @@
+import { JournalProgress, JournalPeriod } from '../_journal-progress'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
@@ -312,6 +313,22 @@ export default async function MyCompliancePage({
                                   </TableCell>
                                   <TableCell>
                                     <StatusBadge status={r.status} />
+                                    {r.kind === 'journal' ? (
+                                      <div className="mt-2 space-y-1">
+                                        <JournalProgress
+                                          count={r.count}
+                                          expected={r.expected}
+                                          met={r.status === 'completed'}
+                                        />
+                                        {r.periodStart && r.periodEnd ? (
+                                          <JournalPeriod
+                                            start={r.periodStart}
+                                            end={r.periodEnd}
+                                            locale={ctx.locale}
+                                          />
+                                        ) : null}
+                                      </div>
+                                    ) : null}
                                   </TableCell>
                                   <TableCell className="text-slate-700 dark:text-slate-300">
                                     <GeneratedValue value={r.dueOn ?? '—'} />

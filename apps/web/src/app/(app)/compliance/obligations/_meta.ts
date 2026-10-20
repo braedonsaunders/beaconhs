@@ -120,7 +120,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     subjectKind: 'per_person',
     audience: true,
     audienceTypes: ['everyone', 'person', 'person_group', 'crew', 'org_unit'],
-    recurrence: { recurring: true, quantity: true, threshold: true },
+    recurrence: { recurring: true, quantity: true, threshold: true, calendar: true },
     target: 'journalName',
     hint: 'These people must log journal entries on this cadence.',
   },

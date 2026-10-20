@@ -41,6 +41,7 @@ export function RecurrencePicker({
 }) {
   const tGenerated = useGeneratedTranslations()
   const frequency = value.frequency ?? 'week'
+  const calendar = fields.calendar || (fields.rolling && value.evidenceWindow === 'calendar')
   const deadline = value.deadline ?? defaultCompletionDeadline(frequency)
   const set = (patch: Partial<RecurrenceValue>) => onChange({ ...value, ...patch })
   const setDeadline = (patch: Partial<typeof deadline>) =>
@@ -150,22 +151,21 @@ export function RecurrencePicker({
                     onChange={(e) =>
                       set({
                         frequency: e.target.value as Frequency,
-                        deadline:
-                          fields.rolling && value.evidenceWindow === 'calendar'
-                            ? defaultCompletionDeadline(e.target.value as Frequency)
-                            : undefined,
+                        deadline: calendar
+                          ? defaultCompletionDeadline(e.target.value as Frequency)
+                          : undefined,
                       })
                     }
                   >
                     {FREQUENCIES.map((f) => (
                       <option key={f.value} value={f.value}>
                         {f.label}
-                        {fields.rolling ? '' : ` (${f.cron})`}
+                        {fields.rolling || fields.calendar ? '' : ` (${f.cron})`}
                       </option>
                     ))}
                   </Select>
                 </div>
-                {!fields.rolling ? (
+                {!fields.rolling && !fields.calendar ? (
                   <div className="space-y-1.5">
                     <Label htmlFor="rec-cron">
                       <GeneratedText id="m_0f75fbe6acc6db" />
@@ -259,13 +259,19 @@ export function RecurrencePicker({
           }
         />
 
-        {fields.rolling && value.kind === 'frequency' && value.evidenceWindow === 'calendar' ? (
+        {calendar && value.kind === 'frequency' ? (
           <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-800">
             <p className="text-sm font-medium">
               <GeneratedValue value="Due by" />
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              <GeneratedValue value="Complete once in each calendar period by this deadline. Days beyond the end of a short month use that month's last day. Times follow the compliance timezone." />
+              <GeneratedValue
+                value={
+                  fields.quantity
+                    ? 'Meet the submission target during this period. Weeks run Monday to Sunday. Work is overdue only after the deadline. Times follow the compliance timezone.'
+                    : "Complete once in each calendar period by this deadline. Days beyond the end of a short month use that month's last day. Times follow the compliance timezone."
+                }
+              />
             </p>
             <div className="grid grid-cols-2 gap-3">
               {frequency === 'year' || frequency === 'quarter' ? (
