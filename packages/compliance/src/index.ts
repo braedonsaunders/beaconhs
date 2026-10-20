@@ -17,3 +17,5 @@ export * from './schedule'
 export * from './skill-coverage'
 export * from './target-lock'
 export * from './target-retirement'
+
+export * from './history'

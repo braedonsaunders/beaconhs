@@ -8,6 +8,7 @@ import {
   type ComplianceTargetRef,
   complianceObligations,
   complianceStatus,
+  compliancePeriodSnapshots,
 } from '@beaconhs/db/schema'
 import type { Database } from '@beaconhs/db'
 import type { requireRequestContext } from '@/lib/auth'
@@ -154,6 +155,7 @@ export async function obligationOverview(
 }
 
 export type PersonStatusRow = {
+  hasHistory: boolean
   kind: ObligationKind
   obligationId: string
   title: string
@@ -192,6 +194,7 @@ export async function queryPersonCompliance(
       percent: complianceStatus.percent,
       targetRef: complianceObligations.targetRef,
       subjectRef: complianceStatus.subjectRef,
+      hasHistory: sql<boolean>`exists (select 1 from ${compliancePeriodSnapshots} where ${compliancePeriodSnapshots.tenantId}=${tenantId} and ${compliancePeriodSnapshots.obligationId}=${complianceObligations.id})`,
     })
     .from(complianceStatus)
     .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
@@ -219,6 +222,7 @@ export async function queryPersonCompliance(
       percent: Number(r.percent),
       targetRef: r.targetRef,
       subjectRef: r.subjectRef,
+      hasHistory: Boolean(r.hasHistory),
     }))
     .sort((a, b) => rank(a.status) - rank(b.status) || a.title.localeCompare(b.title))
 }

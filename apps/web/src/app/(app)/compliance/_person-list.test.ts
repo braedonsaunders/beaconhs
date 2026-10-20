@@ -17,6 +17,7 @@ const rows: PersonStatusRow[] = [
     percent: 0,
     targetRef: null,
     subjectRef: null,
+    hasHistory: false,
   },
   {
     kind: 'document',
@@ -32,6 +33,7 @@ const rows: PersonStatusRow[] = [
     percent: 100,
     targetRef: null,
     subjectRef: null,
+    hasHistory: false,
   },
   {
     kind: 'form',
@@ -47,6 +49,7 @@ const rows: PersonStatusRow[] = [
     percent: 0,
     targetRef: null,
     subjectRef: null,
+    hasHistory: false,
   },
 ]
 

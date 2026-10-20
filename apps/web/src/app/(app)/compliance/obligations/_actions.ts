@@ -22,6 +22,7 @@ import {
   lockComplianceAudienceTargets,
   lockComplianceTarget,
   materializeObligation,
+  discardOpenCompliancePeriods,
   resolveComplianceClock,
   skipQueuedComplianceDispatches,
   validateCronRecurrence,
@@ -215,6 +216,7 @@ async function lockObligation(tx: Database, tenantId: string, id: string) {
 }
 
 async function purgeMaterializedStatus(tx: Database, tenantId: string, id: string): Promise<void> {
+  await discardOpenCompliancePeriods(tx, tenantId, id)
   await tx
     .delete(complianceStatus)
     .where(and(eq(complianceStatus.tenantId, tenantId), eq(complianceStatus.obligationId, id)))

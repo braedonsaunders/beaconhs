@@ -5,14 +5,17 @@
 import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 import { CALENDAR_MONTHS, CALENDAR_WEEKDAYS, FREQUENCIES } from '@/components/recurrence'
 import { and, count, desc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm'
-import { complianceAudience, complianceObligations } from '@beaconhs/db/schema'
+import {
+  complianceAudience,
+  complianceObligations,
+  compliancePeriodSnapshots,
+} from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
 import {
   type AudienceItem,
   evaluateObligation,
   resolveComplianceClock,
   resolveFrequencyWindow,
-  type ComplianceClock,
 } from '@beaconhs/compliance'
 import type { ComplianceRecurrence } from '@beaconhs/db/schema'
 import type { ObligationKind } from './_meta'
@@ -163,24 +166,22 @@ async function getObligationWithAudience(ctx: Ctx, id: string) {
   })
 }
 
-export async function obligationCompliance(
-  ctx: Ctx,
-  id: string,
-  options: { previousPeriod?: boolean } = {},
-) {
+export async function obligationCompliance(ctx: Ctx, id: string) {
   const data = await getObligationWithAudience(ctx, id)
   if (!data) return null
   const evaluated = await ctx.db(async (tx) => {
-    const clock: ComplianceClock = await resolveComplianceClock(tx, ctx.tenantId)
+    const clock = await resolveComplianceClock(tx, ctx.tenantId)
     const journal = data.ob.sourceModule === 'journal' && Boolean(data.ob.recurrence.deadline)
-    if (journal && options.previousPeriod) {
-      const current = resolveFrequencyWindow(data.ob.recurrence, clock, data.ob.createdAt)
-      clock.periodAt = new Date(current.periodStartAt.getTime() - 1)
-    }
     const period = journal
       ? resolveFrequencyWindow(data.ob.recurrence, clock, data.ob.createdAt)
       : null
+    const [snapshot] = await tx
+      .select({ id: compliancePeriodSnapshots.id })
+      .from(compliancePeriodSnapshots)
+      .where(eq(compliancePeriodSnapshots.obligationId, id))
+      .limit(1)
     return {
+      hasHistory: Boolean(snapshot),
       result: await evaluateObligation(tx, ctx.tenantId, data.ob, data.audience, clock),
       period,
     }

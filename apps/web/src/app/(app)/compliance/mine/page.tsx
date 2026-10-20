@@ -310,6 +310,16 @@ export default async function MyCompliancePage({
                                         )
                                       }
                                     />
+                                    {r.hasHistory || (r.periodStart && r.periodEnd) ? (
+                                      <div>
+                                        <Link
+                                          className="text-xs text-teal-700 underline dark:text-teal-300"
+                                          href={`/compliance/obligations/${r.obligationId}/history?person=${person.id}`}
+                                        >
+                                          <GeneratedValue value="Compliance history" />
+                                        </Link>
+                                      </div>
+                                    ) : null}
                                   </TableCell>
                                   <TableCell>
                                     <StatusBadge status={r.status} />

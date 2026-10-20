@@ -16,6 +16,8 @@ import {
   complianceAudience,
   complianceObligations,
   complianceStatus,
+  compliancePeriodSnapshots,
+  auditLog,
   complianceDispatches,
   trainingCourses,
   trainingClasses,
@@ -26,11 +28,17 @@ import {
 } from '@beaconhs/db/schema'
 import {
   evaluateObligation,
+  evaluateComplianceHistory,
+  captureCompliancePeriod,
+  discardOpenCompliancePeriods,
   loadAudience,
   materializeObligation,
   materializeIdentityAudienceObligations,
   resolveObligationAudience,
 } from '@beaconhs/compliance'
+import { obligationCompliance } from './_data'
+import { queryPersonCompliance } from '../_hub'
+import { loadComplianceHistory } from './[id]/history/_data'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   addClassAttendee,
@@ -668,4 +676,361 @@ it('shows journal progress for the whole week, excludes drafts, and reviews the 
     )
     expect(early.rows).toEqual([])
   })
+})
+
+it('preserves ended-period targets and people while reconstructing older periods and allowing evidence corrections', async () => {
+  const id = randomUUID()
+  await ctx.db(async (tx) => {
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        id,
+        tenantId,
+        title: 'Weekly safety journals',
+        sourceModule: 'journal',
+        subjectKind: 'per_person',
+        recurrenceKind: 'frequency',
+        createdAt: new Date('2026-01-01'),
+        recurrence: {
+          kind: 'frequency',
+          frequency: 'week',
+          quantity: 5,
+          compliantPercentage: 80,
+          evidenceWindow: 'calendar',
+          deadline: { weekday: 7, time: '23:59' },
+        },
+      })
+      .returning()
+    await tx.insert(complianceAudience).values(
+      [alex, blair].map((entityKey) => ({
+        tenantId,
+        obligationId: id,
+        kind: 'person' as const,
+        entityKey,
+      })),
+    )
+    await tx.insert(journalEntries).values(
+      [12, 13, 14, 15].map((day) => ({
+        tenantId,
+        personId: alex,
+        reference: randomUUID(),
+        entryDate: `2026-10-${day}`,
+        status: 'submitted' as const,
+      })),
+    )
+    await materializeObligation(tx, tenantId, ob!, {
+      ...clock,
+      now: new Date('2026-10-16T18:00:00Z'),
+    })
+    const [updated] = await tx
+      .update(complianceObligations)
+      .set({ recurrence: { ...ob!.recurrence, quantity: 10, compliantPercentage: 100 } })
+      .where(eq(complianceObligations.id, id))
+      .returning()
+    await tx.delete(complianceAudience).where(eq(complianceAudience.obligationId, id))
+    await tx
+      .insert(complianceAudience)
+      .values({ tenantId, obligationId: id, kind: 'person', entityKey: blair })
+    await tx.update(people).set({ status: 'inactive', userId }).where(eq(people.id, alex))
+    await materializeObligation(tx, tenantId, updated!, clock)
+    const history = await evaluateComplianceHistory(
+      tx,
+      tenantId,
+      updated!,
+      [{ personId: blair, userId: null }],
+      clock,
+      3,
+    )
+    expect(
+      history.find((row) => row.personId === alex && row.periodStart === '2026-10-12'),
+    ).toMatchObject({ recorded: true, expected: 5, status: 'completed' })
+    expect(
+      history.find((row) => row.personId === blair && row.periodStart === '2026-10-05'),
+    ).toMatchObject({ recorded: false, expected: 10, status: 'overdue' })
+    expect(history.some((row) => row.personId === alex && row.periodStart === '2026-10-05')).toBe(
+      false,
+    )
+    const snapshots = await tx
+      .select()
+      .from(compliancePeriodSnapshots)
+      .where(eq(compliancePeriodSnapshots.obligationId, id))
+    expect(snapshots).toHaveLength(2)
+    const old = snapshots.find((row) => row.periodStart === '2026-10-12')!
+    expect(old.rule.recurrence.quantity).toBe(5)
+    await captureCompliancePeriod(
+      tx,
+      tenantId,
+      updated!,
+      { ...clock, periodAt: new Date('2026-10-13T16:00:00Z') },
+      [{ personId: blair, userId: null }],
+      [],
+    )
+    expect(
+      (
+        await tx
+          .select()
+          .from(compliancePeriodSnapshots)
+          .where(eq(compliancePeriodSnapshots.id, old.id))
+      )[0]?.rule,
+    ).toEqual(old.rule)
+    // Backfilled evidence updates the result, while the recorded target stays fixed.
+    await tx.insert(journalEntries).values({
+      tenantId,
+      personId: blair,
+      reference: randomUUID(),
+      entryDate: '2026-10-12',
+      status: 'submitted',
+    })
+    const corrected = await evaluateComplianceHistory(tx, tenantId, updated!, [], clock, 3)
+    expect(
+      corrected.find((row) => row.personId === blair && row.periodStart === '2026-10-12')?.count,
+    ).toBe(1)
+    expect(
+      (
+        await tx
+          .select()
+          .from(compliancePeriodSnapshots)
+          .where(eq(compliancePeriodSnapshots.obligationId, id))
+      ).find((row) => row.id === old.id)?.rule,
+    ).toEqual(old.rule)
+    const current = await tx
+      .select()
+      .from(complianceStatus)
+      .where(eq(complianceStatus.obligationId, id))
+    expect(current).toHaveLength(1)
+    expect(current[0]?.expected).toBe(10)
+    expect(current[0]?.periodStart).toBe('2026-10-19')
+  })
+  const self = await loadComplianceHistory(
+    { ...ctx, isSuperAdmin: false, permissions: new Set() },
+    id,
+    3,
+    blair,
+  )
+  expect(self?.personId).toBe(alex)
+  expect(self?.history.length).toBeGreaterThan(0)
+  expect(self?.history.every((row) => row.personId === alex)).toBe(true)
+  await withTenant(app.db, otherTenant, async (tx) => {
+    expect(
+      await tx
+        .select()
+        .from(compliancePeriodSnapshots)
+        .where(eq(compliancePeriodSnapshots.obligationId, id)),
+    ).toEqual([])
+  })
+  await ctx.db((tx) => tx.update(people).set({ status: 'active' }).where(eq(people.id, alex)))
+})
+
+it('reviews monthly journal periods without treating missing pre-activation months as failures', async () => {
+  await ctx.db(async (tx) => {
+    const id = randomUUID()
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        id,
+        tenantId,
+        title: 'Monthly journals',
+        sourceModule: 'journal',
+        subjectKind: 'per_person',
+        recurrenceKind: 'frequency',
+        createdAt: new Date('2026-08-15T12:00:00Z'),
+        recurrence: {
+          kind: 'frequency',
+          frequency: 'month',
+          quantity: 2,
+          evidenceWindow: 'calendar',
+          deadline: { day: 31, time: '23:59' },
+        },
+      })
+      .returning()
+    await tx
+      .insert(complianceAudience)
+      .values({ tenantId, obligationId: id, kind: 'person', entityKey: alex })
+    await tx.insert(journalEntries).values(
+      [1, 2].map((day) => ({
+        tenantId,
+        personId: alex,
+        reference: randomUUID(),
+        entryDate: `2026-09-0${day}`,
+        status: 'submitted' as const,
+      })),
+    )
+    await materializeObligation(tx, tenantId, ob!, {
+      ...clock,
+      now: new Date('2026-09-20T12:00:00Z'),
+    })
+    const history = await evaluateComplianceHistory(
+      tx,
+      tenantId,
+      ob!,
+      [{ personId: alex, userId }],
+      clock,
+      12,
+    )
+    expect(history).toHaveLength(2)
+    expect(history[0]).toMatchObject({
+      periodStart: '2026-09-01',
+      periodEnd: '2026-09-30',
+      count: 2,
+      expected: 2,
+      status: 'completed',
+      recorded: true,
+    })
+    expect(history[1]).toMatchObject({
+      periodStart: '2026-08-01',
+      periodEnd: '2026-08-31',
+      status: 'overdue',
+      recorded: false,
+    })
+    await expect(evaluateComplianceHistory(tx, tenantId, ob!, [], clock, 25)).rejects.toThrow(
+      '24 periods',
+    )
+    await tx.insert(auditLog).values([
+      {
+        tenantId,
+        entityType: 'compliance_obligation',
+        entityId: id,
+        action: 'update',
+        occurredAt: new Date('2026-09-10T12:00:00Z'),
+        before: { status: 'active' },
+        after: { status: 'paused' },
+      },
+      {
+        tenantId,
+        entityType: 'compliance_obligation',
+        entityId: id,
+        action: 'update',
+        occurredAt: new Date('2026-10-01T12:00:00Z'),
+        before: { status: 'paused' },
+        after: { status: 'active' },
+      },
+    ])
+    const activeOnly = await evaluateComplianceHistory(
+      tx,
+      tenantId,
+      ob!,
+      [{ personId: alex, userId }],
+      clock,
+      12,
+    )
+    expect(activeOnly).toHaveLength(1)
+    expect(activeOnly[0]?.periodStart).toBe('2026-08-01')
+    const deleted = await evaluateComplianceHistory(
+      tx,
+      tenantId,
+      { ...ob!, status: 'archived', deletedAt: new Date('2026-08-20T12:00:00Z') },
+      [{ personId: alex, userId }],
+      clock,
+      12,
+    )
+    expect(deleted).toEqual([])
+  })
+})
+
+it('uses the recorded training target for a prior calendar period after the assigned assessment changes', async () => {
+  const id = randomUUID()
+  await ctx.db(async (tx) => {
+    const oldType = randomUUID(),
+      newType = randomUUID()
+    await tx.insert(trainingAssessmentTypes).values([
+      { id: oldType, tenantId, name: 'Original monthly quiz' },
+      { id: newType, tenantId, name: 'Replacement monthly quiz' },
+    ])
+    await tx.insert(trainingAssessments).values({
+      tenantId,
+      typeId: oldType,
+      personId: alex,
+      status: 'submitted',
+      passed: true,
+      passingScore: 80,
+      completedAt: new Date('2026-09-15T12:00:00Z'),
+    })
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        id,
+        tenantId,
+        title: 'Monthly safety quiz',
+        sourceModule: 'training',
+        subjectKind: 'per_person',
+        recurrenceKind: 'frequency',
+        createdAt: new Date('2026-01-01'),
+        targetRef: { assessmentTypeId: oldType, trainingItemKind: 'assessment_type' },
+        recurrence: {
+          kind: 'frequency',
+          frequency: 'month',
+          evidenceWindow: 'calendar',
+          deadline: { day: 31, time: '23:59' },
+        },
+      })
+      .returning()
+    await tx
+      .insert(complianceAudience)
+      .values({ tenantId, obligationId: id, kind: 'person', entityKey: alex })
+    await materializeObligation(tx, tenantId, ob!, {
+      ...clock,
+      now: new Date('2026-09-20T12:00:00Z'),
+    })
+    const [updated] = await tx
+      .update(complianceObligations)
+      .set({ targetRef: { assessmentTypeId: newType, trainingItemKind: 'assessment_type' } })
+      .where(eq(complianceObligations.id, id))
+      .returning()
+    const history = await evaluateComplianceHistory(
+      tx,
+      tenantId,
+      updated!,
+      [{ personId: alex, userId }],
+      clock,
+      3,
+    )
+    expect(history[0]).toMatchObject({
+      periodStart: '2026-09-01',
+      status: 'completed',
+      recorded: true,
+      count: 1,
+      expected: 1,
+    })
+    expect(history[1]).toMatchObject({
+      periodStart: '2026-08-01',
+      status: 'overdue',
+      recorded: false,
+    })
+    await materializeObligation(tx, tenantId, updated!, clock)
+    const [rolling] = await tx
+      .update(complianceObligations)
+      .set({ recurrence: { kind: 'frequency', frequency: 'month', evidenceWindow: 'rolling' } })
+      .where(eq(complianceObligations.id, id))
+      .returning()
+    await discardOpenCompliancePeriods(tx, tenantId, id, clock.now)
+    await materializeObligation(tx, tenantId, rolling!, clock)
+    expect(
+      await tx
+        .select()
+        .from(compliancePeriodSnapshots)
+        .where(eq(compliancePeriodSnapshots.obligationId, id)),
+    ).toHaveLength(1)
+    const retained = await evaluateComplianceHistory(
+      tx,
+      tenantId,
+      rolling!,
+      [{ personId: alex, userId }],
+      clock,
+      3,
+    )
+    expect(retained).toHaveLength(1)
+    expect(retained[0]).toMatchObject({
+      periodStart: '2026-09-01',
+      status: 'completed',
+      recorded: true,
+    })
+    expect(
+      (await queryPersonCompliance(tx, tenantId, alex)).find((row) => row.obligationId === id)
+        ?.hasHistory,
+    ).toBe(true)
+  })
+  const view = await loadComplianceHistory(ctx, id, 3, alex)
+  expect(view?.supported).toBe(true)
+  expect(view?.history).toHaveLength(1)
+  expect((await obligationCompliance(ctx, id))?.hasHistory).toBe(true)
 })

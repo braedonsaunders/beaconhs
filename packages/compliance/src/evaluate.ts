@@ -138,9 +138,10 @@ export async function evaluateObligation(
   ob: Ob,
   audience: AudienceItem[],
   clock: ComplianceClock = { now: new Date(), timezone: 'UTC' },
+  resolvedAudience?: ResolvedMember[],
 ): Promise<EvalResult> {
   const today = complianceDate(clock)
-  const aud = () => resolveObligationAudience(tx, tenantId, audience)
+  const aud = () => resolvedAudience ?? resolveObligationAudience(tx, tenantId, audience)
   switch (ob.sourceModule) {
     case 'training':
     case 'cert_requirement':
@@ -473,6 +474,7 @@ async function evalDocument(
         eq(documentVersions.tenantId, tid),
         eq(documentVersions.documentId, ob.targetRef.documentId),
         isNotNull(documentVersions.publishedAt),
+        lte(documentVersions.publishedAt, window.evidenceEndAt ?? clock.now),
       ),
     )
     .orderBy(desc(documentVersions.version))
@@ -702,7 +704,9 @@ async function evalInspection(
       .select({
         tu: inspectionRecords.inspectorTenantUserId,
         c: sql<number>`count(*)::int`,
-        completedOn: sql<string | null>`max(${inspectionRecords.occurredAt})::date::text`,
+        completedOn: sql<
+          string | null
+        >`(max(${inspectionRecords.occurredAt}) at time zone ${clock.timezone})::date::text`,
       })
       .from(inspectionRecords)
       .where(

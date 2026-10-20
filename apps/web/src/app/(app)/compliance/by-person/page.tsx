@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { JournalProgress, JournalPeriod } from '../_journal-progress'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
@@ -193,6 +194,16 @@ export default async function ByPersonPage({
                           </TableCell>
                           <TableCell className="text-slate-900 dark:text-slate-100">
                             <GeneratedValue value={r.title} />
+                            {r.hasHistory || (r.periodStart && r.periodEnd) ? (
+                              <div>
+                                <Link
+                                  className="text-xs text-teal-700 underline dark:text-teal-300"
+                                  href={`/compliance/obligations/${r.obligationId}/history?person=${personId}`}
+                                >
+                                  <GeneratedValue value="Compliance history" />
+                                </Link>
+                              </div>
+                            ) : null}
                           </TableCell>
                           <TableCell>
                             <StatusBadge status={r.status} />

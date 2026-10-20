@@ -272,3 +272,23 @@ describe('completion windows across all frequencies', () => {
     expect(march.nextDueAt?.toISOString()).toBe('2026-03-31T21:00:00.000Z')
   })
 })
+
+it('bounds historical calendar date evidence at the requested period end', () => {
+  const window = resolveEvidenceEvaluationWindow(
+    {
+      kind: 'frequency',
+      frequency: 'month',
+      evidenceWindow: 'calendar',
+      deadline: { day: 31, time: '23:59' },
+    },
+    {
+      now: new Date('2026-10-20T12:00:00Z'),
+      periodAt: new Date('2026-09-15T12:00:00Z'),
+      timezone: 'America/Toronto',
+    },
+    new Date('2026-01-01'),
+  )
+  expect(window.evidenceEndOn).toBe('2026-09-30')
+  expect(evidenceInWindow('2026-09-30', window)).toBe(true)
+  expect(evidenceInWindow('2026-10-01', window)).toBe(false)
+})

@@ -569,9 +569,22 @@ A journal target such as **5 per week** counts submitted journals from Monday th
 1. Give each requirement a clear audience name, such as **Foremen — Weekly journals**.
 2. Set **Quantity per period**, **Compliant threshold (%)** and **Due by**. A threshold of 80% with a target of 5 means a minimum of 4; the page shows that minimum separately.
 3. Open the requirement to see its dates, deadline, each person’s **2 / 5 submitted** progress and **Last journal** date. **Submission progress** averages individual progress; extra journals from one person do not cover another person’s missing work.
-4. Choose **Previous period** to check last week separately from the current week. Past periods use the current audience and target. Choose **Current period** to return.
+4. Choose **Compliance history** to review previous periods and filter by employee.
 
-**Mine** and **By person** also show journal counts and period dates. In **Overview**, journal progress can rise during the week even before anyone has met the full target.`,
+**Mine** and **By person** also show journal counts and period dates. In **Overview**, journal progress can rise during the week even before anyone has met the full target.
+
+## Review compliance history
+
+1. Open a recurring requirement and choose **Compliance history**. You can also use that link beside a requirement in **By person** or **Mine**.
+2. Choose **Completed periods**: 3, 6, 12 or 24. The default is 12. Only periods after the requirement was created are included.
+3. Managers can select an employee, search people or period dates, and filter **Met** or **Unmet**. Employees see only their own history. Use the page controls to see more results.
+4. Read each period’s dates, result, submitted or completed count, target and deadline. **Targets met** compares completed targets with all displayed person-period targets.
+
+**Recorded rule** keeps the last rule and assigned people captured during that period, even after later target or group changes. **Reconstructed** means no saved rule exists for that older period, so the current rule and audience are used. Evidence is read again: later corrections can change old counts. History reads never send reminders or replace the current scoreboard.
+
+History applies to separate daily, weekly, monthly, quarterly, yearly and cron periods. Rolling validity, continuous expiry and one-time requirements remain in current compliance; they do not have separate calendar targets.
+
+Saved completed periods remain available after a requirement changes to rolling validity or a one-time deadline. Periods that ended while the requirement was paused or deleted do not count as missed targets.`,
   },
   {
     slug: 'builder',

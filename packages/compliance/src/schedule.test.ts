@@ -181,3 +181,33 @@ describe('calendar quantity periods', () => {
     expect(w.dueAt.toISOString()).toBe('2026-11-02T04:59:00.000Z')
   })
 })
+
+describe('historical schedule anchors', () => {
+  it('resolves the requested frequency period independently of the current active period', () => {
+    const window = resolveFrequencyWindow(
+      { kind: 'frequency', frequency: 'week', cron: '0 8 * * 1' },
+      {
+        now: new Date('2026-10-20T16:00:00Z'),
+        periodAt: new Date('2026-10-12T04:00:00Z'),
+        timezone: toronto,
+      },
+      new Date('2026-01-01'),
+    )
+    expect(window.periodStart).toBe('2026-10-12')
+    expect(window.periodEnd).toBe('2026-10-18')
+    expect(window.dueAt.toISOString()).toBe('2026-10-12T12:00:00.000Z')
+  })
+  it('resolves exact historical cron intervals without jumping back to the current fire', () => {
+    const window = resolveCronWindow(
+      { kind: 'cron', cron: '0 8,16 * * *' },
+      {
+        now: new Date('2026-10-20T16:00:00Z'),
+        periodAt: new Date('2026-10-18T12:00:00Z'),
+        timezone: toronto,
+      },
+      new Date('2026-01-01'),
+    )
+    expect(window.scheduledAt.toISOString()).toBe('2026-10-18T12:00:00.000Z')
+    expect(window.periodEndAt.toISOString()).toBe('2026-10-18T20:00:00.000Z')
+  })
+})

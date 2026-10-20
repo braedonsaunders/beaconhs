@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
+import { supportsComplianceHistory } from '@beaconhs/compliance'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
@@ -64,8 +65,7 @@ export default async function ObligationDetailPage({
   const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
-  const previousPeriod = pickString(sp.period) === 'previous'
-  const data = await obligationCompliance(ctx, id, { previousPeriod })
+  const data = await obligationCompliance(ctx, id)
   if (!data) notFound()
   const { obligation: ob, audience, result, period } = data
   const journal = ob.sourceModule === 'journal'
@@ -235,42 +235,27 @@ export default async function ObligationDetailPage({
           }
         />
 
+        {supportsComplianceHistory(ob) || data.hasHistory ? (
+          <Link
+            href={`${basePath}/history`}
+            className="text-sm text-teal-700 underline dark:text-teal-300"
+          >
+            <GeneratedValue value="Compliance history" />
+          </Link>
+        ) : null}
+
         {journal && period ? (
           <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="space-y-1">
                 <p className="text-sm font-medium">
-                  <GeneratedValue value={previousPeriod ? 'Previous period' : 'Current period'} />
+                  <GeneratedValue value="Current period" />
                 </p>
                 <JournalPeriod
                   start={period.periodStart}
                   end={period.periodEnd}
                   locale={ctx.locale}
                 />
-              </div>
-              <div className="flex gap-3 text-sm">
-                <Link
-                  aria-current={!previousPeriod ? 'page' : undefined}
-                  className="text-teal-700 underline dark:text-teal-300"
-                  href={mergeHref(basePath, sp, {
-                    period: undefined,
-                    page: undefined,
-                    status: undefined,
-                  })}
-                >
-                  <GeneratedValue value="Current period" />
-                </Link>
-                <Link
-                  aria-current={previousPeriod ? 'page' : undefined}
-                  className="text-teal-700 underline dark:text-teal-300"
-                  href={mergeHref(basePath, sp, {
-                    period: 'previous',
-                    page: undefined,
-                    status: undefined,
-                  })}
-                >
-                  <GeneratedValue value="Previous period" />
-                </Link>
               </div>
             </div>
             <p className="text-sm">
@@ -288,11 +273,6 @@ export default async function ObligationDetailPage({
             <p className="text-xs text-slate-500">
               <GeneratedValue value="Submitted journals count, including archived entries. Drafts do not count." />
             </p>
-            {previousPeriod ? (
-              <p className="text-xs text-slate-500">
-                <GeneratedValue value="Past periods use the current audience and target." />
-              </p>
-            ) : null}
           </div>
         ) : null}
         <SummaryStrip

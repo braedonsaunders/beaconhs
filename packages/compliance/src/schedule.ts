@@ -257,7 +257,7 @@ export function resolveCronWindow(
     new Date(activeFrom.getTime() - 1),
     clock.timezone,
   )
-  const latest = previousCronOccurrence(expression, clock.now, clock.timezone)
+  const latest = previousCronOccurrence(expression, clock.periodAt ?? clock.now, clock.timezone)
   const scheduledAt = latest.getTime() >= firstEligible.getTime() ? latest : firstEligible
   const started = scheduledAt.getTime() <= clock.now.getTime()
   const nextScheduledAt = nextCronOccurrence(expression, scheduledAt, clock.timezone)
@@ -331,7 +331,10 @@ export function resolveFrequencyWindow(
       scheduledAt: window.periodStartAt,
     }
   }
-  const currentStart = periodStartFor(calendarDate(clock.now, clock.timezone), frequency)
+  const currentStart = periodStartFor(
+    calendarDate(clock.periodAt ?? clock.now, clock.timezone),
+    frequency,
+  )
   const current = periodWindow(currentStart, frequency, recurrence, clock.timezone)
   const previous = periodWindow(
     shiftPeriod(currentStart, frequency, -1),
@@ -350,7 +353,7 @@ export function resolveFrequencyWindow(
     (window) => window.scheduledAt.getTime() >= activeFrom.getTime(),
   )
   const started = eligible.filter((window) => window.scheduledAt.getTime() <= clock.now.getTime())
-  const selected = started.at(-1) ?? eligible[0]
+  const selected = clock.periodAt ? current : (started.at(-1) ?? eligible[0])
   if (!selected) throw new Error('The obligation has no valid scheduled period')
 
   const nextStart = shiftPeriod(selected.start, frequency, 1)

@@ -13,7 +13,8 @@ import {
   complianceStatus,
   tenantNotificationPolicy,
 } from '@beaconhs/db/schema'
-import { type AudienceItem } from './audience'
+import { type AudienceItem, resolveObligationAudience } from './audience'
+import { captureCompliancePeriod, supportsComplianceHistory } from './history'
 import {
   type ComplianceObligation,
   type EvalResult,
@@ -437,7 +438,13 @@ export async function materializeObligation(
 
   const clock = await resolveComplianceClock(tx, tenantId, options)
   const audience = await loadAudience(tx, tenantId, current.id)
-  const result = await evaluateObligation(tx, tenantId, current, audience, clock)
+  const members = supportsComplianceHistory(current)
+    ? await resolveObligationAudience(tx, tenantId, audience)
+    : undefined
+  const result = members
+    ? await evaluateObligation(tx, tenantId, current, audience, clock, members)
+    : await evaluateObligation(tx, tenantId, current, audience, clock)
+  if (members) await captureCompliancePeriod(tx, tenantId, current, clock, members, result.rows)
 
   const now = clock.now
   const keys = result.rows.map((r) => r.key)

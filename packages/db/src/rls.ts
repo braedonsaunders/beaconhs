@@ -304,6 +304,7 @@ export const TENANT_SCOPED_TABLES = [
   'compliance_audience',
   'compliance_dispatches',
   'compliance_status',
+  'compliance_period_snapshots',
   // Generic admin-managed data sources — binding substrate for data-bound app
   // elements (lookup, cascading dropdowns, data-table, KPI/chart).
   'data_sources',

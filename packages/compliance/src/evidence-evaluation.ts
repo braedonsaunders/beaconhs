@@ -71,7 +71,8 @@ export function resolveEvidenceEvaluationWindow(
       evidenceStartAt: window.periodStartAt,
       evidenceEndAt: new Date(Math.min(window.periodEndAt.getTime(), clock.now.getTime() + 1)),
       evidenceStartOn: window.periodStart,
-      evidenceEndOn: complianceDate(clock),
+      evidenceEndOn:
+        window.periodEnd < complianceDate(clock) ? window.periodEnd : complianceDate(clock),
       periodStart: window.periodStart,
       periodEnd: window.periodEnd,
       dueOn: window.dueOn,

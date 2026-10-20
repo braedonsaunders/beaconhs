@@ -17,6 +17,11 @@ vi.mock('./evaluate', async (importOriginal) => ({
   evaluateObligation,
 }))
 
+vi.mock('./history', () => ({
+  supportsComplianceHistory: () => false,
+  captureCompliancePeriod: vi.fn(),
+}))
+
 import { actionableComplianceTransitions, materializeObligation } from './materialize'
 
 const TENANT_ID = '00000000-0000-4000-8000-000000000001'

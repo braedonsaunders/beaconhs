@@ -74,3 +74,5 @@ export * from './custom-fields'
 export * from './reference-counters'
 export * from './walkthroughs'
 export * from './domain-events'
+
+export * from './compliance-periods'

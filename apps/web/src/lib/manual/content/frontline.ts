@@ -791,7 +791,9 @@ Opening the same app from the general Builder gallery creates an on-demand entry
 - Recurring items come back on schedule — a monthly item reappears every month. That is normal.
 - If an item looks wrong (not your job, wrong site), tell your supervisor instead of ignoring it.
 
-Journal requirements show **2 / 5 submitted** and the period dates. A weekly target gives you Monday through Sunday, with a Sunday **23:59** deadline unless your manager chose another deadline. A draft does not count. **Minimum met** means you have reached the rule’s accepted minimum even if the displayed target is higher. Supervisors can open the requirement and use **Previous period** to check last week.`,
+Journal requirements show **2 / 5 submitted** and the period dates. A weekly target gives you Monday through Sunday, with a Sunday **23:59** deadline unless your manager chose another deadline. A draft does not count. **Minimum met** means you have reached the rule’s accepted minimum even if the displayed target is higher. Choose **Compliance history** beside a recurring requirement to see your results across 3, 6, 12 or 24 completed periods. You see only your own history. Each row shows the period, result, count, target and deadline. **Recorded rule** keeps the rule and assigned people from that period; **Reconstructed** uses the current rule for older periods without a saved record. Later evidence corrections can change old counts.
+
+Saved completed periods remain available after a requirement changes to rolling validity or a one-time deadline. Periods that ended while the requirement was paused or deleted do not count as missed targets.`,
   },
   {
     slug: 'feed',

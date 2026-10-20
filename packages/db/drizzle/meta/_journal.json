@@ -526,6 +526,13 @@
       "when": 1792534006232,
       "tag": "0075_journal_calendar_deadlines",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1792536054020,
+      "tag": "0076_compliance_period_snapshots",
+      "breakpoints": true
     }
   ]
 }
