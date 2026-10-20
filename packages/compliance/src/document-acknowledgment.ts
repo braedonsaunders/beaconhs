@@ -51,7 +51,7 @@ export async function currentDocumentAcknowledgment(
     if (obligation.recurrence.kind !== 'frequency' && obligation.recurrence.kind !== 'cron')
       continue
     const audience = await loadAudience(tx, tenantId, obligation.id)
-    const members = await resolveObligationAudience(tx, tenantId, audience)
+    const members = await resolveObligationAudience(tx, tenantId, audience, obligation.workerType)
     if (!members.some((member) => member.personId === personId)) continue
     const window = resolveEvidenceEvaluationWindow(
       obligation.recurrence,

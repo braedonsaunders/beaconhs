@@ -37,6 +37,7 @@ function obligation(values: Partial<ComplianceObligation> = {}): ComplianceOblig
     subjectKind: 'per_person',
     title: 'Current requirement',
     notes: null,
+    workerType: 'all',
     status: 'active',
     targetRef: { documentId: '00000000-0000-4000-8000-000000000010' },
     recurrence: { kind: 'one_time' },

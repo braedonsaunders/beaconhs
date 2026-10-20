@@ -21,6 +21,7 @@ import {
   notInArray,
   sql,
 } from 'drizzle-orm'
+import { peopleWorkerTypeWhere } from '@beaconhs/db'
 import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
@@ -141,7 +142,8 @@ export async function evaluateObligation(
   resolvedAudience?: ResolvedMember[],
 ): Promise<EvalResult> {
   const today = complianceDate(clock)
-  const aud = () => resolvedAudience ?? resolveObligationAudience(tx, tenantId, audience)
+  const aud = () =>
+    resolvedAudience ?? resolveObligationAudience(tx, tenantId, audience, ob.workerType)
   switch (ob.sourceModule) {
     case 'training':
     case 'cert_requirement':
@@ -1038,7 +1040,14 @@ async function evalJobTitle(tx: Tx, tid: string, ob: Ob): Promise<EvalResult> {
         eq(personTitleAssignments.titleId, titleId),
       ),
     )
-    .where(and(eq(people.tenantId, tid), eq(people.status, 'active'), isNull(people.deletedAt)))
+    .where(
+      and(
+        eq(people.tenantId, tid),
+        eq(people.status, 'active'),
+        isNull(people.deletedAt),
+        peopleWorkerTypeWhere(ob.workerType),
+      ),
+    )
   if (holders.length === 0) return empty()
   const taskIds = tasks.map((t) => t.id)
   const personIds = holders.map((h) => h.id)

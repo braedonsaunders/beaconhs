@@ -1,3 +1,4 @@
+import { peopleWorkerTypeWhere } from '@beaconhs/db'
 import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -72,7 +73,7 @@ export default async function PeoplePage({
     if (departmentFilter) baseFilters.push(eq(people.departmentId, departmentFilter))
     if (locationFilter) baseFilters.push(eq(people.locationOrgUnitId, locationFilter))
     if (personTypeFilter === 'employee' || personTypeFilter === 'contractor')
-      baseFilters.push(sql`${people.metadata}->>'personType' = ${personTypeFilter}`)
+      baseFilters.push(peopleWorkerTypeWhere(personTypeFilter)!)
     const filters = [...baseFilters]
     if (statusFilter !== 'all') {
       filters.push(eq(people.status, statusFilter))

@@ -33,6 +33,7 @@ function obligation(
     subjectKind: 'per_person',
     title: 'Maintained requirement',
     notes: null,
+    workerType: 'all',
     status: 'active',
     targetRef:
       sourceModule === 'document'

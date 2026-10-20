@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   complianceAudience,
@@ -6,6 +6,7 @@ import {
   complianceStatus,
   people,
   personGroupMemberships,
+  personTitleAssignments,
   roleAssignments,
   roles,
   tenantUsers,
@@ -181,7 +182,7 @@ export async function materializeIdentityAudienceObligations(
     )
   }
 
-  const [currentRows, priorRows] = await Promise.all([
+  const [currentRows, priorRows, titleRows] = await Promise.all([
     tx
       .selectDistinct({ id: complianceObligations.id })
       .from(complianceObligations)
@@ -203,13 +204,6 @@ export async function materializeIdentityAudienceObligations(
           eq(complianceStatus.obligationId, complianceObligations.id),
         ),
       )
-      .innerJoin(
-        complianceAudience,
-        and(
-          eq(complianceAudience.tenantId, complianceObligations.tenantId),
-          eq(complianceAudience.obligationId, complianceObligations.id),
-        ),
-      )
       .where(
         and(
           activeObligation,
@@ -217,11 +211,28 @@ export async function materializeIdentityAudienceObligations(
           inArray(complianceStatus.personId, personIds),
         ),
       ),
+    tx
+      .selectDistinct({ id: complianceObligations.id })
+      .from(complianceObligations)
+      .innerJoin(
+        personTitleAssignments,
+        and(
+          eq(personTitleAssignments.tenantId, complianceObligations.tenantId),
+          sql`${complianceObligations.targetRef}->>'jobTitleId' = ${personTitleAssignments.titleId}::text`,
+        ),
+      )
+      .where(
+        and(
+          activeObligation,
+          eq(complianceObligations.sourceModule, 'job_title_signoff'),
+          inArray(personTitleAssignments.personId, personIds),
+        ),
+      ),
   ])
 
-  const obligationIds = [...new Set([...currentRows, ...priorRows].map((row) => row.id))].sort(
-    (a, b) => a.localeCompare(b),
-  )
+  const obligationIds = [
+    ...new Set([...currentRows, ...priorRows, ...titleRows].map((row) => row.id)),
+  ].sort((a, b) => a.localeCompare(b))
   if (obligationIds.length === 0) return { personIds, obligationIds: [] }
 
   const obligations = await tx

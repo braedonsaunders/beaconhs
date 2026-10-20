@@ -439,7 +439,7 @@ export async function materializeObligation(
   const clock = await resolveComplianceClock(tx, tenantId, options)
   const audience = await loadAudience(tx, tenantId, current.id)
   const members = supportsComplianceHistory(current)
-    ? await resolveObligationAudience(tx, tenantId, audience)
+    ? await resolveObligationAudience(tx, tenantId, audience, current.workerType)
     : undefined
   const result = members
     ? await evaluateObligation(tx, tenantId, current, audience, clock, members)

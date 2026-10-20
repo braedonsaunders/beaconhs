@@ -294,6 +294,7 @@ export async function createObligation(rawInput: ObligationInput): Promise<Oblig
           subjectKind: meta.subjectKind as never,
           title: input.title.trim() || meta.label,
           notes: input.notes ?? null,
+          workerType: input.workerType,
           status: 'active',
           targetRef: ref,
           recurrence,
@@ -321,6 +322,7 @@ export async function createObligation(rawInput: ObligationInput): Promise<Oblig
         summary: `Created ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
         after: {
           title: row.title,
+          workerType: row.workerType,
           targetRef: row.targetRef,
           recurrence: row.recurrence,
           audience: audienceRows,
@@ -395,17 +397,19 @@ export async function updateObligation(
         )
       const semanticConfigChanged = obligationSemanticConfigChanged(
         {
+          workerType: existing.workerType,
           targetRef: existing.targetRef,
           recurrence: existing.recurrence,
           audience: previousAudience,
         },
-        { targetRef: ref, recurrence, audience: audienceRows },
+        { targetRef: ref, recurrence, audience: audienceRows, workerType: input.workerType },
       )
       const [updated] = await tx
         .update(complianceObligations)
         .set({
           title: input.title.trim() || meta.label,
           notes: input.notes ?? null,
+          workerType: input.workerType,
           targetRef: ref,
           recurrence,
           recurrenceKind: recurrenceKind as never,
@@ -465,12 +469,14 @@ export async function updateObligation(
         summary: `Updated ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
         before: {
           title: existing.title,
+          workerType: existing.workerType,
           targetRef: existing.targetRef,
           recurrence: existing.recurrence,
           audience: previousAudience,
         },
         after: {
           title: updated.title,
+          workerType: updated.workerType,
           targetRef: updated.targetRef,
           recurrence: updated.recurrence,
           audience: audienceRows,

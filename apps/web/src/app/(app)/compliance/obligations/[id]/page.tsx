@@ -88,7 +88,14 @@ export default async function ObligationDetailPage({
         : `${includedAudience.length} audience target${includedAudience.length === 1 ? '' : 's'}`
 
   const exclusions = audience.filter((row) => row.excluded).length
-  const audienceLabel = `${audienceLabelBase}${exclusions ? ` · ${exclusions} excluded target(s)` : ''}`
+  const workerTypeLabel = tGeneratedValue(
+    ob.workerType === 'employee'
+      ? 'Employees'
+      : ob.workerType === 'contractor'
+        ? 'Contractors'
+        : 'All worker types',
+  )
+  const audienceLabel = `${workerTypeLabel} · ${audienceLabelBase}${exclusions ? ` · ${exclusions} excluded target(s)` : ''}`
 
   const canManage = can(ctx, 'compliance.manage')
   // Only kinds the unified form can author are editable (rules out future
@@ -177,6 +184,7 @@ export default async function ObligationDetailPage({
         id: ob.id,
         title: ob.title,
         notes: ob.notes,
+        workerType: ob.workerType,
         audience: initialAudience,
         recurrence: recurrenceValueFromStored(ob.recurrence),
         targetRef: ob.targetRef ?? {},
@@ -192,7 +200,11 @@ export default async function ObligationDetailPage({
           title={tGeneratedValue(ob.title)}
           subtitle={tGeneratedValue(
             `${kindLabel(ob.sourceModule)} · ${cadenceLabel(ob.recurrence, tGeneratedValue)}${
-              ob.subjectKind === 'per_person' ? ` · ${audienceLabel}` : ''
+              ob.subjectKind === 'per_person'
+                ? ` · ${audienceLabel}`
+                : ob.subjectKind === 'per_task'
+                  ? ` · ${workerTypeLabel}`
+                  : ''
             }`,
           )}
           actions={

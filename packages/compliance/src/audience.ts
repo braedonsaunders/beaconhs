@@ -9,6 +9,7 @@
 // compliance status; the worker needs userId for notifications.
 
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { peopleWorkerTypeWhere } from '@beaconhs/db'
 import type { Database } from '@beaconhs/db'
 import {
   people,
@@ -35,11 +36,13 @@ export async function resolveObligationAudience(
   tx: Database,
   tenantId: string,
   audience: AudienceItem[],
+  workerType: 'all' | 'employee' | 'contractor' = 'all',
 ): Promise<ResolvedMember[]> {
   const included = await resolveAudienceUnion(
     tx,
     tenantId,
     audience.filter((row) => !row.excluded),
+    workerType,
   )
   if (!included.length || !audience.some((row) => row.excluded)) return included
   const excluded = new Set(
@@ -48,6 +51,7 @@ export async function resolveObligationAudience(
         tx,
         tenantId,
         audience.filter((row) => row.excluded),
+        workerType,
       )
     ).map((row) => row.personId),
   )
@@ -58,6 +62,7 @@ async function resolveAudienceUnion(
   tx: Database,
   tenantId: string,
   audience: AudienceItem[],
+  workerType: 'all' | 'employee' | 'contractor' = 'all',
 ): Promise<ResolvedMember[]> {
   if (audience.length === 0) return []
   const byId = new Map<string, string | null>()
@@ -69,6 +74,7 @@ async function resolveAudienceUnion(
     eq(people.tenantId, tenantId),
     eq(people.status, 'active'),
     isNull(people.deletedAt),
+    peopleWorkerTypeWhere(workerType),
   )
 
   if (audience.some((a) => a.kind === 'everyone')) {

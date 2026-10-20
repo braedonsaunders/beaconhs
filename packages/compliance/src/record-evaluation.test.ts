@@ -16,6 +16,7 @@ function obligation(sourceModule: 'equipment_inspection' | 'ppe_inspection'): Co
     subjectKind: 'per_record',
     title: 'Inspection policy',
     notes: null,
+    workerType: 'all',
     status: 'active',
     targetRef:
       sourceModule === 'equipment_inspection'

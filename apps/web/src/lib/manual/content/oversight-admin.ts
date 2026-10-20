@@ -542,7 +542,9 @@ Schedules use the compliance timezone under **Admin** → **Notifications**. Jou
 
 ## Audience exclusions and training validity
 
-In the obligation drawer, build **Audience** first. Then use **Exclude from audience** to remove a person, group, department, crew, role, trade, or site. Exclusions always win. For example, include a **Group**, then exclude one **Person** to require everyone in that group except that person. Excluded people do not receive that obligation's task or compliance alerts.
+In the obligation drawer, choose **Worker type**: **Employees**, **Contractors**, or **All worker types**. New people-based obligations start with **Employees**. The selection uses the classification on [People](/people). **All worker types** also includes unclassified people. Equipment and PPE policies track items and do not use this filter. Job-title sign-offs apply it to the people holding the title.
+
+Build **Audience** next. Then use **Exclude from audience** to remove a person, group, department, crew, role, trade, or site. Exclusions always win. For example, include a **Group**, then exclude one **Person** to require everyone in that group except that person. The worker type limits every included group and individual. For example, **Employees** with **Everyone** means all active employees. Changing the worker type refreshes current results and retires unsent alerts for the previous audience. Recorded past periods keep their saved roster; reconstructed history uses the current selection. Excluded people do not receive that obligation's task or compliance alerts.
 
 For recurring training, choose **Completion window** → **Rolling period since completion**. **Yearly** means a successful completion within the previous 12 months. A matching passed quiz counts even if it was completed outside that assignment. Each person's next due date follows their own completion date. Failed, deleted, future, or expired evidence does not count. Use **Calendar schedule** only when a fresh completion is required in each calendar period. Document acknowledgements and activity schedules keep their calendar periods.
 

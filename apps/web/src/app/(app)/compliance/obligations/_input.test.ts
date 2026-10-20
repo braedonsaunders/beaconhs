@@ -92,3 +92,25 @@ it('preserves independent include and exclude targets, and rejects rolling activ
     ).ok,
   ).toBe(false)
 })
+
+it('defaults new people obligations to employees and validates worker-type selections', () => {
+  expect(parseObligationInput(validInput())).toEqual({
+    ok: true,
+    value: expect.objectContaining({ workerType: 'employee' }),
+  })
+  for (const workerType of ['employee', 'contractor', 'all'] as const)
+    expect(parseObligationInput(validInput({ workerType }))).toEqual({
+      ok: true,
+      value: expect.objectContaining({ workerType }),
+    })
+  expect(parseObligationInput({ ...validInput(), workerType: 'visitor' }).ok).toBe(false)
+  expect(
+    parseObligationInput(
+      validInput({
+        kind: 'equipment_inspection',
+        equipmentTypeId: '10000000-0000-4000-8000-000000000003',
+        audience: [],
+      }),
+    ),
+  ).toEqual({ ok: true, value: expect.objectContaining({ workerType: 'all' }) })
+})

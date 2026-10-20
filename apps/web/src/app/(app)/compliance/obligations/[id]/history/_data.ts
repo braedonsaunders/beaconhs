@@ -49,6 +49,7 @@ export async function loadComplianceHistory(
       tx,
       ctx.tenantId,
       await loadAudience(tx, ctx.tenantId, id),
+      ob.workerType,
     )
     const history = await evaluateComplianceHistory(
       tx,

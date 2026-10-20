@@ -4,6 +4,7 @@ import type { ComplianceRecurrence, ComplianceTargetRef } from '@beaconhs/db/sch
 type AudienceTarget = { kind: string; entityKey: string; excluded?: boolean }
 
 export type ObligationSemanticConfig = {
+  workerType?: 'all' | 'employee' | 'contractor'
   targetRef: ComplianceTargetRef
   recurrence: ComplianceRecurrence
   audience: readonly AudienceTarget[]
@@ -37,6 +38,7 @@ export function obligationSemanticConfigChanged(
   next: ObligationSemanticConfig,
 ): boolean {
   return (
+    (previous.workerType ?? 'all') !== (next.workerType ?? 'all') ||
     !isDeepStrictEqual(asPersistedJson(previous.targetRef), asPersistedJson(next.targetRef)) ||
     !isDeepStrictEqual(asPersistedJson(previous.recurrence), asPersistedJson(next.recurrence)) ||
     !isDeepStrictEqual(canonicalAudience(previous.audience), canonicalAudience(next.audience))

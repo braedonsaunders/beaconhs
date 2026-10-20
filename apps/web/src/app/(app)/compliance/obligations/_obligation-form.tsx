@@ -57,6 +57,7 @@ export type ObligationFormInitial = {
   id: string
   title: string
   notes: string | null
+  workerType: 'all' | 'employee' | 'contractor'
   audience: AudienceItem[]
   recurrence: RecurrenceValue
   targetRef: ComplianceTargetRef
@@ -119,6 +120,9 @@ export function ObligationForm({
   const [jobTitleId, setJobTitleId] = useState(ref.jobTitleId ?? '')
 
   const meta = KIND_META[kind]
+  const [workerType, setWorkerType] = useState<'all' | 'employee' | 'contractor'>(
+    initial?.workerType ?? 'employee',
+  )
   const [audience, setAudience] = useState<AudienceItem[]>(initial?.audience ?? [])
   const [pendingType, setPendingType] = useState<AudienceType>(meta.audienceTypes[0] ?? 'everyone')
   const [pendingValue, setPendingValue] = useState('')
@@ -151,6 +155,7 @@ export function ObligationForm({
       title: title.trim(),
       notes: notes.trim() || null,
       audience: meta.audience ? audience : [],
+      workerType: meta.subjectKind === 'per_record' ? 'all' : workerType,
       recurrence,
       inspectionTypeId: kind === 'inspection' ? inspectionTypeId : undefined,
       documentId: kind === 'document' ? documentId : undefined,
@@ -416,6 +421,28 @@ export function ObligationForm({
           ) : null
         }
       />
+
+      {meta.subjectKind !== 'per_record' && (
+        <Card>
+          <CardContent className="space-y-1.5 pt-6">
+            <Label htmlFor="ob-worker-type">
+              <GeneratedValue value="Worker type" />
+            </Label>
+            <Select
+              id="ob-worker-type"
+              value={workerType}
+              onChange={(e) => setWorkerType(e.target.value as typeof workerType)}
+            >
+              <option value="employee">{tGeneratedValue('Employees')}</option>
+              <option value="contractor">{tGeneratedValue('Contractors')}</option>
+              <option value="all">{tGeneratedValue('All worker types')}</option>
+            </Select>
+            <p className="text-xs text-slate-500">
+              <GeneratedValue value="Applies within the selected audience. Employees and Contractors use the classification on People; All worker types also includes unclassified people. Exclusions always win." />
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <GeneratedValue
         value={

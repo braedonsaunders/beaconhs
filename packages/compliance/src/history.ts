@@ -83,6 +83,7 @@ export async function captureCompliancePeriod(
   const labels = new Map(rows.map((row) => [row.personId, row.label]))
   const rule: CompliancePeriodRule = {
     title: ob.title,
+    workerType: ob.workerType,
     sourceModule: ob.sourceModule,
     subjectKind: ob.subjectKind,
     recurrence: ob.recurrence,

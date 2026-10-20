@@ -143,6 +143,9 @@ export const complianceObligations = pgTable(
     subjectKind: complianceSubjectKind('subject_kind').notNull(),
     title: text('title').notNull(),
     notes: text('notes'),
+    workerType: text('worker_type', { enum: ['all', 'employee', 'contractor'] })
+      .default('all')
+      .notNull(),
     status: complianceObligationStatus('status').default('active').notNull(),
     targetRef: jsonb('target_ref').$type<ComplianceTargetRef>().default({}).notNull(),
     recurrence: jsonb('recurrence').$type<ComplianceRecurrence>().notNull(),
@@ -159,6 +162,10 @@ export const complianceObligations = pgTable(
     ...softDelete,
   },
   (t) => ({
+    workerTypeCheck: check(
+      'compliance_obligations_worker_type_ck',
+      sql`${t.workerType} in ('all', 'employee', 'contractor')`,
+    ),
     tenantIdx: index('compliance_obligations_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('compliance_obligations_tenant_id_id_ux').on(t.tenantId, t.id),
     createdByIdx: index('compliance_obligations_created_by_idx').on(

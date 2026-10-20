@@ -20,6 +20,7 @@ export type CompliancePeriodRule = Pick<
   typeof complianceObligations.$inferSelect,
   'title' | 'sourceModule' | 'subjectKind' | 'recurrence' | 'targetRef'
 > & {
+  workerType?: (typeof complianceObligations.$inferSelect)['workerType']
   createdAt: string
   members: { personId: string; userId: string | null; label: string }[]
 }

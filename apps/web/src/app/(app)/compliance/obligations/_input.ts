@@ -48,6 +48,7 @@ const obligationInputSchema = z
     kind: z.enum(OBLIGATION_KINDS),
     title: z.string().trim().max(500),
     notes: z.string().trim().max(20_000).nullable().optional(),
+    workerType: z.enum(['employee', 'contractor', 'all']).default('employee'),
     audience: z
       .array(
         z
@@ -125,5 +126,12 @@ export function parseObligationInput(raw: unknown): ObligationInputParseResult {
       error: 'Fixed deadlines require a recurring calendar schedule',
     }
 
-  return { ok: true, value: { ...input, audience: normalizedAudience } }
+  return {
+    ok: true,
+    value: {
+      ...input,
+      workerType: meta.subjectKind === 'per_record' ? 'all' : input.workerType,
+      audience: normalizedAudience,
+    },
+  }
 }

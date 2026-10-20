@@ -533,6 +533,13 @@
       "when": 1792536054020,
       "tag": "0076_compliance_period_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1792538848446,
+      "tag": "0077_compliance_worker_type",
+      "breakpoints": true
     }
   ]
 }

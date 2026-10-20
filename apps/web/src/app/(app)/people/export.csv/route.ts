@@ -1,3 +1,4 @@
+import { peopleWorkerTypeWhere } from '@beaconhs/db'
 import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, isNull, type SQL, sql } from 'drizzle-orm'
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
     if (departmentFilter) filters.push(eq(people.departmentId, departmentFilter))
     if (locationFilter) filters.push(eq(people.locationOrgUnitId, locationFilter))
     if (personTypeFilter === 'employee' || personTypeFilter === 'contractor')
-      filters.push(sql`${people.metadata}->>'personType' = ${personTypeFilter}`)
+      filters.push(peopleWorkerTypeWhere(personTypeFilter)!)
     const whereClause = and(...filters)
 
     const orderBy =

@@ -127,12 +127,12 @@ export async function listObligations(
           o.subjectKind === 'per_record'
             ? 'Records'
             : o.subjectKind === 'per_task'
-              ? 'Title holders'
+              ? `${translate(o.workerType === 'employee' ? 'Employees' : o.workerType === 'contractor' ? 'Contractors' : 'All worker types')} · ${translate('Title holders')}`
               : !audienceInfo || audienceInfo.n === 0
                 ? 'No audience'
                 : audienceInfo.everyone
-                  ? `Everyone${audienceInfo?.excluded ? ` · ${audienceInfo.excluded} exclusions` : ''}`
-                  : `${audienceInfo.n} target${audienceInfo.n === 1 ? '' : 's'}${audienceInfo.excluded ? ` · ${audienceInfo.excluded} exclusions` : ''}`,
+                  ? `${translate(o.workerType === 'employee' ? 'Employees' : o.workerType === 'contractor' ? 'Contractors' : 'Everyone')}${audienceInfo?.excluded ? ` · ${audienceInfo.excluded} exclusions` : ''}`
+                  : `${o.workerType === 'all' ? '' : `${translate(o.workerType === 'employee' ? 'Employees' : 'Contractors')} · `}${audienceInfo.n} target${audienceInfo.n === 1 ? '' : 's'}${audienceInfo.excluded ? ` · ${audienceInfo.excluded} exclusions` : ''}`,
         cadence: cadenceLabel(o.recurrence, translate),
         enabled: o.status === 'active',
       }

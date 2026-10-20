@@ -72,3 +72,19 @@ it('invalidates targeting when an include becomes an exclusion', () => {
     }),
   ).toBe(false)
 })
+
+it('treats a worker-type change as a targeting change', () => {
+  const config = { targetRef: {}, recurrence: { kind: 'one_time' as const }, audience: [] }
+  expect(
+    obligationSemanticConfigChanged(
+      { ...config, workerType: 'all' },
+      { ...config, workerType: 'employee' },
+    ),
+  ).toBe(true)
+  expect(
+    obligationSemanticConfigChanged(
+      { ...config, workerType: 'contractor' },
+      { ...config, workerType: 'contractor' },
+    ),
+  ).toBe(false)
+})

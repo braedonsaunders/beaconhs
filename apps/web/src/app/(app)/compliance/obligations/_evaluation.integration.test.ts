@@ -12,6 +12,9 @@ import {
   users,
   people,
   personGroups,
+  personTitles,
+  personTitleAssignments,
+  jobTitleTasks,
   personGroupMemberships,
   complianceAudience,
   complianceObligations,
@@ -1033,4 +1036,208 @@ it('uses the recorded training target for a prior calendar period after the assi
   expect(view?.supported).toBe(true)
   expect(view?.history).toHaveLength(1)
   expect((await obligationCompliance(ctx, id))?.hasHistory).toBe(true)
+})
+
+it('applies worker types to groups and individuals, retires old alerts, and keeps saved period rosters', async () => {
+  const employee = randomUUID(),
+    contractor = randomUUID(),
+    unclassified = randomUUID(),
+    mixedGroup = randomUUID()
+  await ctx.db(async (tx) => {
+    await tx.insert(people).values([
+      {
+        id: employee,
+        tenantId,
+        firstName: 'Employee',
+        lastName: 'Worker type',
+        metadata: { personType: 'employee' },
+      },
+      {
+        id: contractor,
+        tenantId,
+        firstName: 'Contractor',
+        lastName: 'Worker type',
+        metadata: { personType: 'contractor' },
+      },
+      { id: unclassified, tenantId, firstName: 'Unclassified', lastName: 'Worker type' },
+    ])
+    await tx.insert(personGroups).values({ id: mixedGroup, tenantId, name: 'Mixed worker types' })
+    await tx.insert(personGroupMemberships).values(
+      [employee, contractor, unclassified].map((personId) => ({
+        tenantId,
+        groupId: mixedGroup,
+        personId,
+      })),
+    )
+    const audience = [{ kind: 'person_group' as const, entityKey: mixedGroup }]
+    for (const [workerType, expected] of [
+      ['employee', [employee]],
+      ['contractor', [contractor]],
+      ['all', [employee, contractor, unclassified]],
+    ] as const) {
+      const members = await resolveObligationAudience(tx, tenantId, audience, workerType)
+      expect(members.map((member) => member.personId).sort()).toEqual([...expected].sort())
+    }
+    expect(
+      await resolveObligationAudience(
+        tx,
+        tenantId,
+        [
+          ...audience,
+          { kind: 'person', entityKey: contractor },
+          { kind: 'person', entityKey: employee, excluded: true },
+        ],
+        'employee',
+      ),
+    ).toEqual([])
+    const everyone = await resolveObligationAudience(
+      tx,
+      tenantId,
+      [{ kind: 'everyone', entityKey: '' }],
+      'employee',
+    )
+    expect(everyone.map((member) => member.personId)).toContain(employee)
+    for (const id of [contractor, unclassified, inactive, outsider])
+      expect(everyone.map((member) => member.personId)).not.toContain(id)
+    await tx
+      .insert(tenantNotificationPolicy)
+      .values({ tenantId, remindersEnabled: false, scanTimezone: clock.timezone })
+      .onConflictDoUpdate({
+        target: tenantNotificationPolicy.tenantId,
+        set: { remindersEnabled: false, scanTimezone: clock.timezone },
+      })
+  })
+  const { createObligation, updateObligation } = await import('./_actions')
+  const input = {
+    kind: 'journal' as const,
+    title: 'Employee journal worker type verification',
+    audience: [{ type: 'person_group' as const, entityKey: mixedGroup }],
+    recurrence: {
+      kind: 'frequency' as const,
+      frequency: 'week' as const,
+      evidenceWindow: 'calendar' as const,
+      quantity: 5,
+    },
+  }
+  const created = await createObligation(input)
+  expect(created.ok).toBe(true)
+  if (!created.ok) throw new Error(created.error)
+  const id = created.id
+  let endedPeriodId = ''
+  await ctx.db(async (tx) => {
+    const [ob] = await tx
+      .select()
+      .from(complianceObligations)
+      .where(eq(complianceObligations.id, id))
+    expect(ob?.workerType).toBe('employee')
+    expect(
+      (await tx.select().from(complianceStatus).where(eq(complianceStatus.obligationId, id))).map(
+        (row) => row.personId,
+      ),
+    ).toEqual([employee])
+    const [snapshot] = await tx
+      .select()
+      .from(compliancePeriodSnapshots)
+      .where(eq(compliancePeriodSnapshots.obligationId, id))
+    expect(snapshot?.rule.workerType).toBe('employee')
+    expect(snapshot?.rule.members.map((member) => member.personId)).toEqual([employee])
+    // A closed snapshot must survive a subsequent worker-type edit.
+    const [ended] = await tx
+      .insert(compliancePeriodSnapshots)
+      .values({
+        tenantId,
+        obligationId: id,
+        periodStart: '2026-01-05',
+        periodEnd: '2026-01-11',
+        periodStartAt: new Date('2026-01-05T05:00:00Z'),
+        periodEndAt: new Date('2026-01-12T05:00:00Z'),
+        dueAt: new Date('2026-01-12T04:59:00Z'),
+        timezone: clock.timezone,
+        rule: snapshot!.rule,
+      })
+      .returning({ id: compliancePeriodSnapshots.id })
+    endedPeriodId = ended!.id
+    await tx
+      .insert(complianceDispatches)
+      .values({ tenantId, obligationId: id, status: 'queued', audienceSnapshot: [employee] })
+  })
+  expect((await updateObligation(id, { ...input, workerType: 'contractor' })).ok).toBe(true)
+  await ctx.db(async (tx) => {
+    expect(
+      (await tx.select().from(complianceStatus).where(eq(complianceStatus.obligationId, id))).map(
+        (row) => row.personId,
+      ),
+    ).toEqual([contractor])
+    const [ended] = await tx
+      .select()
+      .from(compliancePeriodSnapshots)
+      .where(eq(compliancePeriodSnapshots.id, endedPeriodId))
+    expect(ended?.rule.workerType).toBe('employee')
+    expect(ended?.rule.members.map((member) => member.personId)).toEqual([employee])
+    expect(
+      (
+        await tx
+          .select()
+          .from(complianceDispatches)
+          .where(eq(complianceDispatches.obligationId, id))
+      ).every((row) => row.status === 'skipped'),
+    ).toBe(true)
+    const audits = await tx.select().from(auditLog).where(eq(auditLog.entityId, id))
+    expect(
+      audits.some((row) => (row.after as { workerType?: string })?.workerType === 'contractor'),
+    ).toBe(true)
+    // Changing a person's saved classification also refreshes the canonical scoreboard.
+    await tx
+      .update(people)
+      .set({ metadata: { personType: 'employee' } })
+      .where(eq(people.id, contractor))
+    await materializeIdentityAudienceObligations(tx, tenantId, [contractor])
+    expect(
+      await tx.select().from(complianceStatus).where(eq(complianceStatus.obligationId, id)),
+    ).toEqual([])
+    const titleId = randomUUID()
+    await tx
+      .insert(personTitles)
+      .values({ id: titleId, tenantId, name: 'Worker-type title verification' })
+    await tx.insert(jobTitleTasks).values({ tenantId, titleId, task: 'Read the job description' })
+    await tx
+      .insert(personTitleAssignments)
+      .values([employee, contractor].map((personId) => ({ tenantId, titleId, personId })))
+    const [titleOb] = await tx
+      .insert(complianceObligations)
+      .values({
+        tenantId,
+        title: 'Employee title sign-offs',
+        sourceModule: 'job_title_signoff',
+        subjectKind: 'per_task',
+        workerType: 'employee',
+        targetRef: { jobTitleId: titleId },
+        recurrenceKind: 'one_time',
+        recurrence: { kind: 'one_time' },
+      })
+      .returning()
+    await materializeObligation(tx, tenantId, titleOb!)
+    const holders = async () =>
+      (
+        await tx
+          .select()
+          .from(complianceStatus)
+          .where(eq(complianceStatus.obligationId, titleOb!.id))
+      )
+        .map((row) => row.personId)
+        .sort()
+    expect(await holders()).toEqual([employee, contractor].sort())
+    await tx
+      .update(people)
+      .set({ metadata: { personType: 'contractor' } })
+      .where(eq(people.id, contractor))
+    await materializeIdentityAudienceObligations(tx, tenantId, [contractor])
+    expect(await holders()).toEqual([employee])
+    await tx
+      .update(people)
+      .set({ metadata: { personType: 'employee' } })
+      .where(eq(people.id, contractor))
+    await materializeIdentityAudienceObligations(tx, tenantId, [contractor])
+    expect(await holders()).toEqual([employee, contractor].sort())
+  })
 })

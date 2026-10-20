@@ -306,7 +306,7 @@ export async function executeFlowPlan(
     if (subjectPersonIds.size === 0) return false
     return ctx.db(async (tx) => {
       const [obligation] = await tx
-        .select({ id: complianceObligations.id })
+        .select({ id: complianceObligations.id, workerType: complianceObligations.workerType })
         .from(complianceObligations)
         .where(
           and(
@@ -331,7 +331,12 @@ export async function executeFlowPlan(
             eq(complianceAudience.obligationId, obligationId),
           ),
         )
-      const members = await resolveObligationAudience(tx, ctx.tenantId, audience)
+      const members = await resolveObligationAudience(
+        tx,
+        ctx.tenantId,
+        audience,
+        obligation.workerType,
+      )
       return members.some((member) => subjectPersonIds.has(member.personId))
     })
   }

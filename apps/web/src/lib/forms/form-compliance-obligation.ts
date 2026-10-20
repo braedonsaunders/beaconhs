@@ -59,6 +59,7 @@ export async function loadApplicableFormObligation(
     tx,
     input.tenantId,
     audience.map((row) => ({ kind: row.kind, entityKey: row.entityKey, excluded: row.excluded })),
+    obligation.workerType,
   )
   if (!members.some((member) => member.personId === input.personId)) return null
   const [actionable] = await tx
