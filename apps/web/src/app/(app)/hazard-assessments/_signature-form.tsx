@@ -18,6 +18,7 @@ export function CrewSearch({
   const t = useGeneratedValueTranslations()
   const id = useId()
   const input = useRef<HTMLInputElement>(null)
+  const results = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [options, setOptions] = useState<PickerOption[]>([])
@@ -26,6 +27,14 @@ export function CrewSearch({
   const [hasMore, setHasMore] = useState(false)
   const [highlight, setHighlight] = useState(0)
   const pendingKey = pendingValues.join('|')
+  useEffect(() => {
+    if (results.current) results.current.scrollTop = 0
+  }, [query])
+  useEffect(() => {
+    results.current
+      ?.querySelectorAll<HTMLElement>('[role="option"]')
+      [highlight]?.scrollIntoView?.({ block: 'nearest' })
+  }, [highlight])
   useEffect(() => {
     if (!open) return
     const controller = new AbortController()
@@ -79,12 +88,7 @@ export function CrewSearch({
       align="start"
       matchTriggerWidth
       trigger={
-        <div
-          className="relative min-w-0"
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
-          }}
-        >
+        <div className="relative min-w-0">
           <Search
             size={16}
             className="pointer-events-none absolute top-3.5 left-3 text-slate-400"
@@ -132,7 +136,7 @@ export function CrewSearch({
         </div>
       }
     >
-      <div className="max-h-64 overflow-y-auto">
+      <div ref={results} className="max-h-64 min-h-0 overflow-y-auto overscroll-contain">
         <ul id={id} role="listbox" aria-label={t('Add crew')}>
           {choices.map((option, index) => {
             const Icon =
@@ -152,6 +156,7 @@ export function CrewSearch({
                   type="button"
                   className={`flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${index === highlight ? 'bg-slate-50 dark:bg-slate-800' : ''}`}
                   onMouseDown={(e) => e.preventDefault()}
+                  onPointerDown={(e) => e.preventDefault()}
                   onClick={() => choose(option)}
                 >
                   <Icon size={16} className="shrink-0 text-slate-400" />

@@ -4,6 +4,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from './utils'
+import { useVisualViewport } from './use-visual-viewport'
 
 /**
  * Portal-based popover that escapes any overflow-hidden ancestor.
@@ -41,6 +42,7 @@ export function Popover({
     height: number
   } | null>(null)
   const [mounted, setMounted] = React.useState(false)
+  const viewport = useVisualViewport(open)
 
   React.useEffect(() => setMounted(true), [])
 
@@ -63,7 +65,7 @@ export function Popover({
 
   React.useEffect(() => {
     if (!open) return
-    function onClick(e: MouseEvent) {
+    function onClick(e: Event) {
       const target = e.target as Node
       if (panelRef.current?.contains(target)) return
       if (triggerRef.current?.contains(target)) return
@@ -75,11 +77,13 @@ export function Popover({
     // Defer so the click that opened it doesn't immediately close.
     const t = setTimeout(() => {
       document.addEventListener('mousedown', onClick)
+      document.addEventListener('focusin', onClick)
       document.addEventListener('keydown', onKey)
     }, 0)
     return () => {
       clearTimeout(t)
       document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('focusin', onClick)
       document.removeEventListener('keydown', onKey)
     }
   }, [open, onOpenChange])
@@ -100,16 +104,41 @@ export function Popover({
                   exit={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
                   transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
                   className={cn(
-                    'fixed z-40 min-w-[12rem] origin-top rounded-md border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900',
+                    'fixed z-[80] flex min-w-[12rem] origin-top flex-col overflow-y-auto overscroll-contain rounded-md border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900',
                     className,
                   )}
                   style={{
                     width: matchTriggerWidth ? rect.width : undefined,
-                    top: side === 'bottom' ? rect.top + rect.height + 4 : undefined,
-                    bottom: side === 'top' ? window.innerHeight - rect.top + 4 : undefined,
-                    left: align === 'start' ? rect.left : undefined,
-                    right:
-                      align === 'end' ? window.innerWidth - (rect.left + rect.width) : undefined,
+                    ...(() => {
+                      const screen = viewport ?? {
+                        top: 0,
+                        left: 0,
+                        width: window.innerWidth,
+                        height: window.innerHeight,
+                      }
+                      const below = screen.top + screen.height - rect.top - rect.height - 12
+                      const above = rect.top - screen.top - 12
+                      const up =
+                        side === 'top'
+                          ? above >= below || above >= 256
+                          : below < 200 && above > below
+                      const width = matchTriggerWidth
+                        ? rect.width
+                        : (panelRef.current?.offsetWidth ?? 256)
+                      return {
+                        left: Math.max(
+                          screen.left + 8,
+                          Math.min(
+                            align === 'start' ? rect.left : rect.left + rect.width - width,
+                            screen.left + screen.width - width - 8,
+                          ),
+                        ),
+                        top: up ? undefined : Math.max(screen.top + 8, rect.top + rect.height + 4),
+                        bottom: up ? window.innerHeight - rect.top + 4 : undefined,
+                        maxHeight: Math.max(48, up ? above : below),
+                        maxWidth: screen.width - 16,
+                      }
+                    })(),
                   }}
                   role="dialog"
                 >

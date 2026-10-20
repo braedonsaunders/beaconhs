@@ -141,7 +141,12 @@ On a phone, list pages keep the main button (like **New assessment**) next to th
 - Open this user guide any time at [Help](/help). Use the search box to find an answer fast.
 - If your company has it turned on, the [AI Assistant](/help/assistant) can answer questions in plain English.
 - See something broken in the app itself? Tap **Report an issue** in the top bar. See [Report an issue](/help/report-issue).
-- Your supervisor or safety admin can help with access and permissions.`,
+- Your supervisor or safety admin can help with access and permissions.
+
+## Searching selection lists on a phone
+
+Tap a selection field and type a name, employee number or job number shown in the choices. Matching results stay above the phone keyboard. Scroll inside the results to see more matches. Changing the search returns to the top of the matching list. Tap a result to select it. Adding or removing someone does not clear your other selections.
+`,
   },
   {
     slug: 'workspace',

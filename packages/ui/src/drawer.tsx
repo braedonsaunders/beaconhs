@@ -66,6 +66,14 @@ export function Drawer({
   React.useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
+      const activeDialog = document.activeElement?.closest('[role="dialog"][aria-modal="true"]')
+      if (
+        e.defaultPrevented ||
+        (activeDialog &&
+          activeDialog !== panelRef.current &&
+          !panelRef.current?.contains(activeDialog))
+      )
+        return
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
@@ -89,6 +97,8 @@ export function Drawer({
     const focusTimer = window.setTimeout(() => {
       const panel = panelRef.current
       if (!panel) return
+      const activeDialog = document.activeElement?.closest('[role="dialog"][aria-modal="true"]')
+      if (activeDialog && activeDialog !== panel && !panel.contains(activeDialog)) return
       const first = panel.querySelector<HTMLElement>(focusablesSelector)
       ;(first ?? panel).focus()
     }, 0)

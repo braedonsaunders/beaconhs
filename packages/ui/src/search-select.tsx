@@ -15,6 +15,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { useUiText } from './text-context'
 import { cn } from './utils'
+import { useVisualViewport } from './use-visual-viewport'
 
 export type SelectOption = {
   value: string
@@ -98,6 +99,8 @@ export function SearchSelect({
   const wrapRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const viewport = useVisualViewport(open)
 
   useEffect(() => {
     setMounted(true)
@@ -142,7 +145,10 @@ export function SearchSelect({
     const q = query.trim().toLowerCase()
     if (!q) return allOptions
     return allOptions.filter(
-      (o) => o.label.toLowerCase().includes(q) || o.group?.toLowerCase().includes(q),
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        o.hint?.toLowerCase().includes(q) ||
+        o.group?.toLowerCase().includes(q),
     )
   }, [allOptions, query, remote])
 
@@ -163,12 +169,32 @@ export function SearchSelect({
       ),
     )
     setOpen(true)
-    setTimeout(() => searchRef.current?.focus(), 60)
   }
   function choose(v: string) {
     onChange(v)
     setOpen(false)
   }
+
+  useEffect(() => {
+    if (!open) return
+    const timer = window.setTimeout(() => searchRef.current?.focus({ preventScroll: true }), 60)
+    return () => {
+      window.clearTimeout(timer)
+      const trigger = wrapRef.current?.querySelector('button')
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true })
+    }
+  }, [open, isDesktop])
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0
+  }, [query])
+
+  useEffect(() => {
+    if (!open) return
+    listRef.current?.querySelectorAll<HTMLElement>('[role="option"]')[highlight]?.scrollIntoView?.({
+      block: 'nearest',
+    })
+  }, [highlight, open])
 
   // Click-outside (desktop). The menu is portaled to document.body, so a click
   // inside it is NOT inside wrapRef — check both containers.
@@ -227,8 +253,26 @@ export function SearchSelect({
       }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-      else if (e.key === 'ArrowDown') {
+      if (e.key === 'Tab' && !isDesktop && menuRef.current) {
+        const controls = Array.from(
+          menuRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled])',
+          ),
+        )
+        const first = controls[0]
+        const last = controls.at(-1)
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last?.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first?.focus()
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setOpen(false)
+      } else if (e.key === 'ArrowDown') {
         e.preventDefault()
         setHighlight((h) => nextEnabled(h, 1))
       } else if (e.key === 'ArrowUp') {
@@ -409,10 +453,10 @@ export function SearchSelect({
                 top: menuPos.top,
                 bottom: menuPos.bottom,
               }}
-              className="fixed z-50 min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
+              className="fixed z-[80] min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
             >
               {showSearch ? searchBox(false) : null}
-              <div className={cn('max-h-64 overflow-y-auto', showSearch && 'mt-1')}>
+              <div ref={listRef} className={cn('max-h-64 overflow-y-auto', showSearch && 'mt-1')}>
                 {optionList}
               </div>
             </div>,
@@ -425,7 +469,21 @@ export function SearchSelect({
         ? createPortal(
             <AnimatePresence>
               {open ? (
-                <div className="fixed inset-0 z-[60]">
+                <div
+                  className="fixed inset-0 z-[80]"
+                  style={
+                    viewport
+                      ? {
+                          top: viewport.top,
+                          left: viewport.left,
+                          width: viewport.width,
+                          height: viewport.height,
+                          right: 'auto',
+                          bottom: 'auto',
+                        }
+                      : undefined
+                  }
+                >
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -435,11 +493,16 @@ export function SearchSelect({
                     onClick={() => setOpen(false)}
                   />
                   <motion.div
+                    ref={menuRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={localizedSheetTitle ?? localizedPlaceholder}
                     initial={{ y: '100%' }}
                     animate={{ y: 0 }}
                     exit={{ y: '100%' }}
                     transition={{ type: 'spring', damping: 34, stiffness: 340, mass: 0.8 }}
-                    className="absolute inset-x-0 bottom-0 flex max-h-[82vh] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+                    style={{ maxHeight: '92%' }}
+                    className="absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
                   >
                     <div className="flex items-center justify-center pt-2.5">
                       <span className="h-1.5 w-10 rounded-full bg-slate-300" />
@@ -458,7 +521,10 @@ export function SearchSelect({
                       </button>
                     </div>
                     {showSearch ? searchBox(true) : null}
-                    <div className="mt-1 min-h-0 flex-1 overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                    <div
+                      ref={listRef}
+                      className="mt-1 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                    >
                       {optionList}
                     </div>
                   </motion.div>
