@@ -211,3 +211,18 @@ describe('manual signature notification delivery', () => {
     )
   })
 })
+
+it('drops queued compliance delivery when reminders are off even though the category is enabled', async () => {
+  const { processNotification } = await import('./notify')
+  queries(
+    [{ enabled: true, channels: ['in_app', 'email', 'push', 'sms'] }],
+    [{ remindersEnabled: false }],
+  )
+  await processNotification(
+    signingJob({ category: 'compliance', type: 'compliance.overdue', data: {} }),
+  )
+  expect(mocks.insert).not.toHaveBeenCalled()
+  expect(mocks.enqueueEmail).not.toHaveBeenCalled()
+  expect(mocks.enqueuePush).not.toHaveBeenCalled()
+  expect(mocks.sendSmsVia).not.toHaveBeenCalled()
+})

@@ -17,7 +17,7 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
-import type { ResolvedMember } from '@beaconhs/compliance'
+import { resolveComplianceReminderPolicy, type ResolvedMember } from '@beaconhs/compliance'
 
 export const DEFAULT_ROLES_BY_CATEGORY: Readonly<Record<string, string[]>> = {
   incident: ['safety_manager', 'tenant_admin'],
@@ -36,6 +36,8 @@ export async function isNotificationCategoryEnabled(
   tenantId: string,
   category: string,
 ): Promise<boolean> {
+  if (category === 'compliance')
+    return (await resolveComplianceReminderPolicy(tx, tenantId)).enabled
   const [settings] = await tx
     .select({ enabled: tenantNotificationSettings.enabled })
     .from(tenantNotificationSettings)

@@ -23,17 +23,12 @@ export const tenantNotificationPolicy = pgTable(
     // Suppress non-critical sends during these UTC hours (e.g. 22→6 overnight).
     // null = no quiet hours. Critical alerts always go through.
     quietHours: jsonb('quiet_hours').$type<{ start: number; end: number } | null>().default(null),
-    // Master switch for the compliance DETECTION scan. When false the worker
-    // skips this tenant entirely — no materialization, no overdue/expiring
-    // reminders, no equipment-maintenance alerts — regardless of the schedule
-    // below. Lets an admin pause all automatic compliance sends without losing
-    // their configured cadence.
-    scanEnabled: boolean('scan_enabled').default(true).notNull(),
-    // Per-tenant compliance DETECTION schedule. The worker runs a frequent global
-    // tick and self-gates each tenant against this 5-field cron, evaluated in
-    // `scanTimezone` (IANA). Mirrors the digest self-gating pattern. Defaults
-    // reproduce the legacy daily 06:00 UTC scan, so untouched tenants are unchanged.
-    scanCron: text('scan_cron').default('0 6 * * *').notNull(),
+    // Reminder delivery is independent of the always-on compliance scoreboard.
+    // Keep storage names stable during rolling deployments; these columns now
+    // control delivery only, never evaluation.
+    remindersEnabled: boolean('scan_enabled').default(true).notNull(),
+    reminderCron: text('scan_cron').default('0 6 * * *').notNull(),
+    // Canonical tenant clock for both evidence windows and reminder schedules.
     scanTimezone: text('scan_timezone').default('UTC').notNull(),
     ...timestamps,
   },

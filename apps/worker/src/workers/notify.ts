@@ -109,12 +109,16 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     if (catCfg?.enabled === false) return { disabled: true as const }
     const [policy] = await tx
       .select({
+        remindersEnabled: tenantNotificationPolicy.remindersEnabled,
         digestMode: tenantNotificationPolicy.digestMode,
         quietHours: tenantNotificationPolicy.quietHours,
       })
       .from(tenantNotificationPolicy)
       .where(eq(tenantNotificationPolicy.tenantId, d.tenantId))
       .limit(1)
+
+    if (d.category === 'compliance' && policy?.remindersEnabled === false)
+      return { disabled: true as const }
 
     const now = new Date()
     const allowed = catCfg?.channels.length ? catCfg.channels : (d.channels ?? ['in_app', 'email'])
@@ -267,6 +271,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
             tenantId: d.tenantId,
             userId: target.id,
             subscriptionId: subscription.id,
+            category: d.category,
             title: d.title,
             body: d.body,
             linkPath: d.linkPath,

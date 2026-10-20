@@ -1,10 +1,12 @@
 'use server'
 
 import { activeTenantUsersWhere } from '@beaconhs/db'
+import { complianceReminderAvailableAt } from '@beaconhs/compliance'
 
 import { revalidatePath } from 'next/cache'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import {
+  complianceDispatches,
   personGroups,
   roles,
   tenantNotificationPolicy,
@@ -33,11 +35,10 @@ export type PolicyInput = {
   digestMode: 'off' | 'daily' | 'weekly'
   digestHourUtc: number
   quietHours: { start: number; end: number } | null
-  // Compliance detection master switch. When false the worker skips the tenant
-  // entirely and the schedule below is inert.
-  scanEnabled: boolean
-  // Compliance detection schedule (5-field cron, evaluated in scanTimezone).
-  scanCron: string
+  // Pause reminder delivery without stopping compliance evaluation.
+  remindersEnabled: boolean
+  // Reminder delivery schedule (5-field cron, evaluated in scanTimezone).
+  reminderCron: string
   scanTimezone: string
 }
 
@@ -149,18 +150,29 @@ export async function saveNotificationConfiguration(
   ) {
     throw new Error('Quiet hours must use whole UTC hours from 0 to 23.')
   }
-  if (!isValidCron(input.scanCron)) throw new Error('Enter a valid five-part scan schedule.')
-  if (!isValidTimezone(input.scanTimezone)) throw new Error('Choose a valid scan timezone.')
+  if (!isValidCron(input.reminderCron))
+    throw new Error('Enter a valid five-part reminder schedule.')
+  if (!isValidTimezone(input.scanTimezone)) throw new Error('Choose a valid compliance timezone.')
+  if (typeof input.remindersEnabled !== 'boolean')
+    throw new Error('Choose whether reminders are enabled.')
 
   const digestMode = input.digestMode
   const digestHourUtc = input.digestHourUtc
   const quietHours = input.quietHours
-  const scanEnabled = input.scanEnabled
-  const scanCron = input.scanCron.trim()
+  const remindersEnabled = input.remindersEnabled
+  const reminderCron = input.reminderCron.trim()
   const scanTimezone = input.scanTimezone
   const allowed = await loadAllowedRecipients(ctx, items)
 
   await ctx.db(async (tx) => {
+    const [previousPolicy] = await tx
+      .select({
+        cron: tenantNotificationPolicy.reminderCron,
+        timezone: tenantNotificationPolicy.scanTimezone,
+      })
+      .from(tenantNotificationPolicy)
+      .where(eq(tenantNotificationPolicy.tenantId, ctx.tenantId))
+      .limit(1)
     for (const item of items) {
       const direct = NOTIFICATION_CATEGORIES.find(
         (category) => category.key === item.category,
@@ -205,8 +217,8 @@ export async function saveNotificationConfiguration(
         digestMode,
         digestHourUtc,
         quietHours,
-        scanEnabled,
-        scanCron,
+        remindersEnabled,
+        reminderCron,
         scanTimezone,
       })
       .onConflictDoUpdate({
@@ -215,12 +227,48 @@ export async function saveNotificationConfiguration(
           digestMode,
           digestHourUtc,
           quietHours,
-          scanEnabled,
-          scanCron,
+          remindersEnabled,
+          reminderCron,
           scanTimezone,
           updatedAt: new Date(),
         },
       })
+    if (
+      !remindersEnabled ||
+      items.some((item) => item.category === 'compliance' && !item.enabled)
+    ) {
+      await tx
+        .update(complianceDispatches)
+        .set({
+          status: 'skipped',
+          error: 'Compliance reminders are paused',
+          publishLeaseId: null,
+          publishClaimedAt: null,
+        })
+        .where(
+          and(
+            eq(complianceDispatches.tenantId, ctx.tenantId),
+            eq(complianceDispatches.status, 'queued'),
+          ),
+        )
+    } else if (
+      (previousPolicy?.cron ?? '0 6 * * *') !== reminderCron ||
+      (previousPolicy?.timezone ?? 'UTC') !== scanTimezone
+    ) {
+      await tx
+        .update(complianceDispatches)
+        .set({
+          publishAvailableAt: complianceReminderAvailableAt(reminderCron, scanTimezone, new Date()),
+          publishLeaseId: null,
+          publishClaimedAt: null,
+        })
+        .where(
+          and(
+            eq(complianceDispatches.tenantId, ctx.tenantId),
+            eq(complianceDispatches.status, 'queued'),
+          ),
+        )
+    }
   })
 
   await recordAudit(ctx, {
@@ -233,8 +281,8 @@ export async function saveNotificationConfiguration(
       digestMode,
       digestHourUtc,
       quietHours,
-      scanEnabled,
-      scanCron,
+      remindersEnabled,
+      reminderCron,
       scanTimezone,
     },
   })

@@ -22,6 +22,7 @@ import {
   evaluateObligation,
 } from './evaluate'
 import type { ComplianceClock } from './schedule'
+import { complianceReminderAvailableAt, resolveComplianceReminderPolicy } from './reminders'
 
 type Tx = Database
 
@@ -139,6 +140,7 @@ async function queueActionableTransitions(
   obligation: ComplianceObligation,
   transitions: readonly ComplianceTransition[],
   occurredAt: Date,
+  availableAt: Date,
 ): Promise<string | null> {
   const actionable = actionableComplianceTransitions(obligation, transitions)
   if (actionable.length === 0) return null
@@ -168,6 +170,7 @@ async function queueActionableTransitions(
       obligationId: obligation.id,
       occurredAt: uniqueOccurredAt,
       status: 'queued',
+      publishAvailableAt: availableAt,
       alertPayload: { transitions: actionable },
     })
     .onConflictDoNothing({
@@ -229,6 +232,30 @@ async function reconcileAndQueueActionableTransitions(
   transitions: readonly ComplianceTransition[],
   occurredAt: Date,
 ): Promise<string | null> {
+  const policy = await resolveComplianceReminderPolicy(tx, tenantId)
+  if (!policy.enabled) {
+    await skipQueuedComplianceDispatches(
+      tx,
+      tenantId,
+      obligation.id,
+      'Compliance reminders are paused',
+    )
+    return null
+  }
+  let availableAt: Date
+  try {
+    availableAt = complianceReminderAvailableAt(policy.cron, policy.timezone, occurredAt)
+  } catch (error) {
+    // Delivery configuration must not roll back the freshly computed scoreboard.
+    await skipQueuedComplianceDispatches(
+      tx,
+      tenantId,
+      obligation.id,
+      'Invalid compliance reminder schedule',
+    )
+    console.warn(`[compliance] tenant ${tenantId} has an invalid reminder schedule`, error)
+    return null
+  }
   const queued = await tx
     .select({ id: complianceDispatches.id, alertPayload: complianceDispatches.alertPayload })
     .from(complianceDispatches)
@@ -318,6 +345,7 @@ async function reconcileAndQueueActionableTransitions(
     obligation,
     [...replacementBySubject.values()],
     occurredAt,
+    availableAt,
   )
 }
 

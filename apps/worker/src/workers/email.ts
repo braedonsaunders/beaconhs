@@ -96,11 +96,17 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
     }
   }
 
-  const categorySuppressed =
-    Boolean(job.data.meta?.automaticNotification) &&
-    Boolean(tenantId) &&
-    Boolean(categoryKey) &&
-    !(await withSuperAdmin(db, (tx) => isNotificationCategoryEnabled(tx, tenantId!, categoryKey!)))
+  let disabledCategory: string | undefined
+  if (job.data.meta?.automaticNotification && tenantId && categoryKey) {
+    disabledCategory = await withSuperAdmin(db, async (tx) => {
+      const categories = new Set([categoryKey, ...(job.data.meta?.notificationCategories ?? [])])
+      for (const category of categories) {
+        if (!(await isNotificationCategoryEnabled(tx, tenantId, category))) return category
+      }
+      return undefined
+    })
+  }
+  const categorySuppressed = Boolean(disabledCategory)
 
   // Resolve the effective transport first so we can record the provider used
   // (and the actual sender) on the log row, and honour the global kill switch.
@@ -134,7 +140,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
         categoryKey,
         errorMessage: suppressed
           ? categorySuppressed
-            ? `Automatic ${categoryKey} notifications are disabled for this workspace.`
+            ? `Automatic ${disabledCategory} notifications are disabled for this workspace.`
             : 'Email delivery is disabled by the platform administrator.'
           : null,
         meta: {
@@ -158,7 +164,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
     await updateRunDelivery(runDelivery, {
       status: 'failed',
       error: categorySuppressed
-        ? `Automatic ${categoryKey} notifications are disabled for this workspace.`
+        ? `Automatic ${disabledCategory} notifications are disabled for this workspace.`
         : 'Email delivery is disabled by the platform administrator.',
     })
     return

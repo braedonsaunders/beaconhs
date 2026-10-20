@@ -60,6 +60,7 @@ describe('queue payload validation', () => {
         tenantId: TENANT_ID,
         userId: 'user-one',
         subscriptionId: 'not-a-uuid',
+        category: 'compliance',
         title: 'Alert',
       }),
     ).toThrow(/subscriptionId/)

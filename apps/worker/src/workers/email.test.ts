@@ -162,3 +162,23 @@ describe('email worker provider policy', () => {
     })
   })
 })
+
+it('suppresses an already queued summary if a category inside it was paused', async () => {
+  const queued = job()
+  queued.data.meta = {
+    tenantId: 'tenant-1',
+    category: 'digest',
+    automaticNotification: true,
+    notificationCategories: ['incident', 'compliance'],
+  }
+  mocks.categoryEnabled.mockImplementation(
+    async (_tx, _tenant, category) => category !== 'compliance',
+  )
+  const { processEmail } = await import('./email')
+  await expect(processEmail(queued)).resolves.toBeUndefined()
+  expect(mocks.sendVia).not.toHaveBeenCalled()
+  expect(mocks.resolveDelivery).not.toHaveBeenCalled()
+  expect(mocks.inserted[0]?.errorMessage).toBe(
+    'Automatic compliance notifications are disabled for this workspace.',
+  )
+})

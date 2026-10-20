@@ -1,3 +1,4 @@
+import { isNotificationCategoryEnabled } from '@beaconhs/events'
 import type { Job } from 'bullmq'
 import { and, eq } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
@@ -13,12 +14,10 @@ const publicKey = process.env.VAPID_PUBLIC_KEY
 const privateKey = process.env.VAPID_PRIVATE_KEY
 
 export async function processPush(job: Job<PushJobData>): Promise<void> {
-  if (!publicKey || !privateKey) {
-    throw new Error('Web Push is enabled but VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are not configured')
-  }
   const data = job.data
   assertPushJobData(data)
   const subscription = await withTenant(db, data.tenantId, async (tx) => {
+    if (!(await isNotificationCategoryEnabled(tx, data.tenantId, data.category))) return null
     const [row] = await tx
       .select()
       .from(webpushSubscriptions)
@@ -33,6 +32,9 @@ export async function processPush(job: Job<PushJobData>): Promise<void> {
     return row ?? null
   })
   if (!subscription) return
+  if (!publicKey || !privateKey) {
+    throw new Error('Web Push is enabled but VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY are not configured')
+  }
 
   let validatedSubscription
   try {

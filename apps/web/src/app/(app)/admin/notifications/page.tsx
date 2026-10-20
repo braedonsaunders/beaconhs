@@ -110,8 +110,8 @@ export default async function NotificationSettingsPage() {
     digestMode: (policyRow?.digestMode ?? 'off') as 'off' | 'daily' | 'weekly',
     digestHourUtc: policyRow?.digestHourUtc ?? 7,
     quietHours: policyRow?.quietHours ?? null,
-    scanEnabled: policyRow?.scanEnabled ?? true,
-    scanCron: policyRow?.scanCron ?? '0 6 * * *',
+    remindersEnabled: policyRow?.remindersEnabled ?? true,
+    reminderCron: policyRow?.reminderCron ?? '0 6 * * *',
     scanTimezone: policyRow?.scanTimezone ?? 'UTC',
   }
 

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Database } from '@beaconhs/db'
-import { complianceDispatches, complianceObligations } from '@beaconhs/db/schema'
+import {
+  complianceDispatches,
+  complianceObligations,
+  tenantNotificationPolicy,
+  tenantNotificationSettings,
+} from '@beaconhs/db/schema'
 import {
   confirmDispatchStillPublishable,
   publishClaimedComplianceDispatch,
@@ -32,12 +37,16 @@ function fakeDatabase(
     deletedAt: Date | null
   } | null,
   ownsLease = true,
+  remindersEnabled = true,
 ) {
   const events: string[] = []
   const updates: Array<{ table: unknown; values: Record<string, unknown> }> = []
   const tx = {
     select: vi.fn(() => ({
       from: (table: unknown) => {
+        if (table === tenantNotificationPolicy)
+          return query([{ enabled: remindersEnabled }], () => {})
+        if (table === tenantNotificationSettings) return query([], () => {})
         if (table !== complianceObligations) throw new Error('Unexpected selected table')
         return query(obligation ? [obligation] : [], (mode) => events.push(`lock:${mode}`))
       },
@@ -157,5 +166,27 @@ describe('compliance dispatch lifecycle', () => {
       LEASE_ID,
       fake.tx,
     )
+  })
+})
+
+it('cancels a leased alert when reminder delivery is paused, without emitting', async () => {
+  const fake = fakeDatabase({ id: OBLIGATION_ID, status: 'active', deletedAt: null }, true, false)
+  const emit = vi.fn(async () => true)
+  const outcome = await publishClaimedComplianceDispatch(
+    fake.tx,
+    {
+      id: DISPATCH_ID,
+      tenantId: TENANT_ID,
+      obligationId: OBLIGATION_ID,
+      publishLeaseId: LEASE_ID,
+      alertPayload: { transitions: [] },
+    },
+    emit,
+  )
+  expect(outcome).toBe('skipped')
+  expect(emit).not.toHaveBeenCalled()
+  expect(fake.updates.at(-1)?.values).toMatchObject({
+    status: 'skipped',
+    error: 'Compliance reminders are paused',
   })
 })

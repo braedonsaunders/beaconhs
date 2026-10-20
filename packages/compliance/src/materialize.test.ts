@@ -6,6 +6,7 @@ import {
   complianceObligations,
   complianceStatus,
   tenantNotificationPolicy,
+  tenantNotificationSettings,
 } from '@beaconhs/db/schema'
 import type { ComplianceObligation, EvalResult } from './evaluate'
 
@@ -107,6 +108,7 @@ function fakeDatabase(options: {
   const rowsFor = (table: unknown): unknown[] => {
     if (table === complianceObligations) return options.locked ? [options.locked] : []
     if (table === tenantNotificationPolicy) return [{ timezone: 'UTC' }]
+    if (table === tenantNotificationSettings) return []
     if (table === complianceAudience) return []
     if (table === complianceStatus) return options.prior ?? []
     if (table === complianceDispatches) return options.queuedDispatches ?? []

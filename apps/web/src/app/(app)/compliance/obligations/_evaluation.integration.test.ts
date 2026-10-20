@@ -7,6 +7,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { createClient, withTenant } from '@beaconhs/db'
 import {
   tenants,
+  tenantNotificationPolicy,
   users,
   people,
   personGroups,
@@ -37,6 +38,7 @@ import {
   reopenClass,
 } from '../../training/classes/_actions'
 import { trainingClassRecordSaver } from '../../training/classes/_record-edits'
+import { saveNotificationConfiguration } from '../../admin/notifications/_actions'
 
 const url = process.env.DATABASE_URL,
   adminUrl = process.env.SUPERADMIN_DATABASE_URL
@@ -407,5 +409,152 @@ it('updates booked certificate status immediately across roster, cancellation, c
       sql`select booked_starts_at from report_training_matrix where tenant_id=${tenantId} and person_id=${alex} and course_id=${courseId}`,
     )
     expect((view as unknown as { booked_starts_at: Date | null }[])[0]?.booked_starts_at).toBeNull()
+  })
+})
+
+it('keeps statuses current while reminders are paused and never replays paused transitions', async () => {
+  await ctx.db(async (tx) => {
+    const courseId = randomUUID(),
+      id = randomUUID(),
+      recordId = randomUUID()
+    await tx.insert(trainingCourses).values({
+      id: courseId,
+      tenantId,
+      code: courseId,
+      name: 'Independent reminder course',
+      deliveryType: 'classroom',
+    })
+    await tx.insert(tenantNotificationPolicy).values({
+      tenantId,
+      remindersEnabled: true,
+      reminderCron: '0 8 * * *',
+      scanTimezone: clock.timezone,
+    })
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        id,
+        tenantId,
+        title: 'Independent refresh',
+        sourceModule: 'cert_requirement',
+        subjectKind: 'per_person',
+        targetRef: { courseId },
+        recurrence: { kind: 'one_time', dueOn: '2026-10-01' },
+        recurrenceKind: 'one_time',
+        status: 'active',
+      })
+      .returning()
+    await tx
+      .insert(complianceAudience)
+      .values({ tenantId, obligationId: id, kind: 'person', entityKey: alex })
+    const initial = await materializeObligation(tx, tenantId, ob!, clock)
+    expect(initial.result.rows[0]?.status).toBe('overdue')
+    expect(initial.dispatchId).not.toBeNull()
+    const [queued] = await tx
+      .select()
+      .from(complianceDispatches)
+      .where(eq(complianceDispatches.id, initial.dispatchId!))
+    expect(queued?.publishAvailableAt.toISOString()).toBe('2026-10-21T12:00:00.000Z')
+    await tx
+      .update(tenantNotificationPolicy)
+      .set({ remindersEnabled: false })
+      .where(eq(tenantNotificationPolicy.tenantId, tenantId))
+    await tx.insert(trainingRecords).values({
+      id: recordId,
+      tenantId,
+      personId: alex,
+      courseId,
+      completedOn: '2026-10-20',
+      source: 'external_upload',
+    })
+    const completed = await materializeObligation(tx, tenantId, ob!, clock)
+    expect(completed.result.rows[0]?.status).toBe('completed')
+    expect(completed.dispatchId).toBeNull()
+    const [cancelled] = await tx
+      .select()
+      .from(complianceDispatches)
+      .where(eq(complianceDispatches.id, initial.dispatchId!))
+    expect(cancelled?.status).toBe('skipped')
+    await tx.delete(trainingRecords).where(eq(trainingRecords.id, recordId))
+    const paused = await materializeObligation(tx, tenantId, ob!, clock)
+    expect(paused.result.rows[0]?.status).toBe('overdue')
+    expect(paused.dispatchId).toBeNull()
+    await tx
+      .update(tenantNotificationPolicy)
+      .set({ remindersEnabled: true })
+      .where(eq(tenantNotificationPolicy.tenantId, tenantId))
+    const resumed = await materializeObligation(tx, tenantId, ob!, clock)
+    expect(resumed.result.rows[0]?.status).toBe('overdue')
+    expect(resumed.dispatchId).toBeNull()
+  })
+})
+
+it('reschedules waiting reminders and cancels them through the saved admin policy', async () => {
+  const dispatchId = await ctx.db(async (tx) => {
+    const courseId = randomUUID(),
+      id = randomUUID()
+    await tx
+      .update(tenantNotificationPolicy)
+      .set({ remindersEnabled: true, reminderCron: '0 8 * * *' })
+      .where(eq(tenantNotificationPolicy.tenantId, tenantId))
+    await tx.insert(trainingCourses).values({
+      id: courseId,
+      tenantId,
+      code: courseId,
+      name: 'Reminder settings course',
+      deliveryType: 'classroom',
+    })
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        id,
+        tenantId,
+        title: 'Saved reminder controls',
+        sourceModule: 'cert_requirement',
+        subjectKind: 'per_person',
+        targetRef: { courseId },
+        recurrence: { kind: 'one_time', dueOn: '2026-10-01' },
+        recurrenceKind: 'one_time',
+      })
+      .returning()
+    await tx
+      .insert(complianceAudience)
+      .values({ tenantId, obligationId: id, kind: 'person', entityKey: alex })
+    return (await materializeObligation(tx, tenantId, ob!, clock)).dispatchId!
+  })
+  expect(dispatchId).toBeTruthy()
+  const policy = {
+    remindersEnabled: true,
+    reminderCron: '0 9 * * *',
+    scanTimezone: clock.timezone,
+    digestMode: 'off' as const,
+    digestHourUtc: 7,
+    quietHours: null,
+  }
+  await saveNotificationConfiguration([], policy)
+  await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(complianceDispatches)
+      .where(eq(complianceDispatches.id, dispatchId))
+    expect(row?.status).toBe('queued')
+    expect(
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: clock.timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(row!.publishAvailableAt),
+    ).toBe('09:00')
+    expect(row!.publishAvailableAt.getTime()).toBeGreaterThan(Date.now())
+  })
+  await saveNotificationConfiguration([], { ...policy, remindersEnabled: false })
+  await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(complianceDispatches)
+      .where(eq(complianceDispatches.id, dispatchId))
+    expect(row?.status).toBe('skipped')
+    expect(row?.publishLeaseId).toBeNull()
+    expect(row?.error).toBe('Compliance reminders are paused')
   })
 })

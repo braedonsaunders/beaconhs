@@ -428,7 +428,7 @@ export function NotificationSettingsForm({
 
   // Detection-schedule UI state, derived from the stored cron. Any change recompiles
   // to a cron and patches the policy (the canonical value the worker reads).
-  const [sched, setSched] = useState(() => decompileCron(policy.scanCron))
+  const [sched, setSched] = useState(() => decompileCron(policy.reminderCron))
   const tzList = useMemo<string[]>(() => {
     let z: string[] = []
     try {
@@ -446,7 +446,9 @@ export function NotificationSettingsForm({
   const updateSched = (next: Partial<ReturnType<typeof decompileCron>>) => {
     const merged = { ...sched, ...next }
     setSched(merged)
-    patchPol({ scanCron: compileCron(merged.preset, merged.hour, merged.weekday, merged.custom) })
+    patchPol({
+      reminderCron: compileCron(merged.preset, merged.hour, merged.weekday, merged.custom),
+    })
   }
 
   const save = () => {
@@ -607,38 +609,33 @@ export function NotificationSettingsForm({
             </div>
           </div>
 
-          {/* Per-tenant compliance detection schedule (evaluated in its timezone). */}
+          {/* Per-tenant reminder delivery schedule (evaluated in its timezone). */}
           <div className="space-y-1.5 border-t border-slate-100 pt-4 dark:border-slate-800">
             <div className="flex items-center justify-between gap-3">
               <Label>
-                <GeneratedText id="m_1af34f7e5bf545" />
+                <GeneratedText id="m_0a41179aae873f" />
               </Label>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  <GeneratedText id={pol.scanEnabled ? 'm_0738c9c7544385' : 'm_0580723cde1d9a'} />
+                  <GeneratedText
+                    id={pol.remindersEnabled ? 'm_0738c9c7544385' : 'm_0580723cde1d9a'}
+                  />
                 </span>
                 <Toggle
-                  checked={pol.scanEnabled}
-                  onChange={(next) => patchPol({ scanEnabled: next })}
-                  label={tGenerated('m_0bf8e367a48bd6')}
+                  checked={pol.remindersEnabled}
+                  onChange={(next) => patchPol({ remindersEnabled: next })}
+                  label={tGenerated('m_1452bfe2f62909')}
                 />
               </div>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              <GeneratedText id="m_178b7c2d54db58" />
+              <GeneratedText id="m_1f05c44bce3aba" />
             </p>
-            <div
-              className={cn(
-                'flex flex-wrap items-center gap-2 pt-1',
-                !pol.scanEnabled && 'pointer-events-none opacity-50',
-              )}
-              aria-disabled={!pol.scanEnabled}
-            >
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               <Select
                 value={sched.preset}
                 onChange={(e) => updateSched({ preset: e.target.value as SchedulePreset })}
                 className="w-40"
-                disabled={!pol.scanEnabled}
               >
                 {SCHEDULE_PRESETS.map((p) => (
                   <option key={p.value} value={p.value}>
@@ -729,9 +726,9 @@ export function NotificationSettingsForm({
             />
             <GeneratedValue
               value={
-                !pol.scanEnabled ? (
+                !pol.remindersEnabled ? (
                   <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                    <GeneratedText id="m_04dfee210292be" />
+                    <GeneratedText id="m_0b5d55c47d3c52" />
                   </p>
                 ) : null
               }

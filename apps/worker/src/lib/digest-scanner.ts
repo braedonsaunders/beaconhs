@@ -4,12 +4,13 @@
 // of one email per alert. The notify worker holds non-critical emails back when
 // digest mode is on, so this is where they actually go out.
 
-import { and, asc, count, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm'
+import { and, asc, count, eq, gt, inArray, isNull, lte, notInArray, sql } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import {
   notifications,
   tenantNotificationPolicy,
+  tenantNotificationSettings,
   tenants,
   tenantUsers,
   users,
@@ -34,6 +35,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
     await withTenant(db, t.id, async (tx) => {
       const [pol] = await tx
         .select({
+          remindersEnabled: tenantNotificationPolicy.remindersEnabled,
           digestMode: tenantNotificationPolicy.digestMode,
           digestHourUtc: tenantNotificationPolicy.digestHourUtc,
         })
@@ -42,6 +44,20 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
         .limit(1)
       if (!pol || pol.digestMode === 'off' || pol.digestHourUtc !== hour) return
       if (pol.digestMode === 'weekly' && !isMonday) return
+      const settings = await tx
+        .select({ category: tenantNotificationSettings.category })
+        .from(tenantNotificationSettings)
+        .where(
+          and(
+            eq(tenantNotificationSettings.tenantId, t.id),
+            eq(tenantNotificationSettings.enabled, false),
+          ),
+        )
+      const disabledCategories = settings.map((row) => row.category)
+      if (!pol.remindersEnabled) disabledCategories.push('compliance')
+      const categoryFilter = disabledCategories.length
+        ? notInArray(notifications.category, disabledCategories)
+        : undefined
       result.tenants += 1
 
       const sinceHours = pol.digestMode === 'weekly' ? 168 : 24
@@ -69,6 +85,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
             and(
               eq(notifications.tenantId, t.id),
               isNull(notifications.readAt),
+              categoryFilter,
               sql`coalesce(${notifications.data}->>'delivery', '') <> 'immediate'`,
               sql`${notifications.occurredAt} >= ${windowStart}`,
               lte(notifications.occurredAt, windowEnd),
@@ -85,6 +102,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
           .select({
             userId: notifications.userId,
             title: notifications.title,
+            category: notifications.category,
             linkPath: notifications.linkPath,
             rank: sql<number>`row_number() over (
               partition by ${notifications.userId}
@@ -97,6 +115,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
               eq(notifications.tenantId, t.id),
               inArray(notifications.userId, recipientIds),
               isNull(notifications.readAt),
+              categoryFilter,
               sql`coalesce(${notifications.data}->>'delivery', '') <> 'immediate'`,
               sql`${notifications.occurredAt} >= ${windowStart}`,
               lte(notifications.occurredAt, windowEnd),
@@ -107,6 +126,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
           .select({
             userId: ranked.userId,
             title: ranked.title,
+            category: ranked.category,
             linkPath: ranked.linkPath,
           })
           .from(ranked)
@@ -142,7 +162,12 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
               subject,
               html: `<p>${total} unread notification${total === 1 ? '' : 's'}:</p>${moreHtml}<ul>${list}</ul>`,
               text: `${items.map((i) => `• ${i.title}`).join('\n')}${moreText}`,
-              meta: { tenantId: t.id, category: 'digest' },
+              meta: {
+                tenantId: t.id,
+                category: 'digest',
+                automaticNotification: true,
+                notificationCategories: [...new Set(items.map((item) => item.category))],
+              },
             },
             { jobId },
           )

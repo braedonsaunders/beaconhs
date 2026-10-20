@@ -1,14 +1,6 @@
-// Unified compliance scan — the single detection brain. A FREQUENT global tick
-// (every minute) walks each tenant and self-gates against that tenant's
-// configured detection schedule (`tenant_notification_policy.scan_cron`,
-// evaluated in `scan_timezone`) — the same pattern the digest + scheduled-flow
-// scans use. When a tenant is due, re-materialise every active obligation into
-// compliance_status (the scoreboard the hub reads) and emit PERSON-TARGETED
-// alerts for the subjects whose status changed this run (pending→overdue,
-// →expiring). Firing only on transitions means a still-overdue item never
-// re-spams; running twice in the same minute is harmless (the second pass sees
-// no transition). Tenants without a policy row use the documented daily
-// 06:00-UTC default.
+// Every minute refreshes the scoreboard, independently of reminder delivery.
+// Materialization keeps a durable, current outbox; its delivery time follows
+// the tenant's reminder cadence. Pausing reminders never pauses evaluation.
 
 import { and, asc, eq, exists, inArray, isNull, notExists, sql } from 'drizzle-orm'
 import { db, withSuperAdmin, withTenant, type Database } from '@beaconhs/db'
@@ -18,14 +10,13 @@ import {
   tenantNotificationPolicy,
   tenants,
 } from '@beaconhs/db/schema'
-import { materializeTenant } from '@beaconhs/compliance'
+import { materializeTenant, resolveComplianceReminderPolicy } from '@beaconhs/compliance'
 import { emitComplianceTransitions } from '@beaconhs/events'
 import {
   publishQueuedEquipmentMaintenance,
   scanTenantEquipmentMaintenance,
 } from './equipment-maintenance-scanner'
 import { cronOccursAt } from './cron'
-import { formComplianceBoundaryDue } from './form-compliance-schedule'
 import {
   durablePublicationClaimPredicate,
   durablePublicationError,
@@ -222,6 +213,25 @@ export async function publishClaimedComplianceDispatch(
   )
   if (!owned) return 'skipped'
 
+  const policy = await resolveComplianceReminderPolicy(tx, dispatch.tenantId)
+  if (!policy.enabled) {
+    await tx
+      .update(complianceDispatches)
+      .set({
+        status: 'skipped',
+        error: 'Compliance reminders are paused',
+        publishLeaseId: null,
+        publishClaimedAt: null,
+      })
+      .where(
+        and(
+          eq(complianceDispatches.id, dispatch.id),
+          eq(complianceDispatches.publishLeaseId, dispatch.publishLeaseId),
+        ),
+      )
+    return 'skipped'
+  }
+
   const transitions = dispatch.alertPayload?.transitions
   if (!transitions?.length) {
     await tx
@@ -271,8 +281,8 @@ export async function publishClaimedComplianceDispatch(
 // `scheduledFor` is the minute the tick was SCHEDULED to run (the caller passes
 // the BullMQ slot time). Matching against it — instead of the wall clock at
 // processing time — means a tick delayed by queue congestion or a retry still
-// evaluates the minute it was meant for, so a tenant's daily scan is not
-// silently skipped when the tick lands a few minutes late.
+// evaluates the minute it was meant for. The scoreboard always uses the actual
+// processing time so a delayed tick cannot overwrite newer evidence with an old clock.
 export async function scanCompliance(
   scheduledFor: Date = new Date(),
 ): Promise<ComplianceScanResult> {
@@ -284,47 +294,26 @@ export async function scanCompliance(
     maintenance: 0,
     errors: 0,
   }
-  const now = scheduledFor
+  const now = new Date()
 
-  // One cross-tenant read of each tenant's detection schedule. Deployment runs
+  // One cross-tenant read of each tenant's reminder schedule. Deployment runs
   // migrations before starting the worker, so a missing policy table is a hard
   // deployment error rather than a second, silently degraded execution mode.
-  const { tenantRows, formSchedules } = await withSuperAdmin(db, async (tx) => {
+  const tenantRows = await withSuperAdmin(db, async (tx) => {
     const tenantRows = await tx
       .select({
         id: tenants.id,
-        enabled: tenantNotificationPolicy.scanEnabled,
-        cron: tenantNotificationPolicy.scanCron,
+        enabled: tenantNotificationPolicy.remindersEnabled,
+        cron: tenantNotificationPolicy.reminderCron,
         tz: tenantNotificationPolicy.scanTimezone,
       })
       .from(tenants)
       .leftJoin(tenantNotificationPolicy, eq(tenantNotificationPolicy.tenantId, tenants.id))
-    const formSchedules = await tx
-      .select({
-        id: complianceObligations.id,
-        tenantId: complianceObligations.tenantId,
-        recurrence: complianceObligations.recurrence,
-      })
-      .from(complianceObligations)
-      .where(
-        and(
-          eq(complianceObligations.sourceModule, 'form'),
-          eq(complianceObligations.status, 'active'),
-          isNull(complianceObligations.deletedAt),
-        ),
-      )
-    return { tenantRows, formSchedules }
+    return tenantRows
   })
-  const formSchedulesByTenant = new Map<string, typeof formSchedules>()
-  for (const schedule of formSchedules) {
-    const list = formSchedulesByTenant.get(schedule.tenantId) ?? []
-    list.push(schedule)
-    formSchedulesByTenant.set(schedule.tenantId, list)
-  }
   const schedules = tenantRows.map((r) => ({
     id: r.id,
-    // A missing policy row (left join null) keeps the documented default-on
-    // behaviour; an explicit `false` pauses the scan for this tenant.
+    // Missing policy rows retain default-on reminders.
     enabled: r.enabled ?? true,
     cron: r.cron ?? DEFAULT_CRON,
     tz: r.tz ?? DEFAULT_TZ,
@@ -332,33 +321,16 @@ export async function scanCompliance(
 
   for (const s of schedules) {
     result.tenants += 1
-    // Detection paused for this tenant: no materialization, reminders, or
-    // equipment-maintenance alerts until an admin turns it back on.
-    if (!s.enabled) continue
-    let tenantHeartbeatDue: boolean
+    let tenantHeartbeatDue = false
     try {
-      tenantHeartbeatDue = cronDueNow(s.cron, s.tz, now)
+      tenantHeartbeatDue = s.enabled && cronDueNow(s.cron, s.tz, scheduledFor)
     } catch (error) {
+      // A damaged delivery schedule must never stop scoreboard evaluation.
       result.errors += 1
       console.warn(
-        `[compliance_scan] tenant ${s.id} has an invalid scan schedule: ${complianceErrorMessage(error)}`,
+        `[compliance_scan] tenant ${s.id} has an invalid reminder schedule: ${complianceErrorMessage(error)}`,
       )
-      continue
     }
-    let formBoundaryDue = false
-    for (const schedule of formSchedulesByTenant.get(s.id) ?? []) {
-      try {
-        if (formComplianceBoundaryDue(schedule.recurrence, now, s.tz)) formBoundaryDue = true
-      } catch (error) {
-        // One damaged imported obligation must not suppress every other
-        // compliance status (or equipment maintenance) for this tenant.
-        result.errors += 1
-        console.warn(
-          `[compliance_scan] form obligation ${schedule.id} has an invalid schedule: ${complianceErrorMessage(error)}`,
-        )
-      }
-    }
-    if (!tenantHeartbeatDue && !formBoundaryDue) continue
     result.due += 1
 
     let materialized: Awaited<ReturnType<typeof materializeTenant>> = []

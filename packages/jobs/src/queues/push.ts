@@ -10,6 +10,7 @@ import {
 
 export type PushJobData = {
   tenantId: string
+  category: string
   userId: string
   subscriptionId: string
   title: string
@@ -23,6 +24,7 @@ export function assertPushJobData(data: PushJobData): void {
   assertUuid(data.tenantId, 'Push tenantId')
   assertString(data.userId, 'Push userId', { min: 1, max: 200 })
   assertUuid(data.subscriptionId, 'Push subscriptionId')
+  assertString(data.category, 'Push category', { min: 1, max: 100 })
   assertString(data.title, 'Push title', { min: 1, max: 500 })
   assertOptionalString(data.body, 'Push body', 20_000)
   assertRelativeAppPath(data.linkPath, 'Push linkPath')

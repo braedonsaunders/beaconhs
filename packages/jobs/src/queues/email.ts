@@ -28,6 +28,8 @@ export type EmailJobData = {
     category?: string
     /** Re-check the tenant category kill switch immediately before delivery. */
     automaticNotification?: boolean
+    /** Categories included in a summary; every one must still permit delivery. */
+    notificationCategories?: string[]
     reportRunDeliveryId?: string
     briefRunDeliveryId?: string
   }
