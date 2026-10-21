@@ -8,6 +8,7 @@ import {
   emailLog,
   reportRunDeliveries,
   reportRuns,
+  tenantNotificationPolicy,
 } from '@beaconhs/db/schema'
 import { isNotificationCategoryEnabled } from '@beaconhs/events'
 import type { EmailJobData } from '@beaconhs/jobs'
@@ -99,6 +100,14 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
   let disabledCategory: string | undefined
   if (job.data.meta?.automaticNotification && tenantId && categoryKey) {
     disabledCategory = await withSuperAdmin(db, async (tx) => {
+      if (job.data.meta?.equipmentMaintenanceReminder) {
+        const [policy] = await tx
+          .select({ enabled: tenantNotificationPolicy.equipmentRemindersEnabled })
+          .from(tenantNotificationPolicy)
+          .where(eq(tenantNotificationPolicy.tenantId, tenantId))
+          .limit(1)
+        if (policy?.enabled === false) return 'equipment'
+      }
       const categories = new Set([categoryKey, ...(job.data.meta?.notificationCategories ?? [])])
       for (const category of categories) {
         if (!(await isNotificationCategoryEnabled(tx, tenantId, category))) return category

@@ -15,7 +15,6 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { requireUuidInput } from '@/lib/mutation-input'
-import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 
 export async function setEquipmentDeleted(formData: FormData) {
   const ctx = await requireRequestContext()
@@ -45,7 +44,6 @@ export async function setEquipmentDeleted(formData: FormData) {
       .update(equipmentItems)
       .set({ deletedAt: restore ? null : new Date() })
       .where(and(eq(equipmentItems.tenantId, ctx.tenantId), eq(equipmentItems.id, id)))
-    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'equipment',
       entityId: id,
@@ -90,12 +88,6 @@ export async function setEquipmentInspectionDeleted(formData: FormData) {
       )
     if (record.equipmentItemId) {
       await reconcileEquipmentInspectionDatesInTx(tx, ctx.tenantId, record.equipmentItemId)
-      const [item] = await tx
-        .select({ typeId: equipmentItems.typeId })
-        .from(equipmentItems)
-        .where(eq(equipmentItems.id, record.equipmentItemId))
-        .limit(1)
-      if (item) await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
     }
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'equipment_inspection_record',

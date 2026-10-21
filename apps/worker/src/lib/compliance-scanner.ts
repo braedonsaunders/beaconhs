@@ -303,8 +303,8 @@ export async function scanCompliance(
     const tenantRows = await tx
       .select({
         id: tenants.id,
-        enabled: tenantNotificationPolicy.remindersEnabled,
-        cron: tenantNotificationPolicy.reminderCron,
+        enabled: tenantNotificationPolicy.equipmentRemindersEnabled,
+        cron: tenantNotificationPolicy.equipmentReminderCron,
         tz: tenantNotificationPolicy.scanTimezone,
       })
       .from(tenants)
@@ -321,14 +321,14 @@ export async function scanCompliance(
 
   for (const s of schedules) {
     result.tenants += 1
-    let tenantHeartbeatDue = false
+    let equipmentDeliveryDue = false
     try {
-      tenantHeartbeatDue = s.enabled && cronDueNow(s.cron, s.tz, scheduledFor)
+      equipmentDeliveryDue = s.enabled && cronDueNow(s.cron, s.tz, scheduledFor)
     } catch (error) {
       // A damaged delivery schedule must never stop scoreboard evaluation.
       result.errors += 1
       console.warn(
-        `[compliance_scan] tenant ${s.id} has an invalid reminder schedule: ${complianceErrorMessage(error)}`,
+        `[compliance_scan] tenant ${s.id} has an invalid equipment reminder schedule: ${complianceErrorMessage(error)}`,
       )
     }
     result.due += 1
@@ -344,13 +344,11 @@ export async function scanCompliance(
     } catch (err) {
       result.errors += 1
       console.warn(`[compliance_scan] tenant ${s.id} failed: ${complianceErrorMessage(err)}`)
-      continue
     }
     result.obligations += materialized.length
-    // Equipment maintenance rides the same per-tenant heartbeat — inspection
-    // schedules + ad-hoc reminders whose due date arrived alert once per due
-    // cycle (see the scanner's due_notified_for stamps).
-    if (tenantHeartbeatDue) {
+    // Equipment shares the always-on scan tick, with its own delivery switch
+    // and schedule. Each inspection/reminder cycle alerts once.
+    if (equipmentDeliveryDue) {
       try {
         result.maintenance += await scanTenantEquipmentMaintenance(s.id)
       } catch (err) {

@@ -16,6 +16,7 @@ export async function saveOilChange(form: FormData) {
   const id = requireUuidInput(form.get('itemId'), 'Equipment')
   const enabled = form.get('enabled') === 'on'
   const last = optionalDateInput(form.get('last'), 'Last oil change')
+  if (last && last < '1902-01-01') throw new Error('Enter a valid oil-change date.')
   const interval = form.get('interval') ? Number(form.get('interval')) : null
   const hours = form.get('hours') ? Number(form.get('hours')) : null
   if (

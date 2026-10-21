@@ -32,7 +32,7 @@ import {
   SCHEDULE_PRESETS,
   WEEKDAYS,
   type SchedulePreset,
-} from './_schedule'
+} from '@/lib/reminder-schedule'
 
 type RoleOpt = { key: string; name: string }
 type MemberOpt = { value: string; label: string }
@@ -629,7 +629,7 @@ export function NotificationSettingsForm({
               </div>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              <GeneratedText id="m_1f05c44bce3aba" />
+              <GeneratedValue value="Compliance status refreshes automatically every minute and after recorded changes, even with reminders off. This schedule controls compliance reminders only. Equipment reminders have their own schedule under Equipment → Maintenance → Reminders." />
             </p>
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Select

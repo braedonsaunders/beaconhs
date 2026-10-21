@@ -226,3 +226,16 @@ it('drops queued compliance delivery when reminders are off even though the cate
   expect(mocks.enqueuePush).not.toHaveBeenCalled()
   expect(mocks.sendSmsVia).not.toHaveBeenCalled()
 })
+
+it('drops queued equipment reminders when maintenance delivery is off while other equipment alerts remain enabled', async () => {
+  const { processNotification } = await import('./notify')
+  queries(
+    [{ enabled: true, channels: ['in_app', 'email'] }],
+    [{ equipmentRemindersEnabled: false, remindersEnabled: true }],
+  )
+  await processNotification(
+    signingJob({ category: 'equipment', type: 'equipment.maintenance_due', data: {} }),
+  )
+  expect(mocks.insert).not.toHaveBeenCalled()
+  expect(mocks.enqueueEmail).not.toHaveBeenCalled()
+})

@@ -19,7 +19,6 @@ import {
 } from '@beaconhs/db/schema'
 import { nextReference } from '@/lib/reference'
 import { addInterval } from '@/lib/equipment/intervals'
-import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 
@@ -285,7 +284,7 @@ export async function finaliseEquipmentInspection(
     const record = await lockVisibleEquipmentInspectionForMutation(tx, ctx, recordId)
 
     // The item lock serializes schedule advancement with schedule editing and
-    // type/status changes. Compliance is refreshed from this exact snapshot.
+    // type/status changes, so the next due date uses one consistent snapshot.
     const [item] = record.equipmentItemId
       ? await tx
           .select({ id: equipmentItems.id, typeId: equipmentItems.typeId })
@@ -496,7 +495,7 @@ export async function finaliseEquipmentInspection(
         submittedAt: new Date(),
         submittedByTenantUserId: ctx.membership?.id ?? null,
         // Snapshot this record's own inspection date + computed next-due so the
-        // upcoming report and compliance engine can read the row directly.
+        // upcoming report and maintenance views can read the row directly.
         lastInspectionOn: occurredOn,
         nextDueOn,
       })
@@ -523,8 +522,6 @@ export async function finaliseEquipmentInspection(
       event: 'on_submit',
       occurrenceKey: randomUUID(),
     })
-
-    if (item) await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
 
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'equipment_inspection_record',

@@ -30,7 +30,6 @@ import { requireExportContext, requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { optionalTextInput, optionalUuidInput, requireEnumInput } from '@/lib/mutation-input'
-import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { csvRow } from '@/lib/csv'
 import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
 import {
@@ -310,11 +309,6 @@ export async function bulkSetEquipmentStatus(args: {
         occurrenceKey: `${batchId}:${row.id}`,
       })
     }
-    await materializeEquipmentTypeEvidence(
-      tx,
-      ctx.tenantId,
-      editableRows.map((row) => row.typeId),
-    )
     return { updated: editable.length, skipped, editable }
   })
 

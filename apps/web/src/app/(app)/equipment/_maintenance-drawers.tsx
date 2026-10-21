@@ -37,7 +37,7 @@ export type ScheduleEditing = {
   label: string | null
   intervalValue: number
   intervalUnit: EquipmentIntervalUnit
-  nextDueOn: string
+  nextDueOn: string | null
   notes: string | null
   isActive: boolean
 }
@@ -58,17 +58,15 @@ export type ReminderEditing = {
 type PersonOption = { value: string; label: string; hint?: string }
 type ItemOption = { value: string; label: string; hint?: string }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 export function ScheduleDrawer({
+  defaultDate,
   open,
   closeHref,
   itemId,
   itemTypeId,
   editing,
 }: {
+  defaultDate: string
   open: boolean
   closeHref: string
   itemId: string
@@ -89,6 +87,7 @@ export function ScheduleDrawer({
       size="md"
     >
       <ScheduleForm
+        defaultDate={defaultDate}
         key={editing?.id ?? 'new'}
         itemId={itemId}
         itemTypeId={itemTypeId}
@@ -103,11 +102,13 @@ export function ScheduleDrawer({
 }
 
 function ScheduleForm({
+  defaultDate,
   itemId,
   itemTypeId,
   editing,
   onDone,
 }: {
+  defaultDate: string
   itemId: string
   itemTypeId: string | null
   editing: ScheduleEditing | null
@@ -122,7 +123,7 @@ function ScheduleForm({
     intervalValue: editing?.intervalValue ?? 1,
     intervalUnit: editing?.intervalUnit ?? 'year',
   })
-  const [nextDueOn, setNextDueOn] = useState(editing?.nextDueOn ?? todayIso())
+  const [nextDueOn, setNextDueOn] = useState(editing ? (editing.nextDueOn ?? '') : defaultDate)
   const [notes, setNotes] = useState(editing?.notes ?? '')
   const [isActive, setIsActive] = useState(editing?.isActive ?? true)
   const [error, setError] = useState<string | null>(null)
@@ -313,6 +314,7 @@ function ScheduleForm({
 }
 
 export function ReminderDrawer({
+  defaultDate,
   open,
   closeHref,
   itemId,
@@ -322,6 +324,7 @@ export function ReminderDrawer({
   people,
   peopleLookup,
 }: {
+  defaultDate: string
   open: boolean
   closeHref: string
   /** Fixed asset (detail page). Omit and pass itemOptions on the cockpit. */
@@ -346,6 +349,7 @@ export function ReminderDrawer({
       size="md"
     >
       <ReminderForm
+        defaultDate={defaultDate}
         key={editing?.id ?? 'new'}
         itemId={itemId}
         itemOptions={itemOptions}
@@ -363,6 +367,7 @@ export function ReminderDrawer({
 }
 
 function ReminderForm({
+  defaultDate,
   itemId,
   itemOptions,
   itemLookup,
@@ -371,6 +376,7 @@ function ReminderForm({
   peopleLookup,
   onDone,
 }: {
+  defaultDate: string
   itemId?: string
   itemOptions?: ItemOption[]
   itemLookup?: PickerLookup
@@ -384,7 +390,7 @@ function ReminderForm({
   const [equipmentItemId, setEquipmentItemId] = useState(editing?.equipmentItemId ?? itemId ?? '')
   const [title, setTitle] = useState(editing?.title ?? '')
   const [details, setDetails] = useState(editing?.details ?? '')
-  const [dueOn, setDueOn] = useState(editing?.dueOn ?? todayIso())
+  const [dueOn, setDueOn] = useState(editing?.dueOn ?? defaultDate)
   const [repeat, setRepeat] = useState<IntervalValue>({
     isPreUse: false,
     intervalValue: editing?.repeatIntervalValue ?? null,

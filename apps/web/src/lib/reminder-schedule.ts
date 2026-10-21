@@ -1,5 +1,5 @@
-// Shared, pure helpers for the per-tenant compliance DETECTION schedule.
-// Imported by the notifications cockpit (client) AND the save action (server),
+// Shared, pure helpers for independent compliance and equipment reminder schedules.
+// Imported by reminder forms (client) and save actions (server),
 // so this MUST stay free of server/db imports. The worker evaluates the cron in
 // the tenant's timezone; these helpers only translate friendly presets <-> cron
 // and validate the subset of cron syntax the worker's parser accepts.

@@ -6,12 +6,11 @@
 // NOT care whether the thing
 // being required is satisfied by a PERSON (per_person), a RECORD that mustn't
 // expire (per_record), or a per-(person×task) sign-off (per_task) — so you can
-// author "all Foremen hold a valid First Aid cert", "every Crane is inspected
-// monthly", "issued PPE inspected every 90 days" in the same place as a journal
+// author "all Foremen hold a valid First Aid cert", "issued PPE inspected every 90 days" in the same place as a journal
 // cadence.
 //
 // Completion EVIDENCE stays in each module's own tables (training_records,
-// inspection_records, equipment_items, …) and is read by per-module adapters.
+// inspection_records, ppe_items, …) and is read by per-module adapters.
 // `compliance_status` is the materialized scoreboard (refreshed immediately on
 // supported mutations and reconciled by the scheduled worker scan);
 // `compliance_dispatches` is the recurring-fire ledger.
@@ -44,7 +43,6 @@ export const complianceSourceModule = pgEnum('compliance_source_module', [
   'journal',
   'cert_requirement', // audience must hold a valid certification (course)
   'skill_requirement', // audience must hold a valid skill ticket
-  'equipment_inspection', // equipment of a type stays within its inspection cadence
   'ppe_inspection', // PPE of a type stays within its inspection/expiry cadence
   'job_title_signoff', // people with a title acknowledge a task
   'corrective_action',
@@ -112,7 +110,6 @@ export type ComplianceTargetRef = {
   trainingItemKind?: 'course' | 'assessment_type'
   skillTypeId?: string // skill_requirement satisfied by a valid training_skill_assignment
   formTemplateId?: string
-  equipmentTypeId?: string
   ppeTypeId?: string
   jobTitleId?: string
 }

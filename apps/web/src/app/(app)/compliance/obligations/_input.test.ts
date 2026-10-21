@@ -107,10 +107,21 @@ it('defaults new people obligations to employees and validates worker-type selec
   expect(
     parseObligationInput(
       validInput({
-        kind: 'equipment_inspection',
-        equipmentTypeId: '10000000-0000-4000-8000-000000000003',
+        kind: 'ppe_inspection',
+        ppeTypeId: '10000000-0000-4000-8000-000000000003',
         audience: [],
       }),
     ),
   ).toEqual({ ok: true, value: expect.objectContaining({ workerType: 'all' }) })
+})
+
+it('rejects equipment policy authoring through Compliance', () => {
+  expect(
+    parseObligationInput({
+      ...validInput(),
+      kind: 'equipment_inspection',
+      equipmentTypeId: '10000000-0000-4000-8000-000000000003',
+      audience: [],
+    }).ok,
+  ).toBe(false)
 })

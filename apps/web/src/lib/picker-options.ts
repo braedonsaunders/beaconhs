@@ -108,7 +108,6 @@ const PICKER_LOOKUPS = [
   'compliance-obligation-assessment-types',
   'compliance-obligation-skill-types',
   'compliance-obligation-form-templates',
-  'compliance-obligation-equipment-types',
   'compliance-obligation-ppe-types',
   'compliance-obligation-job-titles',
   'compliance-obligation-audience-roles',

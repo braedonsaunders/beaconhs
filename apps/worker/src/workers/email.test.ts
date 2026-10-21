@@ -27,6 +27,10 @@ vi.mock('@beaconhs/db/schema', () => ({
   },
   reportRunDeliveries: { id: 'report_run_deliveries.id' },
   reportRuns: { id: 'report_runs.id' },
+  tenantNotificationPolicy: {
+    equipmentRemindersEnabled: 'policy.equipment_reminders_enabled',
+    tenantId: 'policy.tenant_id',
+  },
 }))
 vi.mock('../lib/resolve-email-transport', () => ({
   resolveEmailDelivery: mocks.resolveDelivery,
@@ -181,4 +185,28 @@ it('suppresses an already queued summary if a category inside it was paused', as
   expect(mocks.inserted[0]?.errorMessage).toBe(
     'Automatic compliance notifications are disabled for this workspace.',
   )
+})
+
+it('suppresses an already queued maintenance email after equipment reminders are paused', async () => {
+  const { processEmail } = await import('./email')
+  const paused = {
+    ...tx,
+    select: () => ({
+      from: () => ({ where: () => ({ limit: async () => [{ enabled: false }] }) }),
+    }),
+  }
+  mocks.withSuperAdmin.mockImplementation(async (_db, callback) => callback(paused))
+  const queued = job()
+  queued.data.meta = {
+    tenantId: 'tenant-1',
+    category: 'equipment',
+    automaticNotification: true,
+    equipmentMaintenanceReminder: true,
+  }
+  await processEmail(queued)
+  expect(mocks.sendVia).not.toHaveBeenCalled()
+  expect(mocks.inserted[0]).toMatchObject({
+    status: 'failed',
+    meta: { provider: 'suppressed', suppressed: true },
+  })
 })

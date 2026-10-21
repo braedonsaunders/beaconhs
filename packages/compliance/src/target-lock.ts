@@ -3,7 +3,6 @@ import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
   documents,
-  equipmentTypes,
   formTemplates,
   inspectionTypes,
   personTitles,
@@ -23,7 +22,6 @@ type TargetEntity =
   | 'assessment_type'
   | 'skill_type'
   | 'form_template'
-  | 'equipment_type'
   | 'ppe_type'
   | 'job_title'
 
@@ -81,8 +79,6 @@ export function planComplianceTargetLock(
       return target('skill_type', ref.skillTypeId, 'skill type')
     case 'form':
       return target('form_template', ref.formTemplateId, 'app')
-    case 'equipment_inspection':
-      return target('equipment_type', ref.equipmentTypeId, 'equipment type')
     case 'ppe_inspection':
       return target('ppe_type', ref.ppeTypeId, 'PPE type')
     case 'job_title_signoff':
@@ -196,15 +192,6 @@ export async function lockComplianceTarget(
             isNull(formTemplates.deletedAt),
           ),
         )
-        .limit(1)
-        .for('key share')
-      return unavailable(row, plan.label)
-    }
-    case 'equipment_type': {
-      const [row] = await tx
-        .select({ id: equipmentTypes.id })
-        .from(equipmentTypes)
-        .where(and(eq(equipmentTypes.tenantId, tenantId), eq(equipmentTypes.id, plan.id)))
         .limit(1)
         .for('key share')
       return unavailable(row, plan.label)

@@ -103,9 +103,6 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
       return { ref: {} }
     case 'hazard_assessment':
       return { ref: {} }
-    case 'equipment_inspection':
-      if (!input.equipmentTypeId) return { ref: {}, error: 'Pick an equipment type' }
-      return { ref: { equipmentTypeId: input.equipmentTypeId } }
     case 'ppe_inspection':
       if (!input.ppeTypeId) return { ref: {}, error: 'Pick a PPE type' }
       return { ref: { ppeTypeId: input.ppeTypeId } }
@@ -117,12 +114,7 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
 
 function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRecurrence {
   const cronFor = () => r.cron?.trim() || frequencyToCron(r.frequency ?? 'week')
-  if (
-    kind === 'cert_requirement' ||
-    kind === 'skill_requirement' ||
-    kind === 'equipment_inspection' ||
-    kind === 'ppe_inspection'
-  )
+  if (kind === 'cert_requirement' || kind === 'skill_requirement' || kind === 'ppe_inspection')
     return { kind: 'expiry', remindBeforeDays: r.remindBeforeDays ?? 30 }
   if (kind === 'job_title_signoff') return { kind: 'one_time' }
   if (kind === 'form')

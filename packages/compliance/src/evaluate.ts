@@ -28,7 +28,6 @@ import {
   correctiveActions,
   documentAcknowledgments,
   documentVersions,
-  equipmentItems,
   formResponses,
   hazidAssessmentSignatures,
   hazidAssessments,
@@ -159,8 +158,6 @@ export async function evaluateObligation(
       return evalInspection(tx, tenantId, await aud(), ob, clock)
     case 'hazard_assessment':
       return evalHazardAssessment(tx, tenantId, await aud(), ob, clock)
-    case 'equipment_inspection':
-      return evalEquipment(tx, tenantId, ob, today)
     case 'ppe_inspection':
       return evalPpe(tx, tenantId, ob, today)
     case 'corrective_action':
@@ -872,42 +869,6 @@ function recordRow(
     dueOn,
     completedOn: null,
   }
-}
-
-async function evalEquipment(tx: Tx, tid: string, ob: Ob, today: string): Promise<EvalResult> {
-  const remind = ob.recurrence?.remindBeforeDays ?? 30
-  const typeId = ob.targetRef?.equipmentTypeId
-  // An item's due date = the soonest next_due_on across its ACTIVE recurring
-  // inspection schedules. No active schedule ⇒ null ⇒ 'completed' (nothing
-  // outstanding), matching the pre-schedules behaviour for untracked items.
-  const rows = await tx
-    .select({
-      id: equipmentItems.id,
-      name: equipmentItems.name,
-      tag: equipmentItems.assetTag,
-      due: sql<string | null>`(
-        select min(s.next_due_on)
-        from equipment_inspection_schedules s
-        where s.equipment_item_id = ${equipmentItems.id}
-          and s.tenant_id = ${equipmentItems.tenantId}
-          and s.is_active = true
-      )`,
-    })
-    .from(equipmentItems)
-    .where(
-      and(
-        eq(equipmentItems.tenantId, tid),
-        typeId ? eq(equipmentItems.typeId, typeId) : undefined,
-        eq(equipmentItems.isDraft, false),
-        notInArray(equipmentItems.status, ['retired', 'lost']),
-        isNull(equipmentItems.deletedAt),
-      ),
-    )
-  return tally(
-    rows.map((r) =>
-      recordRow(r.id, `${r.name} (${r.tag})`, expiryStatus(r.due, today, remind), r.due),
-    ),
-  )
 }
 
 async function evalPpe(tx: Tx, tid: string, ob: Ob, today: string): Promise<EvalResult> {

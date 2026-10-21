@@ -47,7 +47,6 @@ export type ObligationTargets = {
   assessmentTypes: { id: string; name: string }[]
   skillTypes: { id: string; name: string }[]
   formTemplates: { id: string; name: string }[]
-  equipmentTypes: { id: string; name: string }[]
   ppeTypes: { id: string; name: string }[]
   jobTitles: { id: string; name: string }[]
 }
@@ -115,7 +114,6 @@ export function ObligationForm({
   const [assessmentTypeId, setAssessmentTypeId] = useState(ref.assessmentTypeId ?? '')
   const [skillTypeId, setSkillTypeId] = useState(ref.skillTypeId ?? '')
   const [formTemplateId, setFormTemplateId] = useState(ref.formTemplateId ?? '')
-  const [equipmentTypeId, setEquipmentTypeId] = useState(ref.equipmentTypeId ?? '')
   const [ppeTypeId, setPpeTypeId] = useState(ref.ppeTypeId ?? '')
   const [jobTitleId, setJobTitleId] = useState(ref.jobTitleId ?? '')
 
@@ -170,7 +168,6 @@ export function ObligationForm({
           : undefined,
       skillTypeId: kind === 'skill_requirement' ? skillTypeId : undefined,
       formTemplateId: kind === 'form' ? formTemplateId : undefined,
-      equipmentTypeId: kind === 'equipment_inspection' ? equipmentTypeId : undefined,
       ppeTypeId: kind === 'ppe_inspection' ? ppeTypeId : undefined,
       jobTitleId: kind === 'job_title_signoff' ? jobTitleId : undefined,
     }
@@ -332,19 +329,6 @@ export function ObligationForm({
                         onChange={setSkillTypeId}
                         placeholder={tGenerated('m_0517043c1615d8')}
                         options={targets.skillTypes.map((s) => ({ id: s.id, label: s.name }))}
-                      />
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    meta.target === 'equipmentType' ? (
-                      <TargetSelect
-                        lookup="compliance-obligation-equipment-types"
-                        value={equipmentTypeId}
-                        onChange={setEquipmentTypeId}
-                        placeholder={tGenerated('m_0bfe8ba4c03426')}
-                        options={targets.equipmentTypes.map((t) => ({ id: t.id, label: t.name }))}
                       />
                     ) : null
                   }

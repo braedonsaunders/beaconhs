@@ -19,7 +19,6 @@ import {
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
-import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { canSeeRecord, moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import {
   addIntervalToDate,
@@ -72,7 +71,8 @@ export async function saveEquipmentSchedule(input: {
 
   const interval = parseValueUnit(input.intervalValue, input.intervalUnit)
   if (!interval) return { ok: false, error: 'Enter a valid interval.' }
-  if (!DATE_RE.test(input.nextDueOn)) return { ok: false, error: 'Next due date is required.' }
+  if (!DATE_RE.test(input.nextDueOn) || input.nextDueOn < '1902-01-01')
+    return { ok: false, error: 'Next due date is required.' }
   const label = input.label?.trim() || null
   const inspectionTypeId = input.inspectionTypeId || null
   if (!inspectionTypeId && !label) {
@@ -154,7 +154,6 @@ export async function saveEquipmentSchedule(input: {
         summary: `Updated inspection schedule (${formatInterval(interval.value, interval.unit)})`,
         after: { scheduleId: row.id, inspectionTypeId, label, nextDueOn: input.nextDueOn },
       })
-      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
       return { id: row.id, created: false }
     }
     const [row] = await tx
@@ -174,7 +173,6 @@ export async function saveEquipmentSchedule(input: {
       summary: `Added inspection schedule (${formatInterval(interval.value, interval.unit)})`,
       after: { scheduleId: row.id, inspectionTypeId, label, nextDueOn: input.nextDueOn },
     })
-    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
     return { id: row.id, created: true }
   })
   if (!result) return { ok: false, error: 'Failed to save schedule.' }
@@ -213,7 +211,6 @@ export async function deleteEquipmentSchedule(input: {
       summary: 'Removed inspection schedule',
       before: { scheduleId: input.id },
     })
-    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
     return true
   })
   if (!deleted) return { ok: false, error: 'Schedule not found.' }
@@ -434,6 +431,7 @@ export async function completeEquipmentSchedule(form: FormData) {
   assertCan(ctx, 'equipment.manage')
   const id = requireUuidInput(form.get('scheduleId'), 'Schedule')
   const completedOn = requiredDateInput(form.get('completedOn'), 'Completion date')
+  if (completedOn < '1902-01-01') throw new Error('Enter a valid completion date.')
   const evidence = requiredTextInput(
     form.get('evidence'),
     'Completion notes or certificate reference',

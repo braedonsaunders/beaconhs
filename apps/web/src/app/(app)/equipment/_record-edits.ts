@@ -19,7 +19,6 @@ import { isUniqueViolation } from '@beaconhs/db'
 import { departments, equipmentItems } from '@beaconhs/db/schema'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { can } from '@beaconhs/tenant'
-import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { customFieldRecordOp, isCustomFieldOp } from '@/lib/custom-fields/record-op'
 import { refreshEquipmentAvailability } from '@/lib/equipment-custody'
 import { EQUIPMENT_FIELD_GROUPS, equipmentFieldWireValue } from '@/lib/equipment/field-groups'
@@ -38,7 +37,6 @@ type LoadedEquipment = {
   row: EquipmentRow
   /** Before this batch: a draft's first edit commits it. */
   wasDraft: boolean
-  priorTypeId: string | null
 }
 
 const METER_FIELDS = new Set(['currentHours', 'currentOdometer'])
@@ -94,7 +92,7 @@ export const equipmentRecordSaver = defineRecordSaver<LoadedEquipment>('equipmen
     if (row.deletedAt) {
       throw recordLocked('This equipment item is deleted. Restore it to edit.')
     }
-    return { row, wasDraft: row.isDraft, priorTypeId: row.typeId }
+    return { row, wasDraft: row.isDraft }
   },
   resolve(tx, ctx, { row }, op) {
     if (isCustomFieldOp(op)) {
@@ -136,12 +134,11 @@ export const equipmentRecordSaver = defineRecordSaver<LoadedEquipment>('equipmen
       },
     )(op)
   },
-  async afterWrites(tx, ctx, { row, wasDraft, priorTypeId }, changes) {
+  async afterWrites(tx, ctx, { row, wasDraft }, changes) {
     // Custom-field values audit themselves and never commit a draft.
     const native = changes.filter((change) => !isCustomFieldOp(change.op))
     if (native.length === 0) return
     const statusChange = native.find((change) => change.op === 'status')
-    const typeChanged = native.some((change) => change.op === 'typeId')
     if (statusChange) await refreshEquipmentAvailability(tx, [row.id])
     if (wasDraft) {
       await recordModuleFlowEvent(tx, ctx, {
@@ -160,9 +157,6 @@ export const equipmentRecordSaver = defineRecordSaver<LoadedEquipment>('equipmen
       })
     }
     await auditFieldChanges(tx, ctx, { entityType: 'equipment', entityId: row.id }, native)
-    if (wasDraft || statusChange || typeChanged) {
-      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [priorTypeId, row.typeId])
-    }
   },
   revalidate: (itemId) => [`/equipment/${itemId}`, '/equipment'],
 })

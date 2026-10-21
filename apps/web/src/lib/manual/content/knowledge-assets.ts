@@ -687,6 +687,23 @@ The **Overview** details save to this device first and send when signal comes ba
 
 ## Oil changes and inspection schedules
 
+Equipment owns asset inspection schedules, servicing, oil changes, warranties, work orders and maintenance reminders. These do not appear in **Compliance → Due & expiring**. A person's requirement to submit an inspection remains in Compliance.
+
+## Review fleet inspection status
+
+1. Open **Equipment → Maintenance**, then choose **Inspection status**.
+2. Search by unit name, tag or type. Filter by **Overdue**, **Due soon**, **Current** or **Not configured**. Use the pages below the list.
+3. Open a unit to edit its inspection schedules. **Current** means every active calendar schedule is more than 30 days away. **Not configured** means the unit has no active calendar schedule, or an active schedule needs a real due date. Schedules with unknown dates stay active. Dated reminders wait until a real due date is entered. It does not mean that an inspection is legally required or that the unit is compliant. Pre-use checks remain on the unit.
+4. Managers can open **Inspection types** to configure checklists and default intervals. Each unit's schedule holds its actual next due date.
+
+## Control equipment reminders
+
+1. Open **Equipment → Maintenance**, then choose **Reminders**.
+2. Choose whether to **Send equipment maintenance reminders**, select the **Reminder schedule**, then choose **Save**.
+3. Recipients and delivery channels use the **Equipment** category under **Admin → Notifications**. The schedule uses the displayed timezone.
+
+Equipment reminders are independent of compliance reminders. Inspection dates and lists remain current when delivery is off. Turning delivery back on allows outstanding, unnotified inspection and reminder cycles to be sent once. Oil-change tracking must be enabled on the unit for it to appear as due. Unknown historical oil-change dates are left blank until a real date is entered.
+
 Open the unit’s **Equipment Checks** tab, then **Oil changes**. For applicable units, enter **Last oil change**, **Interval (months)**, and **Engine hours at oil change**, then choose **Save oil change**. A new date adds a maintenance log entry and recalculates the next due date. Use a maintenance log entry for any expense or receipt as well.
 
 In **Inspections**, schedules with a checklist have **Start**. Schedules for outside inspections have **Record completion**: enter the completion date and certificate reference or notes. Saving advances the next due date and adds history. Inspection names and intervals are configured by your company.

@@ -1,16 +1,7 @@
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
+import { getGeneratedTranslations, getGeneratedValueTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
-import {
-  Badge,
-  PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@beaconhs/ui'
+import { Badge, PageHeader, Table, TableBody, TableCell, TableHeader, TableRow } from '@beaconhs/ui'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -21,13 +12,8 @@ import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { ComplianceSubNav } from '../_sub-nav'
-import {
-  SIGNAL_MODULE_LABELS,
-  type ComplianceSignal,
-  type SignalModule,
-  type SignalStatus,
-  listDueSignals,
-} from '../_signals'
+import { OBLIGATION_KINDS, KIND_META } from '../obligations/_meta'
+import { type DueObligationRow, type DueStatus, listDueObligations } from '../_due'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -40,37 +26,21 @@ const SORTS = ['module', 'item', 'person', 'due', 'status'] as const
 
 const STATUS_OPTIONS = [
   { value: 'overdue', label: 'Overdue' },
-  { value: 'expired', label: 'Expired' },
+  { value: 'expiring', label: 'Expiring' },
   { value: 'due_soon', label: 'Due soon' },
-  { value: 'open', label: 'Open' },
+  { value: 'booked', label: 'Booked' },
 ]
-const MODULE_OPTIONS = (Object.keys(SIGNAL_MODULE_LABELS) as SignalModule[]).map((m) => ({
-  value: m,
-  label: SIGNAL_MODULE_LABELS[m],
-}))
+const MODULE_OPTIONS = [
+  ...OBLIGATION_KINDS.map((value) => ({ value, label: KIND_META[value].label })),
+  { value: 'corrective_action', label: 'Corrective actions' },
+]
 
-function SignalStatusBadge({ status }: { status: SignalStatus }) {
-  if (status === 'overdue')
-    return (
-      <Badge variant="destructive">
-        <GeneratedText id="m_1e40bdcf2d1ba1" />
-      </Badge>
-    )
-  if (status === 'expired')
-    return (
-      <Badge variant="destructive">
-        <GeneratedText id="m_13f7150c94b182" />
-      </Badge>
-    )
-  if (status === 'due_soon')
-    return (
-      <Badge variant="warning">
-        <GeneratedText id="m_0971fcc40acc3d" />
-      </Badge>
-    )
+function SignalStatusBadge({ status }: { status: DueStatus }) {
   return (
-    <Badge variant="secondary">
-      <GeneratedText id="m_107ab58c3c38bc" />
+    <Badge
+      variant={status === 'overdue' ? 'destructive' : status === 'booked' ? 'secondary' : 'warning'}
+    >
+      <GeneratedValue value={STATUS_OPTIONS.find((option) => option.value === status)!.label} />
     </Badge>
   )
 }
@@ -81,6 +51,7 @@ export default async function ExpiringPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const tGenerated = await getGeneratedTranslations()
+  const tValue = await getGeneratedValueTranslations()
   const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
@@ -88,7 +59,7 @@ export default async function ExpiringPage({
   const moduleFilter = MODULE_OPTIONS.find((option) => option.value === moduleParam)?.value
   const statusParam = pickString(sp.status)
   const statusFilter = STATUS_OPTIONS.find((option) => option.value === statusParam)?.value as
-    SignalStatus | undefined
+    DueStatus | undefined
   const params = parseListParams(sp, {
     sort: 'status',
     dir: 'asc',
@@ -105,19 +76,19 @@ export default async function ExpiringPage({
     page: params.page,
     perPage: params.perPage,
   }
-  let result = await listDueSignals(ctx, request)
+  let result = await listDueObligations(ctx, request)
   // A stale shared URL can point beyond the last page after filters change.
   // Re-read the actual last page rather than rendering an empty phantom page.
   const requestedPageCount = Math.max(1, Math.ceil(result.total / params.perPage))
   if (result.rows.length === 0 && result.total > 0 && params.page > requestedPageCount) {
-    result = await listDueSignals(ctx, { ...request, page: requestedPageCount })
+    result = await listDueObligations(ctx, { ...request, page: requestedPageCount })
   }
   const counts = result.counts
   const total = result.total
   const pageCount = Math.max(1, Math.ceil(total / params.perPage))
   const page = Math.min(params.page, pageCount)
   const rows = result.rows
-  const allCount = counts.overdue + counts.expired + counts.due_soon + counts.open
+  const allCount = counts.overdue + counts.expiring + counts.due_soon + counts.booked
 
   return (
     <ListPageLayout
@@ -125,7 +96,9 @@ export default async function ExpiringPage({
         <>
           <PageHeader
             title={tGenerated('m_096d47f60747b3')}
-            description={tGenerated('m_08b47a2a64f061')}
+            description={tValue(
+              'Upcoming and overdue configured requirements. Equipment maintenance is managed in Equipment.',
+            )}
           />
           <ComplianceSubNav active="expiring" />
           <TableToolbar>
@@ -141,7 +114,7 @@ export default async function ExpiringPage({
               basePath={BASE}
               currentParams={sp}
               paramKey="module"
-              label={tGenerated('m_065b964e065bf7')}
+              label={tValue('Kind')}
               options={MODULE_OPTIONS}
             />
           </TableToolbar>
@@ -155,13 +128,9 @@ export default async function ExpiringPage({
             value={counts.overdue}
             tone="danger"
           />
-          <SummaryCard
-            label={tGenerated('m_13f7150c94b182')}
-            value={counts.expired}
-            tone="danger"
-          />
+          <SummaryCard label={tValue('Expiring')} value={counts.expiring} tone="danger" />
           <SummaryCard label={tGenerated('m_0940472e630286')} value={counts.due_soon} tone="warn" />
-          <SummaryCard label={tGenerated('m_082fbc548bd97d')} value={counts.open} tone="muted" />
+          <SummaryCard label={tValue('Booked')} value={counts.booked} tone="muted" />
         </div>
 
         <GeneratedValue
@@ -190,11 +159,8 @@ export default async function ExpiringPage({
                         column="module"
                         active={params.sort === 'module'}
                       >
-                        <GeneratedText id="m_065b964e065bf7" />
+                        <GeneratedValue value="Kind" />
                       </SortableTh>
-                      <TableHead>
-                        <GeneratedText id="m_074ba2f160c506" />
-                      </TableHead>
                       <SortableTh
                         basePath={BASE}
                         currentParams={sp}
@@ -202,7 +168,7 @@ export default async function ExpiringPage({
                         column="item"
                         active={params.sort === 'item'}
                       >
-                        <GeneratedText id="m_02fb6dc94e4dca" />
+                        <GeneratedValue value="Requirement" />
                       </SortableTh>
                       <SortableTh
                         basePath={BASE}
@@ -211,7 +177,7 @@ export default async function ExpiringPage({
                         column="person"
                         active={params.sort === 'person'}
                       >
-                        <GeneratedText id="m_12e926c9216094" />
+                        <GeneratedValue value="Person / item" />
                       </SortableTh>
                       <SortableTh
                         basePath={BASE}
@@ -257,7 +223,7 @@ export default async function ExpiringPage({
   )
 }
 
-function SignalRow({ signal: s }: { signal: ComplianceSignal }) {
+function SignalRow({ signal: s }: { signal: DueObligationRow }) {
   const subject = s.href ? (
     <Link href={s.href as never} className="text-slate-900 hover:underline dark:text-slate-100">
       <GeneratedValue value={s.subject} />
@@ -271,17 +237,21 @@ function SignalRow({ signal: s }: { signal: ComplianceSignal }) {
     <TableRow>
       <TableCell>
         <Badge variant="secondary">
-          <GeneratedValue value={SIGNAL_MODULE_LABELS[s.module]} />
+          <GeneratedValue
+            value={MODULE_OPTIONS.find((option) => option.value === s.module)?.label ?? s.module}
+          />
         </Badge>
-      </TableCell>
-      <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-        <GeneratedValue value={s.family} />
       </TableCell>
       <TableCell>
         <GeneratedValue value={subject} />
       </TableCell>
       <TableCell className="text-slate-700 dark:text-slate-300">
         <GeneratedValue value={s.personName ?? '—'} />
+        {s.expected > 0 ? (
+          <span className="block text-xs text-slate-500">
+            <GeneratedValue value={`${s.count} / ${s.expected}`} />
+          </span>
+        ) : null}
       </TableCell>
       <TableCell className="text-slate-700 dark:text-slate-300">
         <GeneratedValue value={s.dueOn ?? '—'} />

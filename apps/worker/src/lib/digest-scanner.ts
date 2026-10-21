@@ -36,6 +36,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
       const [pol] = await tx
         .select({
           remindersEnabled: tenantNotificationPolicy.remindersEnabled,
+          equipmentRemindersEnabled: tenantNotificationPolicy.equipmentRemindersEnabled,
           digestMode: tenantNotificationPolicy.digestMode,
           digestHourUtc: tenantNotificationPolicy.digestHourUtc,
         })
@@ -55,9 +56,14 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
         )
       const disabledCategories = settings.map((row) => row.category)
       if (!pol.remindersEnabled) disabledCategories.push('compliance')
-      const categoryFilter = disabledCategories.length
-        ? notInArray(notifications.category, disabledCategories)
-        : undefined
+      const categoryFilter = and(
+        disabledCategories.length
+          ? notInArray(notifications.category, disabledCategories)
+          : undefined,
+        pol.equipmentRemindersEnabled === false
+          ? notInArray(notifications.type, ['equipment.maintenance_due', 'equipment.reminder_due'])
+          : undefined,
+      )
       result.tenants += 1
 
       const sinceHours = pol.digestMode === 'weekly' ? 168 : 24
@@ -103,6 +109,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
             userId: notifications.userId,
             title: notifications.title,
             category: notifications.category,
+            type: notifications.type,
             linkPath: notifications.linkPath,
             rank: sql<number>`row_number() over (
               partition by ${notifications.userId}
@@ -127,6 +134,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
             userId: ranked.userId,
             title: ranked.title,
             category: ranked.category,
+            type: ranked.type,
             linkPath: ranked.linkPath,
           })
           .from(ranked)
@@ -165,6 +173,9 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
               meta: {
                 tenantId: t.id,
                 category: 'digest',
+                equipmentMaintenanceReminder: items.some((item) =>
+                  ['equipment.maintenance_due', 'equipment.reminder_due'].includes(item.type),
+                ),
                 automaticNotification: true,
                 notificationCategories: [...new Set(items.map((item) => item.category))],
               },

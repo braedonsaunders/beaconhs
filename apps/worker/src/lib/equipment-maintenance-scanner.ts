@@ -6,6 +6,7 @@
 // then stamps the exact due cycle. Completing the work advances the due date,
 // which re-arms the stamp for the next cycle.
 
+import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
 import { and, asc, eq, inArray, isNull, lte, notInArray, sql } from 'drizzle-orm'
 import { db, withSuperAdmin, withTenant, type Database } from '@beaconhs/db'
 import {
@@ -14,6 +15,7 @@ import {
   equipmentItems,
   equipmentMaintenanceDispatches,
   equipmentReminders,
+  tenantNotificationPolicy,
 } from '@beaconhs/db/schema'
 import { emitEquipmentMaintenanceDue, type EquipmentMaintenanceDueEntry } from '@beaconhs/events'
 import {
@@ -31,8 +33,6 @@ import {
 
 /** Scan one tenant; returns how many entries were alerted. */
 export async function scanTenantEquipmentMaintenance(tenantId: string): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10)
-
   // Items that are gone from service don't page anyone.
   const itemFilters = [
     isNull(equipmentItems.deletedAt),
@@ -40,6 +40,7 @@ export async function scanTenantEquipmentMaintenance(tenantId: string): Promise<
   ]
 
   const queuedCount = await withTenant(db, tenantId, async (tx) => {
+    const today = complianceDate(await resolveComplianceClock(tx, tenantId))
     // Serialize the snapshot transaction per tenant. Without this lock, two
     // delayed/retried scans can create overlapping snapshots when a new due
     // record appears between their reads.
@@ -117,21 +118,25 @@ export async function scanTenantEquipmentMaintenance(tenantId: string): Promise<
       entry: EquipmentMaintenanceDueEntry
       cycle: EquipmentMaintenanceCycleIdentity
     }> = [
-      ...dueSchedules.map((schedule) => ({
-        entry: {
-          kind: 'inspection' as const,
-          equipmentItemId: schedule.equipmentItemId,
-          itemName: schedule.itemName,
-          assetTag: schedule.assetTag,
-          title: schedule.typeName ?? schedule.label ?? 'Inspection',
-          dueOn: schedule.dueOn,
-        },
-        cycle: {
-          kind: 'inspection' as const,
-          id: schedule.id,
-          dueOn: schedule.dueOn,
-        },
-      })),
+      ...dueSchedules
+        .filter(
+          (schedule): schedule is typeof schedule & { dueOn: string } => schedule.dueOn !== null,
+        )
+        .map((schedule) => ({
+          entry: {
+            kind: 'inspection' as const,
+            equipmentItemId: schedule.equipmentItemId,
+            itemName: schedule.itemName,
+            assetTag: schedule.assetTag,
+            title: schedule.typeName ?? schedule.label ?? 'Inspection',
+            dueOn: schedule.dueOn,
+          },
+          cycle: {
+            kind: 'inspection' as const,
+            id: schedule.id,
+            dueOn: schedule.dueOn,
+          },
+        })),
       ...dueReminders.map((reminder) => ({
         entry: {
           kind: 'reminder' as const,
@@ -255,6 +260,32 @@ export async function publishQueuedEquipmentMaintenance(): Promise<{
         .returning({ id: equipmentMaintenanceDispatches.id }),
     )
     if (!owned) continue
+
+    const [policy] = await withTenant(db, dispatch.tenantId, (tx) =>
+      tx
+        .select({ enabled: tenantNotificationPolicy.equipmentRemindersEnabled })
+        .from(tenantNotificationPolicy)
+        .where(eq(tenantNotificationPolicy.tenantId, dispatch.tenantId))
+        .limit(1),
+    )
+    if (policy?.enabled === false) {
+      await withTenant(db, dispatch.tenantId, (tx) =>
+        tx
+          .update(equipmentMaintenanceDispatches)
+          .set({
+            publishAvailableAt: new Date(Date.now() + 60_000),
+            publishLeaseId: null,
+            publishClaimedAt: null,
+          })
+          .where(
+            and(
+              eq(equipmentMaintenanceDispatches.id, dispatch.id),
+              eq(equipmentMaintenanceDispatches.publishLeaseId, dispatch.publishLeaseId),
+            ),
+          ),
+      )
+      continue
+    }
 
     if (dispatch.entries.length === 0) {
       result.errors += 1

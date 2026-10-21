@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SQL } from 'drizzle-orm'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import type { Database } from '@beaconhs/db'
-import { equipmentItems, ppeItems } from '@beaconhs/db/schema'
+import { ppeItems } from '@beaconhs/db/schema'
 import { evaluateObligation, type ComplianceObligation } from './evaluate'
 
 const TENANT_ID = '00000000-0000-4000-8000-000000000001'
 const TYPE_ID = '00000000-0000-4000-8000-000000000002'
 
-function obligation(sourceModule: 'equipment_inspection' | 'ppe_inspection'): ComplianceObligation {
+function obligation(sourceModule: 'ppe_inspection'): ComplianceObligation {
   return {
     id: '00000000-0000-4000-8000-000000000003',
     tenantId: TENANT_ID,
@@ -18,10 +18,7 @@ function obligation(sourceModule: 'equipment_inspection' | 'ppe_inspection'): Co
     notes: null,
     workerType: 'all',
     status: 'active',
-    targetRef:
-      sourceModule === 'equipment_inspection'
-        ? { equipmentTypeId: TYPE_ID }
-        : { ppeTypeId: TYPE_ID },
+    targetRef: { ppeTypeId: TYPE_ID },
     recurrence: { kind: 'expiry', remindBeforeDays: 30 },
     recurrenceKind: 'expiry',
     lastScannedAt: null,
@@ -58,35 +55,6 @@ function fakeDatabase(table: unknown, rows: unknown[]) {
 }
 
 describe('per-record compliance evaluation', () => {
-  it('excludes draft and retired/lost equipment from inspection obligations', async () => {
-    const fake = fakeDatabase(equipmentItems, [
-      {
-        id: '00000000-0000-4000-8000-000000000004',
-        name: 'Telehandler',
-        tag: 'EQ-42',
-        due: '2026-07-20',
-      },
-    ])
-
-    const evaluated = await evaluateObligation(
-      fake.tx,
-      TENANT_ID,
-      obligation('equipment_inspection'),
-      [],
-      { now: new Date('2026-07-14T12:00:00.000Z'), timezone: 'UTC' },
-    )
-
-    expect(evaluated.rows[0]).toMatchObject({
-      label: 'Telehandler (EQ-42)',
-      status: 'expiring',
-      dueOn: '2026-07-20',
-    })
-    const predicate = new PgDialect().sqlToQuery(fake.whereClause()!)
-    expect(predicate.sql).toContain('"equipment_items"."is_draft" = $3')
-    expect(predicate.sql).toContain('"equipment_items"."status" not in ($4, $5)')
-    expect(predicate.params).toEqual([TENANT_ID, TYPE_ID, false, 'retired', 'lost'])
-  })
-
   it('uses the earliest PPE inspection, annual inspection, or expiry date', async () => {
     const fake = fakeDatabase(ppeItems, [
       {

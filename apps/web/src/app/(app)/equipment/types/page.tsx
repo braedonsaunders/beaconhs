@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Boxes, Plus, Trash2 } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, type SQL } from 'drizzle-orm'
-import { assertComplianceTargetCanRetire } from '@beaconhs/compliance'
 import {
   Badge,
   Button,
@@ -99,7 +98,6 @@ async function deleteType(formData: FormData) {
       .limit(1)
       .for('update')
     if (!type) throw new Error('Equipment type not found')
-    await assertComplianceTargetCanRetire(tx, ctx.tenantId, 'equipment_type', id)
 
     // Server-side usage check — the disabled delete button is advisory only.
     // Items reference types with no ON DELETE action (a bare delete would 500

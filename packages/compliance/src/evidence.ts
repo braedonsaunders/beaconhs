@@ -3,7 +3,6 @@ import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
   documents,
-  equipmentTypes,
   formTemplates,
   inspectionTypes,
   ppeTypes,
@@ -22,7 +21,6 @@ export type ComplianceEvidenceTarget =
   | { sourceModule: 'document'; targetRef: { documentId: string } }
   | { sourceModule: 'inspection'; targetRef: { inspectionTypeId: string } }
   | { sourceModule: 'form'; targetRef: { formTemplateId: string } }
-  | { sourceModule: 'equipment_inspection'; targetRef: { equipmentTypeId: string } }
   | { sourceModule: 'ppe_inspection'; targetRef: { ppeTypeId: string } }
   | {
       sourceModule: 'journal' | 'hazard_assessment' | 'corrective_action'
@@ -47,7 +45,6 @@ type ComplianceEvidenceOwner =
   | 'assessment_type'
   | 'course'
   | 'document'
-  | 'equipment_type'
   | 'form_template'
   | 'inspection_type'
   | 'ppe_type'
@@ -58,7 +55,6 @@ type ComplianceEvidenceMatch = {
     | 'assessmentTypeId'
     | 'courseId'
     | 'documentId'
-    | 'equipmentTypeId'
     | 'formTemplateId'
     | 'inspectionTypeId'
     | 'ppeTypeId'
@@ -122,15 +118,6 @@ export function planComplianceEvidenceTarget(
         owner: 'form_template',
         ownerId: owner.id,
         matches: [{ sourceModule: 'form', targetKey: 'formTemplateId' }],
-      }
-    case 'equipment_inspection':
-      if (owner.entity !== 'equipment_type') {
-        throw new ComplianceTargetError('Compliance equipment evidence target is invalid')
-      }
-      return {
-        owner: 'equipment_type',
-        ownerId: owner.id,
-        matches: [{ sourceModule: 'equipment_inspection', targetKey: 'equipmentTypeId' }],
       }
     case 'ppe_inspection':
       if (owner.entity !== 'ppe_type') {
@@ -220,16 +207,6 @@ async function lockEvidenceTargetOwner(
       if (!row) throw new ComplianceTargetError('The evidence form template no longer exists')
       return
     }
-    case 'equipment_type': {
-      const [row] = await tx
-        .select({ id: equipmentTypes.id })
-        .from(equipmentTypes)
-        .where(and(eq(equipmentTypes.tenantId, tenantId), eq(equipmentTypes.id, plan.ownerId)))
-        .limit(1)
-        .for('update')
-      if (!row) throw new ComplianceTargetError('The evidence equipment type no longer exists')
-      return
-    }
     case 'ppe_type': {
       const [row] = await tx
         .select({ id: ppeTypes.id })
@@ -289,8 +266,6 @@ function evidenceTargetRefValue(targetKey: ComplianceEvidenceMatch['targetKey'])
       return sql<string>`${complianceObligations.targetRef}->>'inspectionTypeId'`
     case 'formTemplateId':
       return sql<string>`${complianceObligations.targetRef}->>'formTemplateId'`
-    case 'equipmentTypeId':
-      return sql<string>`${complianceObligations.targetRef}->>'equipmentTypeId'`
     case 'ppeTypeId':
       return sql<string>`${complianceObligations.targetRef}->>'ppeTypeId'`
     case 'courseId':

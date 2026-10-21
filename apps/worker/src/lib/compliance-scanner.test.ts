@@ -51,3 +51,13 @@ it('refreshes paused tenants and tenants outside their reminder hour on every ti
   ])
   expect(mocks.maintenance).not.toHaveBeenCalled()
 })
+
+it('delivers equipment reminders on their own schedule while scoreboard evaluation continues', async () => {
+  mocks.rows = [
+    { id: 'equipment-on', enabled: true, cron: '0 8 * * *', tz: 'America/Toronto' },
+    { id: 'equipment-off', enabled: false, cron: '0 8 * * *', tz: 'America/Toronto' },
+  ]
+  await scanCompliance(new Date('2026-10-20T12:00:00Z'))
+  expect(mocks.maintenance).toHaveBeenCalledExactlyOnceWith('equipment-on')
+  expect(mocks.materialize).toHaveBeenCalledTimes(2)
+})

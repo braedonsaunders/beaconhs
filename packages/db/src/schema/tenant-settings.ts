@@ -28,6 +28,8 @@ export const tenantNotificationPolicy = pgTable(
     // control delivery only, never evaluation.
     remindersEnabled: boolean('scan_enabled').default(true).notNull(),
     reminderCron: text('scan_cron').default('0 6 * * *').notNull(),
+    equipmentRemindersEnabled: boolean('equipment_reminders_enabled').default(true).notNull(),
+    equipmentReminderCron: text('equipment_reminder_cron').default('0 6 * * *').notNull(),
     // Canonical tenant clock for both evidence windows and reminder schedules.
     scanTimezone: text('scan_timezone').default('UTC').notNull(),
     ...timestamps,

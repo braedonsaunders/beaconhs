@@ -1,61 +1,22 @@
-// Cross-module "due & expiring" signals — Milestone 1.5.
-//
-// The unified hub's CREATE form only handles audience-on-cadence assignments
-// (the 5 kinds). But compliance across the platform is mostly a DIFFERENT shape:
-// per-record expiries (certs, permits, equipment/PPE due dates), recurring
-// per-record timed check-ins, document review cadence, and single-owner
-// tasks (corrective actions, work orders, incident preventative steps).
-//
-// This aggregator READS those signals from each module's own tables and projects
-// them into one row shape so the hub can show "everything that needs attention
-// across the whole platform" in one place. It is the read-path preview of the
-// M3 per-record/expiry completion adapters — when those land, this becomes a
-// single query over `compliance_status`.
-
+// Native equipment maintenance and skill-ticket dates for operational dashboard widgets.
+import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
 import { sql, type SQL } from 'drizzle-orm'
 import {
-  correctiveActions,
-  documents,
   equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentReminders,
   equipmentItems,
   equipmentWorkOrders,
-  incidentPreventativeSteps,
-  formResponses,
   people,
-  ppeItems,
-  ppeTypes,
-  trainingCourses,
-  trainingRecords,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 
 export type SignalStatus = 'overdue' | 'expired' | 'due_soon' | 'open'
 
-export type SignalModule =
-  | 'training'
-  | 'skills'
-  | 'monitored_session'
-  | 'documents'
-  | 'equipment'
-  | 'ppe'
-  | 'corrective_actions'
-  | 'incidents'
+type SignalModule = 'skills' | 'equipment'
 
-export const SIGNAL_MODULE_LABELS: Record<SignalModule, string> = {
-  training: 'Training',
-  skills: 'Skills',
-  monitored_session: 'Monitored sessions',
-  documents: 'Documents',
-  equipment: 'Equipment',
-  ppe: 'PPE',
-  corrective_actions: 'Corrective actions',
-  incidents: 'Incidents',
-}
-
-export type ComplianceSignal = {
+type OperationalDueSignal = {
   key: string
   module: SignalModule
   family: string
@@ -87,7 +48,7 @@ type DueSignalListOptions = {
 }
 
 type DueSignalListResult = {
-  rows: ComplianceSignal[]
+  rows: OperationalDueSignal[]
   total: number
   counts: Record<SignalStatus, number>
 }
@@ -110,7 +71,7 @@ type SignalQueryRow = {
 }
 
 /**
- * Every due / expiring / overdue / open-task compliance signal across modules,
+ * Native operational dates, independent of configured people obligations,
  * within the horizon (or already past).
  */
 export async function listDueSignals(
@@ -118,9 +79,8 @@ export async function listDueSignals(
   options: DueSignalListOptions = {},
 ): Promise<DueSignalListResult> {
   const tid = ctx.tenantId!
-  const now = new Date()
-  const today = now.toISOString().slice(0, 10)
-  const horizonDate = new Date(now.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000)
+  const today = complianceDate(await ctx.db((tx) => resolveComplianceClock(tx, tid)))
+  const horizonDate = new Date(Date.parse(today) + HORIZON_DAYS * 24 * 60 * 60 * 1000)
   const horizonIso = horizonDate.toISOString().slice(0, 10)
   const page = Math.max(1, Math.min(10_000, Math.trunc(options.page ?? 1)))
   const perPage = Math.max(5, Math.min(100, Math.trunc(options.perPage ?? 50)))
@@ -156,74 +116,20 @@ export async function listDueSignals(
   return ctx.db(async (tx) => {
     // Dashboard equipment widgets share the module's site/holder visibility.
     const equipmentScope =
-      options.module === 'equipment'
-        ? ((await moduleScopeWhere(ctx, tx, {
-            prefix: 'equipment',
-            siteCol: equipmentItems.currentSiteOrgUnitId,
-            personCol: equipmentItems.currentHolderPersonId,
-          })) ?? sql`true`)
-        : sql`true`
+      (await moduleScopeWhere(ctx, tx, {
+        prefix: 'equipment',
+        siteCol: equipmentItems.currentSiteOrgUnitId,
+        personCol: equipmentItems.currentHolderPersonId,
+      })) ?? sql`true`
     const queryResult = await tx.execute<SignalQueryRow>(sql`
       with signals as (
-        select 'training'::text as module, 'Certification expiry'::text as family,
-          coalesce(${trainingCourses.name}, 'Certification')::text as subject,
-          nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), '')::text as person_name,
-          ${trainingRecords.personId}::text as person_id, ${trainingRecords.expiresOn}::date as due_on,
-          case when ${trainingRecords.expiresOn} < ${today}::date then 'expired' else 'due_soon' end::text as status,
-          '/training/records/' || ${trainingRecords.id}::text as href, ${trainingRecords.id}::text as stable_key
-        from ${trainingRecords}
-        join ${people} on ${people.id} = ${trainingRecords.personId}
-        left join ${trainingCourses} on ${trainingCourses.id} = ${trainingRecords.courseId}
-        where ${trainingRecords.tenantId} = ${tid} and ${trainingRecords.deletedAt} is null
-          and ${trainingRecords.expiresOn} is not null and ${trainingRecords.expiresOn} <= ${horizonIso}::date
-          and ${people.status} = 'active' and ${people.deletedAt} is null
-          and (${trainingRecords.courseId} is null or not exists (
-            select 1 from ${trainingRecords} tr_newer
-            where tr_newer.tenant_id = ${trainingRecords.tenantId}
-              and tr_newer.person_id = ${trainingRecords.personId}
-              and tr_newer.course_id = ${trainingRecords.courseId}
-              and tr_newer.deleted_at is null
-              and (tr_newer.completed_on, tr_newer.created_at, tr_newer.id)
-                > (${trainingRecords.completedOn}, ${trainingRecords.createdAt}, ${trainingRecords.id})
-          ))
-
-        union all
-        select 'skills', 'Skill ticket expiry', certification_name,
-          person_name, person_id::text, expires_on::date,
-          case when outcome = 'expired' or expires_on < ${today}::date then 'expired' else 'due_soon' end,
-          '/training/skills/' || id::text, id::text
-        from report_skill_assignments
-        where tenant_id = ${tid} and person_status = 'active'
-          and outcome in ('complete', 'expired') and expires_on is not null
-          and expires_on <= ${horizonIso}::date
-
-        union all
-        select 'monitored_session', 'Check-in', 'Monitored session check-in', null, null,
-          ${formResponses.nextCheckinDueAt}::date,
-          case when ${formResponses.monitorStatus} in ('missed','escalated') or ${formResponses.nextCheckinDueAt}::date < ${today}::date then 'overdue' else 'due_soon' end,
-          '/apps/responses/' || ${formResponses.id}::text, ${formResponses.id}::text
-        from ${formResponses}
-        where ${formResponses.tenantId} = ${tid}
-          and ${formResponses.monitorStatus} in ('active','missed','escalated')
-          and ${formResponses.nextCheckinDueAt} <= ${horizonDate.toISOString()}::timestamptz
-
-        union all
-        select 'documents', 'Review due', ${documents.title}, null, null, ${documents.nextReviewOn}::date,
-          case when ${documents.nextReviewOn} < ${today}::date then 'overdue' else 'due_soon' end,
-          '/documents/' || ${documents.id}::text, ${documents.id}::text
-        from ${documents}
-        where ${documents.tenantId} = ${tid} and ${documents.deletedAt} is null
-          and ${documents.status} in ('draft','published','under_review')
-          and ${documents.nextReviewOn} is not null and ${documents.nextReviewOn} <= ${horizonIso}::date
-
-        union all
-        select 'equipment', 'Inspection', ${equipmentItems.assetTag} || ' — ' ||
-          coalesce(${equipmentInspectionTypes.name}, ${equipmentInspectionSchedules.label}, 'Inspection'),
-          nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), ''),
-          ${equipmentItems.currentHolderPersonId}::text, ${equipmentInspectionSchedules.nextDueOn}::date,
-          case when ${equipmentInspectionSchedules.nextDueOn} < ${today}::date then 'overdue' else 'due_soon' end,
-          '/equipment/maintenance?drawer=unit-' || ${equipmentItems.id}::text,
-          ${equipmentInspectionSchedules.id}::text || ':inspection'
+        select 'equipment'::text as module, 'Inspection'::text as family, ${equipmentItems.assetTag} || ' — ' ||
+          coalesce(${equipmentInspectionTypes.name}, ${equipmentInspectionSchedules.label}, 'Inspection') as subject,
+          nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), '') as person_name,
+          ${equipmentItems.currentHolderPersonId}::text as person_id, ${equipmentInspectionSchedules.nextDueOn}::date as due_on,
+          case when ${equipmentInspectionSchedules.nextDueOn} < ${today}::date then 'overdue' else 'due_soon' end::text as status,
+          '/equipment/maintenance?drawer=unit-' || ${equipmentItems.id}::text as href,
+          ${equipmentInspectionSchedules.id}::text || ':inspection' as stable_key
         from ${equipmentItems}
         join ${equipmentInspectionSchedules} on ${equipmentInspectionSchedules.equipmentItemId} = ${equipmentItems.id}
           and ${equipmentInspectionSchedules.tenantId} = ${equipmentItems.tenantId}
@@ -231,7 +137,7 @@ export async function listDueSignals(
         left join ${equipmentInspectionTypes} on ${equipmentInspectionTypes.id} = ${equipmentInspectionSchedules.inspectionTypeId}
         left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
         where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
+          and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
           and ${equipmentInspectionSchedules.nextDueOn} <= ${horizonIso}::date
 
         union all
@@ -246,7 +152,7 @@ export async function listDueSignals(
           and ${equipmentItems.tenantId} = ${equipmentReminders.tenantId}
         left join ${people} on ${people.id} = ${equipmentReminders.assignedToPersonId}
         where ${equipmentReminders.tenantId} = ${tid} and ${equipmentReminders.completedAt} is null
-          and ${equipmentItems.deletedAt} is null and ${equipmentItems.status} not in ('retired','lost')
+          and ${equipmentItems.deletedAt} is null and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost')
           and (${equipmentScope}) and ${equipmentReminders.dueOn} <= ${horizonIso}::date
 
         union all
@@ -254,11 +160,12 @@ export async function listDueSignals(
           nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), ''),
           ${equipmentItems.currentHolderPersonId}::text, ${equipmentItems.nextOilChangeDue}::date,
           case when ${equipmentItems.nextOilChangeDue} < ${today}::date then 'overdue' else 'due_soon' end,
-          '/equipment/' || ${equipmentItems.id}::text, ${equipmentItems.id}::text || ':oil'
+          '/equipment/' || ${equipmentItems.id}::text || '?tab=inspections&itab=oil', ${equipmentItems.id}::text || ':oil'
         from ${equipmentItems}
         left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
         where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
+          and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
+          and ${equipmentItems.requiresOilChange} = true
           and ${equipmentItems.nextOilChangeDue} is not null and ${equipmentItems.nextOilChangeDue} <= ${horizonIso}::date
 
         union all
@@ -270,49 +177,9 @@ export async function listDueSignals(
         from ${equipmentItems}
         left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
         where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
+          and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
           and ${equipmentItems.warrantyExpiresOn} is not null and ${equipmentItems.warrantyExpiresOn} <= ${horizonIso}::date
 
-        union all
-        select 'ppe', family, coalesce(${ppeTypes.name}, 'PPE') || case when ${ppeItems.serialNumber} is not null then ' · ' || ${ppeItems.serialNumber} else '' end,
-          nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), ''),
-          ${ppeItems.currentHolderPersonId}::text, due_on,
-          case when expiry and due_on < ${today}::date then 'expired' when due_on < ${today}::date then 'overdue' else 'due_soon' end,
-          '/ppe/' || ${ppeItems.id}::text, ${ppeItems.id}::text || ':' || family
-        from ${ppeItems}
-        left join ${ppeTypes} on ${ppeTypes.id} = ${ppeItems.typeId}
-        left join ${people} on ${people.id} = ${ppeItems.currentHolderPersonId}
-        cross join lateral (values
-          ('Inspection'::text, ${ppeItems.nextInspectionDue}::date, false),
-          ('Annual inspection'::text, ${ppeItems.nextAnnualInspectionDue}::date, false),
-          ('Expiry'::text, ${ppeItems.expiresOn}::date, true)
-        ) signal(family, due_on, expiry)
-        where ${ppeItems.tenantId} = ${tid} and ${ppeItems.deletedAt} is null
-          and ${ppeItems.status} not in ('discarded','expired')
-          and due_on is not null and due_on <= ${horizonIso}::date
-
-        union all
-        select 'corrective_actions', 'Corrective action', ${correctiveActions.reference} || ' — ' || ${correctiveActions.title},
-          null, null, ${correctiveActions.dueOn}::date,
-          case when ${correctiveActions.dueOn} < ${today}::date then 'overdue' else 'due_soon' end,
-          '/corrective-actions/' || ${correctiveActions.id}::text, ${correctiveActions.id}::text
-        from ${correctiveActions}
-        where ${correctiveActions.tenantId} = ${tid} and ${correctiveActions.deletedAt} is null
-          and ${correctiveActions.status} in ('open','in_progress','pending_verification')
-          and ${correctiveActions.dueOn} is not null and ${correctiveActions.dueOn} <= ${horizonIso}::date
-
-        union all
-        select 'incidents', 'Preventative action', 'Preventative action',
-          nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), ''),
-          ${incidentPreventativeSteps.ownerPersonId}::text, ${incidentPreventativeSteps.targetDate}::date,
-          case when ${incidentPreventativeSteps.targetDate} < ${today}::date then 'overdue' else 'due_soon' end,
-          '/incidents/' || ${incidentPreventativeSteps.incidentId}::text, ${incidentPreventativeSteps.id}::text
-        from ${incidentPreventativeSteps}
-        left join ${people} on ${people.id} = ${incidentPreventativeSteps.ownerPersonId}
-        where ${incidentPreventativeSteps.tenantId} = ${tid}
-          and ${incidentPreventativeSteps.status} in ('planned','in_progress')
-          and ${incidentPreventativeSteps.targetDate} is not null
-          and ${incidentPreventativeSteps.targetDate} <= ${horizonIso}::date
 
         union all
         select 'equipment', 'Work order', ${equipmentWorkOrders.reference} ||
@@ -325,6 +192,16 @@ export async function listDueSignals(
         where ${equipmentWorkOrders.tenantId} = ${tid} and (${equipmentScope})
           and ${equipmentWorkOrders.deletedAt} is null and ${equipmentItems.deletedAt} is null
           and ${equipmentWorkOrders.status} in ('open','assigned','in_progress','awaiting_parts')
+
+        union all
+        select 'skills', 'Skill ticket expiry', certification_name,
+          person_name, person_id::text, expires_on::date,
+          case when outcome = 'expired' or expires_on < ${today}::date then 'expired' else 'due_soon' end,
+          '/training/skills/' || id::text, id::text
+        from report_skill_assignments
+        where tenant_id = ${tid} and person_status = 'active'
+          and outcome in ('complete', 'expired') and expires_on is not null
+          and expires_on <= ${horizonIso}::date
       ), filtered as (
         select * from signals ${filteredWhere}
       ), totals as (

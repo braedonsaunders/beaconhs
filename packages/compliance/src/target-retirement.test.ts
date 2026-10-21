@@ -23,7 +23,6 @@ describe('planComplianceTargetRetirement', () => {
     ['assessment_type', ['training'], 'assessmentTypeId'],
     ['skill_type', ['skill_requirement'], 'skillTypeId'],
     ['form_template', ['form'], 'formTemplateId'],
-    ['equipment_type', ['equipment_inspection'], 'equipmentTypeId'],
     ['ppe_type', ['ppe_inspection'], 'ppeTypeId'],
   ] as const)('maps %s to its sole producer and target key', (target, modules, key) => {
     const plan = planComplianceTargetRetirement(target)

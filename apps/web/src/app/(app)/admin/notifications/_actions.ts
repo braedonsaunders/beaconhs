@@ -17,7 +17,7 @@ import { can, type RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { NOTIFICATION_CATEGORIES } from './_catalog'
-import { isValidCron, isValidTimezone } from './_schedule'
+import { isValidCron, isValidTimezone } from '@/lib/reminder-schedule'
 
 export type EscalationStep = { afterDays: number; roleKeys: string[] }
 

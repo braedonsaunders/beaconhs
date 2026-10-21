@@ -110,6 +110,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     const [policy] = await tx
       .select({
         remindersEnabled: tenantNotificationPolicy.remindersEnabled,
+        equipmentRemindersEnabled: tenantNotificationPolicy.equipmentRemindersEnabled,
         digestMode: tenantNotificationPolicy.digestMode,
         quietHours: tenantNotificationPolicy.quietHours,
       })
@@ -117,6 +118,11 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
       .where(eq(tenantNotificationPolicy.tenantId, d.tenantId))
       .limit(1)
 
+    if (
+      ['equipment.maintenance_due', 'equipment.reminder_due'].includes(d.type) &&
+      policy?.equipmentRemindersEnabled === false
+    )
+      return { disabled: true as const }
     if (d.category === 'compliance' && policy?.remindersEnabled === false)
       return { disabled: true as const }
 
@@ -239,6 +245,10 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
           userId: target.id,
           category: d.category,
           automaticNotification: true,
+          equipmentMaintenanceReminder: [
+            'equipment.maintenance_due',
+            'equipment.reminder_due',
+          ].includes(d.type),
         },
       },
       {

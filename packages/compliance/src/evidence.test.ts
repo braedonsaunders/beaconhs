@@ -195,16 +195,6 @@ describe('evidence-target compliance materialization', () => {
     })
     expect(
       planComplianceEvidenceTarget({
-        sourceModule: 'equipment_inspection',
-        targetRef: { equipmentTypeId: TARGET_ID },
-      }),
-    ).toEqual({
-      owner: 'equipment_type',
-      ownerId: TARGET_ID,
-      matches: [{ sourceModule: 'equipment_inspection', targetKey: 'equipmentTypeId' }],
-    })
-    expect(
-      planComplianceEvidenceTarget({
         sourceModule: 'ppe_inspection',
         targetRef: { ppeTypeId: TARGET_ID },
       }),

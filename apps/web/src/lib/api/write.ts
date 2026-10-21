@@ -69,10 +69,7 @@ import {
 } from '@/app/(app)/inspections/_lib'
 import { nextReference } from '@/lib/reference'
 import { openEquipmentCheckoutItemIds, refreshEquipmentAvailability } from '@/lib/equipment-custody'
-import {
-  materializeEquipmentTypeEvidence,
-  materializePpeTypeEvidence,
-} from '@/lib/compliance-type-evidence'
+import { materializePpeTypeEvidence } from '@/lib/compliance-type-evidence'
 import { isUuid } from '@/lib/list-params'
 import { ApiError } from './errors'
 
@@ -1469,8 +1466,12 @@ const equipmentCreate = z.object({
   requiresPreUseInspection: z.boolean().default(false),
   requiresOilChange: z.boolean().default(false),
   oilChangeIntervalMonths: z.number().int().positive().nullish(),
-  lastOilChangeOn: isoDate.nullish(),
-  nextOilChangeDue: isoDate.nullish(),
+  lastOilChangeOn: isoDate
+    .refine((value) => value >= '1902-01-01', 'Enter a valid oil-change date.')
+    .nullish(),
+  nextOilChangeDue: isoDate
+    .refine((value) => value >= '1902-01-01', 'Enter a valid oil-change date.')
+    .nullish(),
   metadata,
 })
 
@@ -1591,7 +1592,6 @@ async function createEquipment(ctx: RequestContext, raw: unknown): Promise<Write
           currentHolderPersonId: created.currentHolderPersonId,
         },
       })
-      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [created.typeId])
     }
     return created
   })
@@ -1769,7 +1769,6 @@ async function updateEquipment(
           currentHolderPersonId: updated.currentHolderPersonId,
         },
       })
-      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [before.typeId, updated.typeId])
     }
 
     return { before, updated }
@@ -1813,7 +1812,6 @@ async function deleteEquipment(ctx: RequestContext, id: string): Promise<WriteRe
       },
       after: { deletedAt },
     })
-    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [before.typeId])
     return { before, deletedAt }
   })
   revalidatePath('/equipment')

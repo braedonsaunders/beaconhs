@@ -30,6 +30,7 @@ export type EmailJobData = {
     automaticNotification?: boolean
     /** Categories included in a summary; every one must still permit delivery. */
     notificationCategories?: string[]
+    equipmentMaintenanceReminder?: boolean
     reportRunDeliveryId?: string
     briefRunDeliveryId?: string
   }

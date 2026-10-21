@@ -31,7 +31,6 @@ describe('compliance target retirement contract', () => {
       'assessmentTypeId',
       'skillTypeId',
       'formTemplateId',
-      'equipmentTypeId',
       'ppeTypeId',
     ]) {
       expect(helper).toContain(`targetRefKey: '${targetKey}'`)
@@ -73,12 +72,6 @@ describe('compliance target retirement contract', () => {
     expectOwnerThenObligation(
       between(actions, 'export async function deleteAssessmentType', '// ----- Question CRUD'),
     )
-  })
-
-  it('locks equipment types before usage and obligation checks and audits atomically', () => {
-    const page = source('../app/(app)/equipment/types/page.tsx')
-    expectOwnerThenObligation(between(page, 'async function deleteType', 'export default'))
-    expect(page).toContain('eq(equipmentTypes.tenantId, ctx.tenantId)')
   })
 
   it('routes both PPE delete entrypoints through one locked lifecycle', () => {

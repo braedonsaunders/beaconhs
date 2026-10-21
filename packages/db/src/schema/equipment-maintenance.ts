@@ -5,7 +5,7 @@
 // — hydraulics", "5-year structural") each with an arbitrary value + unit
 // interval. Submitting an inspection of the matching type advances the
 // schedule's last-completed / next-due dates. These rows drive the maintenance
-// cockpit, compliance signals, and the upcoming-inspections report.
+// cockpit, equipment inspection status, and the upcoming-inspections report.
 //
 // equipment_reminders: ad-hoc, user-entered maintenance to-dos pinned to an
 // asset ("check roof membrane in March"). One-off by default; an optional
@@ -52,7 +52,8 @@ export const equipmentInspectionSchedules = pgTable(
     intervalValue: integer('interval_value').notNull(),
     intervalUnit: equipmentIntervalUnit('interval_unit').notNull(),
     lastCompletedOn: date('last_completed_on'),
-    nextDueOn: date('next_due_on').notNull(),
+    // Unknown dates need setup; the active requirement is retained without a dated reminder.
+    nextDueOn: date('next_due_on'),
     // The nextDueOn value the maintenance scan last notified about — a
     // schedule alerts once per due cycle (stamp ≠ nextDueOn), not on every
     // scan while it sits overdue. Advancing the schedule re-arms it.
@@ -63,6 +64,14 @@ export const equipmentInspectionSchedules = pgTable(
     ...timestamps,
   },
   (t) => ({
+    dueDateCheck: check(
+      'equipment_inspection_schedules_due_date_ck',
+      sql`${t.nextDueOn} IS NULL OR ${t.nextDueOn} >= '1902-01-01'`,
+    ),
+    completedDateCheck: check(
+      'equipment_inspection_schedules_completed_date_ck',
+      sql`${t.lastCompletedOn} IS NULL OR ${t.lastCompletedOn} >= '1902-01-01'`,
+    ),
     tenantDueIdx: index('equipment_inspection_schedules_tenant_due_idx').on(
       t.tenantId,
       t.nextDueOn,

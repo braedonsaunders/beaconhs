@@ -233,7 +233,6 @@ function emptyTargets() {
     assessmentTypes: [],
     skillTypes: [],
     formTemplates: [],
-    equipmentTypes: [],
     ppeTypes: [],
     jobTitles: [],
   }

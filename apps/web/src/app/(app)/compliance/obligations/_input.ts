@@ -68,7 +68,6 @@ const obligationInputSchema = z
     assessmentTypeId: uuid.optional(),
     skillTypeId: uuid.optional(),
     formTemplateId: uuid.optional(),
-    equipmentTypeId: uuid.optional(),
     ppeTypeId: uuid.optional(),
     jobTitleId: uuid.optional(),
   })

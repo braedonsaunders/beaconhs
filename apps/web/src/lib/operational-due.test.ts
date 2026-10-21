@@ -1,14 +1,19 @@
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
+vi.mock('@beaconhs/compliance', () => ({
+  complianceDate: () => '2026-07-01',
+  resolveComplianceClock: async () => ({ now: new Date('2026-07-01T12:00:00Z'), timezone: 'UTC' }),
+}))
 import type { RequestContext } from '@beaconhs/tenant'
-import { listDueSignals } from './_signals'
+import { listDueSignals } from '@/lib/operational-due'
 
 type ExecuteResult = { rows: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
 
 function context(result: ExecuteResult): RequestContext {
   return {
     tenantId: '00000000-0000-0000-0000-000000000001',
+    isSuperAdmin: true,
+    permissions: new Set(['*']),
+    scopes: [],
     db: vi.fn(async (callback: (tx: { execute: () => Promise<ExecuteResult> }) => unknown) =>
       callback({ execute: async () => result }),
     ),
@@ -17,7 +22,7 @@ function context(result: ExecuteResult): RequestContext {
 
 const signalRow = {
   stable_key: 'document-1',
-  module: 'documents',
+  module: 'equipment',
   family: 'Review due',
   subject: 'Emergency response plan',
   person_name: null,
@@ -42,8 +47,8 @@ describe('listDueSignals', () => {
     expect(result).toEqual({
       rows: [
         {
-          key: 'documents:document-1',
-          module: 'documents',
+          key: 'equipment:document-1',
+          module: 'equipment',
           family: 'Review due',
           subject: 'Emergency response plan',
           personName: null,
@@ -81,15 +86,5 @@ describe('listDueSignals', () => {
       total: 0,
       counts: { overdue: 0, expired: 0, due_soon: 0, open: 0 },
     })
-  })
-
-  it('opens each due item on its own record, not a module landing page', () => {
-    const source = readFileSync(fileURLToPath(new URL('./_signals.ts', import.meta.url)), 'utf8')
-    expect(source).toContain("'/training/records/' || ${trainingRecords.id}::text as href")
-    expect(source).not.toContain("'/training'::text as href")
-    expect(source).toContain("'/ppe/' || ${ppeItems.id}::text")
-    expect(source).not.toContain("'/ppe', ${ppeItems.id}")
-    expect(source).toContain("'/apps/responses/' || ${formResponses.id}::text")
-    expect(source).not.toContain("'/apps/sessions'")
   })
 })

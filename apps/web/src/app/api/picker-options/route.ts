@@ -383,7 +383,6 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'compliance-obligation-assessment-types':
     case 'compliance-obligation-skill-types':
     case 'compliance-obligation-form-templates':
-    case 'compliance-obligation-equipment-types':
     case 'compliance-obligation-ppe-types':
     case 'compliance-obligation-job-titles':
     case 'compliance-obligation-audience-roles':
@@ -1049,26 +1048,6 @@ async function loadOptions(
           })
         }),
       )
-    }
-
-    if (lookup === 'compliance-obligation-equipment-types') {
-      const match = input.hasQuery
-        ? or(
-            ilike(equipmentTypes.name, input.term),
-            input.selected ? eq(equipmentTypes.id, input.selected) : undefined,
-          )
-        : undefined
-      const rows = await tx
-        .select({ id: equipmentTypes.id, name: equipmentTypes.name })
-        .from(equipmentTypes)
-        .where(match)
-        .orderBy(
-          ...(input.selected ? [desc(sql`${equipmentTypes.id} = ${input.selected}`)] : []),
-          asc(equipmentTypes.name),
-          asc(equipmentTypes.id),
-        )
-        .limit(PICKER_RESULT_LIMIT + 1)
-      return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
     }
 
     if (lookup === 'compliance-obligation-ppe-types') {

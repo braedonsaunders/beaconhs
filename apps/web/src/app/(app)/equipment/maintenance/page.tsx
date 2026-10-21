@@ -1,3 +1,4 @@
+import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import {
@@ -13,7 +14,7 @@ import {
 // (desktop), and a day-grouped work list that is the primary mobile surface.
 
 import Link from 'next/link'
-import { and, asc, count, desc, eq, isNull, lte, notInArray, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, lte, or, notInArray, sql, type SQL } from 'drizzle-orm'
 import {
   AlarmClock,
   BellRing,
@@ -85,7 +86,7 @@ type Entry = {
   assetTag: string
   title: string
   detail: string | null
-  dueOn: string
+  dueOn: string | null
   /** The inspection this row starts, when the schedule names one. */
   startTypeId: string | null
   reminderId: string | null
@@ -111,7 +112,7 @@ type UnitDrawerData = {
     intervalValue: number
     intervalUnit: 'day' | 'week' | 'month' | 'year'
     lastCompletedOn: string | null
-    nextDueOn: string
+    nextDueOn: string | null
     isActive: boolean
   }[]
   reminders: {
@@ -152,7 +153,7 @@ export default async function EquipmentMaintenancePage({
   const ctx = await requireRequestContext()
   const manage = can(ctx, 'equipment.manage')
 
-  const today = isoDate(new Date())
+  const today = complianceDate(await ctx.db((tx) => resolveComplianceClock(tx, ctx.tenantId)))
   const currentMonth = today.slice(0, 7)
   const rawMonth = pickString(sp.month)
   const month = rawMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(rawMonth) ? rawMonth : currentMonth
@@ -216,7 +217,10 @@ export default async function EquipmentMaintenancePage({
         .where(
           and(
             eq(equipmentInspectionSchedules.isActive, true),
-            lte(equipmentInspectionSchedules.nextDueOn, horizon),
+            or(
+              isNull(equipmentInspectionSchedules.nextDueOn),
+              lte(equipmentInspectionSchedules.nextDueOn, horizon),
+            ),
             ...itemFilters,
           ),
         )
@@ -427,17 +431,21 @@ export default async function EquipmentMaintenancePage({
         e.assetTag.toLowerCase().includes(q) ||
         e.title.toLowerCase().includes(q),
     )
-    .sort((a, b) => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0))
+    .sort((a, b) => (a.dueOn ?? '').localeCompare(b.dueOn ?? ''))
 
-  const overdue = entries.filter((e) => e.dueOn < today)
+  const overdue = entries.filter((e) => e.dueOn !== null && e.dueOn < today)
   const dueToday = entries.filter((e) => e.dueOn === today)
-  const week = entries.filter((e) => e.dueOn > today && e.dueOn <= addDays(today, 7))
-  const next30 = entries.filter((e) => e.dueOn >= today && e.dueOn <= addDays(today, 30))
+  const week = entries.filter(
+    (e) => e.dueOn !== null && e.dueOn > today && e.dueOn <= addDays(today, 7),
+  )
+  const next30 = entries.filter(
+    (e) => e.dueOn !== null && e.dueOn >= today && e.dueOn <= addDays(today, 30),
+  )
 
   // Calendar cells for the viewed month (Sunday-first grid).
   const byDay = new Map<string, Entry[]>()
   for (const e of entries) {
-    if (e.dueOn >= monthStart && e.dueOn <= monthEnd) {
+    if (e.dueOn !== null && e.dueOn >= monthStart && e.dueOn <= monthEnd) {
       const list = byDay.get(e.dueOn) ?? []
       list.push(e)
       byDay.set(e.dueOn, list)
@@ -495,16 +503,31 @@ export default async function EquipmentMaintenancePage({
             title={tGenerated('m_08fc3f5f377c0d')}
             description={tGenerated('m_17a93656a9e4d7')}
             actions={
-              manage ? (
-                <Link
-                  href={mergeHref(BASE, sp, { drawer: 'reminder-new' }) as never}
-                  scroll={false}
-                >
-                  <Button>
-                    <Plus size={14} /> <GeneratedText id="m_04b0444a0259a5" />
+              <div className="flex flex-wrap gap-2">
+                <Link href="/equipment/maintenance/inspection-status">
+                  <Button variant="outline">
+                    <GeneratedValue value="Inspection status" />
                   </Button>
                 </Link>
-              ) : undefined
+                {manage ? (
+                  <>
+                    <Link href="/equipment/maintenance/settings">
+                      <Button variant="outline">
+                        <GeneratedValue value="Reminders" />
+                      </Button>
+                    </Link>
+                    <Link
+                      href={mergeHref(BASE, sp, { drawer: 'reminder-new' }) as never}
+                      scroll={false}
+                    >
+                      <Button>
+                        <Plus size={14} />
+                        <GeneratedText id="m_04b0444a0259a5" />
+                      </Button>
+                    </Link>
+                  </>
+                ) : null}
+              </div>
             }
           />
           <EquipmentSubNav active="maintenance" />
@@ -694,7 +717,7 @@ export default async function EquipmentMaintenancePage({
                               scroll={false}
                               title={tGeneratedValue(`${e.itemName} — ${e.title}`)}
                               className={`flex items-center gap-1 truncate rounded px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 ${
-                                e.dueOn < today
+                                e.dueOn !== null && e.dueOn < today
                                   ? 'text-rose-600 dark:text-rose-400'
                                   : 'text-slate-700 dark:text-slate-200'
                               }`}
@@ -718,7 +741,7 @@ export default async function EquipmentMaintenancePage({
                                 href={mergeHref(BASE, sp, { drawer: `day-${day}` }) as never}
                                 scroll={false}
                                 className={`flex items-center justify-center gap-1 rounded px-1 py-1 font-semibold ${
-                                  dayEntries.some((e) => e.dueOn < today)
+                                  dayEntries.some((e) => e.dueOn !== null && e.dueOn < today)
                                     ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-900/60'
                                     : 'bg-teal-100 text-teal-800 hover:bg-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:hover:bg-teal-900/60'
                                 }`}
@@ -808,6 +831,7 @@ export default async function EquipmentMaintenancePage({
       />
 
       <ReminderDrawer
+        defaultDate={today}
         open={manage && (drawerKey === 'reminder-new' || reminderEditing != null)}
         closeHref={closeHref}
         itemLookup="equipment-reminder-items"
@@ -859,10 +883,12 @@ function WorkList({
                 <GeneratedValue value={' '} />
                 <span
                   className={
-                    e.dueOn < today ? 'font-medium text-rose-600 dark:text-rose-400' : undefined
+                    e.dueOn !== null && e.dueOn < today
+                      ? 'font-medium text-rose-600 dark:text-rose-400'
+                      : undefined
                   }
                 >
-                  <GeneratedValue value={e.dueOn} />
+                  <GeneratedValue value={e.dueOn ?? 'Not configured'} />
                 </span>
                 <GeneratedValue value={e.detail ? ` · ${e.detail}` : ''} />
               </div>
@@ -883,7 +909,7 @@ function WorkList({
               <GeneratedValue
                 value={
                   e.kind === 'oil_change' ? (
-                    <Link href={`/equipment/${e.itemId}?tab=log&drawer=add-log`}>
+                    <Link href={`/equipment/${e.itemId}?tab=inspections&itab=oil`}>
                       <Button size="sm" variant="outline">
                         <Droplets size={14} /> <GeneratedText id="m_10f6648885696d" />
                       </Button>
@@ -1060,12 +1086,12 @@ function UnitMaintenanceDrawer({
                                   <GeneratedValue value={' '} />
                                   <span
                                     className={
-                                      s.isActive && s.nextDueOn < today
+                                      s.isActive && s.nextDueOn !== null && s.nextDueOn < today
                                         ? 'font-medium text-rose-600 dark:text-rose-400'
                                         : undefined
                                     }
                                   >
-                                    <GeneratedValue value={s.nextDueOn} />
+                                    <GeneratedValue value={s.nextDueOn ?? 'Not configured'} />
                                   </span>
                                 </div>
                               </div>

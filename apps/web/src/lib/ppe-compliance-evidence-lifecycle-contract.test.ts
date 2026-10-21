@@ -14,10 +14,6 @@ function between(value: string, start: string, end: string): string {
 }
 
 const typeEvidence = source('./compliance-type-evidence.ts')
-const equipmentEdits = source('../app/(app)/equipment/_record-edits.ts')
-const equipmentBulk = source('../app/(app)/equipment/_actions.ts')
-const equipmentSchedules = source('../app/(app)/equipment/_maintenance-actions.ts')
-const equipmentInspections = source('../app/(app)/equipment/inspections/_lib.ts')
 const ppeDetail = source('../app/(app)/ppe/[id]/page.tsx')
 const ppeEdits = source('../app/(app)/ppe/_record-edits.ts')
 const ppeInspectionActions = source('../app/(app)/ppe/_inspection-actions.ts')
@@ -25,57 +21,11 @@ const ppeBulk = source('../app/(app)/ppe/_actions.ts')
 const ppeLifecycle = source('../app/(app)/ppe/_lib.ts')
 const api = source('./api/write.ts')
 
-describe('equipment and PPE compliance evidence lifecycle', () => {
-  it('centralizes deterministic type-target fan-out for both evidence families', () => {
+describe('PPE compliance evidence lifecycle', () => {
+  it('centralizes deterministic PPE type-target fan-out', () => {
     expect(typeEvidence).toContain('materializeEvidenceTargetsObligations(')
-    expect(typeEvidence).toContain("sourceModule: 'equipment_inspection' as const")
-    expect(typeEvidence).toContain('targetRef: { equipmentTypeId }')
     expect(typeEvidence).toContain("sourceModule: 'ppe_inspection' as const")
     expect(typeEvidence).toContain('targetRef: { ppeTypeId }')
-  })
-
-  it('refreshes equipment draft finalization, type/status edits, and bulk status atomically', () => {
-    // Inline field edits are applied by the equipment record saver: the item
-    // row is locked in `load`, and `afterWrites` runs in the same transaction.
-    const update = equipmentEdits
-    const bulkStatus = between(
-      equipmentBulk,
-      'export async function bulkSetEquipmentStatus',
-      'export async function bulkExportEquipmentCsv',
-    )
-
-    expect(update).toContain(".for('update')")
-    expect(update).toContain('if (wasDraft || statusChange || typeChanged)')
-    expect(update).toContain('await auditFieldChanges(tx, ctx')
-    expect(update).toContain(
-      'await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [priorTypeId, row.typeId])',
-    )
-    expect(bulkStatus).toContain('await materializeEquipmentTypeEvidence(')
-  })
-
-  it('serializes schedule writes and inspection submission with their equipment refresh', () => {
-    const save = between(
-      equipmentSchedules,
-      'export async function saveEquipmentSchedule',
-      'export async function deleteEquipmentSchedule',
-    )
-    const remove = between(
-      equipmentSchedules,
-      'export async function deleteEquipmentSchedule',
-      '// --- reminders',
-    )
-    const finalize = between(
-      equipmentInspections,
-      'export async function finaliseEquipmentInspection',
-      '',
-    )
-
-    for (const mutation of [save, remove, finalize]) {
-      expect(mutation).toContain(".for('update')")
-      expect(mutation).toContain('await materializeEquipmentTypeEvidence(tx, ctx.tenantId')
-    }
-    expect(save).toContain('await recordAuditInTransaction(tx, ctx')
-    expect(remove).toContain('await recordAuditInTransaction(tx, ctx')
   })
 
   it('refreshes PPE field, inspection, status, and certificate evidence in locked transactions', () => {
@@ -120,7 +70,6 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
       'export async function bulkDiscardPpe',
       'export async function bulkExportPpeCsv',
     )
-    const apiEquipment = between(api, 'async function createEquipment', 'const EQUIPMENT_BODY')
     const apiPpe = between(api, 'async function createPpe', 'const PPE_BODY')
 
     expect(custody).toContain(".for('update')")
@@ -131,8 +80,8 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
     // who changed it — both are the point of routing through this helper.
     expect(custody).toContain("item.status === 'out_of_service'")
     expect(custody).toContain('statusChangedByTenantUserId: issuedByTenantUserId')
-    for (const mutation of [create, discard, apiEquipment, apiPpe]) {
-      expect(mutation).toMatch(/materialize(?:Equipment|Ppe)TypeEvidence\(/u)
+    for (const mutation of [create, discard, apiPpe]) {
+      expect(mutation).toMatch(/materializePpeTypeEvidence\(/u)
     }
     expect(create).toContain('.insert(ppeIssues)')
     expect(create).toContain('await recordAuditInTransaction(tx, ctx')

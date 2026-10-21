@@ -132,7 +132,6 @@ describe('equipment inspection atomicity contract', () => {
     expect(submit).toContain("nextReference(tx, ctx.tenantId, 'work_order'")
     expect(submit).toContain('recordModuleFlowEvent(tx, ctx,')
     expect(submit).toContain('recordAuditInTransaction(tx, ctx,')
-    expect(submit).toContain('materializeEquipmentTypeEvidence(')
 
     const passAll = functionSlice(actions, 'passAllEquipmentInspection', '// --- submit / reopen')
     expect(passAll).toContain('record.allowPassAll')
@@ -218,7 +217,6 @@ describe('equipment inspection atomicity contract', () => {
     expect(reopen).toContain('closedAt: null')
     expect(reopen).toContain('closedByTenantUserId: null')
     expect(reopen).toContain('locked: false')
-    expect(reopen).toContain('materializeEquipmentTypeEvidence(')
     expect(reopen).toContain('recordAuditInTransaction(tx, ctx,')
   })
 

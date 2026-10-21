@@ -540,6 +540,20 @@
       "when": 1792538848446,
       "tag": "0077_compliance_worker_type",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1792543876467,
+      "tag": "0078_equipment_compliance_boundary",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1792545238759,
+      "tag": "0079_equipment_unknown_inspection_dates",
+      "breakpoints": true
     }
   ]
 }

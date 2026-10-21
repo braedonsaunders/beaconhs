@@ -11,7 +11,6 @@ export type RetirableComplianceTarget =
   | 'assessment_type'
   | 'skill_type'
   | 'form_template'
-  | 'equipment_type'
   | 'ppe_type'
 
 type ComplianceTargetRefKey =
@@ -21,7 +20,6 @@ type ComplianceTargetRefKey =
   | 'assessmentTypeId'
   | 'skillTypeId'
   | 'formTemplateId'
-  | 'equipmentTypeId'
   | 'ppeTypeId'
 
 export type ComplianceTargetRetirementPlan = {
@@ -64,11 +62,6 @@ const PLANS: Record<RetirableComplianceTarget, ComplianceTargetRetirementPlan> =
     sourceModules: ['form'],
     targetRefKey: 'formTemplateId',
     label: 'app',
-  },
-  equipment_type: {
-    sourceModules: ['equipment_inspection'],
-    targetRefKey: 'equipmentTypeId',
-    label: 'equipment type',
   },
   ppe_type: {
     sourceModules: ['ppe_inspection'],

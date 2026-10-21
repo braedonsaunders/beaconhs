@@ -1,3 +1,4 @@
+import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
 import { setEquipmentDeleted } from '../_lifecycle-actions'
 import { transferLocation } from './_custody-actions'
 import { EquipmentTelemetryPanel } from '@/components/equipment-telemetry-panel'
@@ -1098,7 +1099,7 @@ export default async function EquipmentDetailPage({
   }
   const customValues = readCustomFieldValues(item.metadata)
 
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = complianceDate(await ctx.db((tx) => resolveComplianceClock(tx, ctx.tenantId)))
   // Named so the pre-use row reads like the scheduled ones next to it.
   const preUseTypeName = item.preUseInspectionTypeId
     ? ((
@@ -2523,10 +2524,12 @@ export default async function EquipmentDetailPage({
                                                 ({ schedule, type: schedType }) => {
                                                   const overdue =
                                                     schedule.isActive &&
+                                                    schedule.nextDueOn !== null &&
                                                     schedule.nextDueOn < todayIso
                                                   const dueSoon =
                                                     schedule.isActive &&
                                                     !overdue &&
+                                                    schedule.nextDueOn !== null &&
                                                     schedule.nextDueOn <= dueSoonCutoffIso
                                                   return (
                                                     <TableRow key={schedule.id}>
@@ -2579,7 +2582,9 @@ export default async function EquipmentDetailPage({
                                                       <TableCell>
                                                         <span className="flex items-center gap-2">
                                                           <GeneratedValue
-                                                            value={schedule.nextDueOn}
+                                                            value={
+                                                              schedule.nextDueOn ?? 'Not configured'
+                                                            }
                                                           />
                                                           <GeneratedValue
                                                             value={
@@ -3244,7 +3249,7 @@ export default async function EquipmentDetailPage({
                 name="entryDate"
                 type="date"
                 required
-                defaultValue={editingLog?.entryDate ?? new Date().toISOString().slice(0, 10)}
+                defaultValue={editingLog?.entryDate ?? todayIso}
               />
             </Field>
             <EquipmentLogKindFields
@@ -3290,11 +3295,7 @@ export default async function EquipmentDetailPage({
           >
             <input type="hidden" name="id" value={id} />
             <Field label={tGenerated('m_09030228796275')}>
-              <Input
-                name="lastSeenDate"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-              />
+              <Input name="lastSeenDate" type="date" defaultValue={todayIso} />
             </Field>
             <Field label={tGenerated('m_0c8ecbc807dca2')}>
               <Input
@@ -3474,7 +3475,7 @@ export default async function EquipmentDetailPage({
           open={drawerKey === 'new-truck-log-entry' && canManageEquipment}
           closeHref={closeHref}
           itemId={id}
-          defaultDate={new Date().toISOString().slice(0, 10)}
+          defaultDate={todayIso}
           action={createTruckLogEntryAction}
         />
 
@@ -3486,6 +3487,7 @@ export default async function EquipmentDetailPage({
         />
 
         <ScheduleDrawer
+          defaultDate={todayIso}
           open={!locked && (drawerKey === 'schedule-new' || scheduleEditing != null)}
           closeHref={`${basePath}?tab=inspections`}
           itemId={id}
@@ -3494,6 +3496,7 @@ export default async function EquipmentDetailPage({
         />
 
         <ReminderDrawer
+          defaultDate={todayIso}
           open={!locked && (drawerKey === 'reminder-new' || reminderEditing != null)}
           closeHref={`${basePath}?tab=inspections`}
           itemId={id}

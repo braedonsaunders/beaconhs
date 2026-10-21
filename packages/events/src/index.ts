@@ -648,7 +648,12 @@ export async function emitEquipmentMaintenanceDue(
           subject: title,
           html: maintenanceRollupEmailHtml({ title, entries, url }),
           text: `${title}.\n${url}`,
-          meta: { tenantId, category: 'equipment', automaticNotification: true },
+          meta: {
+            tenantId,
+            category: 'equipment',
+            automaticNotification: true,
+            equipmentMaintenanceReminder: true,
+          },
         },
         { jobId: stableJobId('equipment-email', deliveryKey) },
       )

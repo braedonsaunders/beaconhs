@@ -23,7 +23,6 @@ import { assertCan, type RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
-import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { formatInterval } from '@/lib/equipment/intervals'
 import { isUuid } from '@/lib/list-params'
 import { sanitizeFrom } from '@/lib/back-nav'
@@ -753,7 +752,6 @@ export async function reopenEquipmentInspection(formData: FormData) {
     if (!updated) throw new Error('Equipment inspection changed before it could be reopened')
     if (record.equipmentItemId)
       await reconcileEquipmentInspectionDatesInTx(tx, ctx.tenantId, record.equipmentItemId)
-    if (item) await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'equipment_inspection_record',
       entityId: recordId,

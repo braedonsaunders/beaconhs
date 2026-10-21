@@ -6,7 +6,6 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
   departments,
   documents,
-  equipmentTypes,
   formTemplates,
   inspectionTypes,
   orgUnits,
@@ -62,7 +61,6 @@ export async function loadObligationFormOptions(
   const assessmentTypeId = isUuid(ref.assessmentTypeId ?? '') ? ref.assessmentTypeId! : null
   const skillTypeId = isUuid(ref.skillTypeId ?? '') ? ref.skillTypeId! : null
   const formTemplateId = isUuid(ref.formTemplateId ?? '') ? ref.formTemplateId! : null
-  const equipmentTypeId = isUuid(ref.equipmentTypeId ?? '') ? ref.equipmentTypeId! : null
   const ppeTypeId = isUuid(ref.ppeTypeId ?? '') ? ref.ppeTypeId! : null
   const jobTitleId = isUuid(ref.jobTitleId ?? '') ? ref.jobTitleId! : null
 
@@ -87,7 +85,6 @@ export async function loadObligationFormOptions(
       allDepts,
       allPeople,
       allOrgUnits,
-      equipTypes,
       ppeTypeRows,
       jobTitles,
       allGroups,
@@ -199,12 +196,6 @@ export async function loadObligationFormOptions(
               ),
             )
         : Promise.resolve([]),
-      equipmentTypeId
-        ? tx
-            .select({ id: equipmentTypes.id, name: equipmentTypes.name })
-            .from(equipmentTypes)
-            .where(eq(equipmentTypes.id, equipmentTypeId))
-        : Promise.resolve([]),
       ppeTypeId
         ? tx
             .select({ id: ppeTypes.id, name: ppeTypes.name })
@@ -242,7 +233,6 @@ export async function loadObligationFormOptions(
       allDepts,
       allPeople,
       allOrgUnits,
-      equipTypes,
       ppeTypeRows,
       jobTitles,
       allGroups,
@@ -264,7 +254,6 @@ export async function loadObligationFormOptions(
         name: `${skillType.code ? `${skillType.code} · ` : ''}${skillType.name}`,
       })),
       formTemplates: data.templates,
-      equipmentTypes: data.equipTypes,
       ppeTypes: data.ppeTypeRows,
       jobTitles: data.jobTitles,
     },
