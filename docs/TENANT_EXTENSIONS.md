@@ -62,3 +62,17 @@ retained for rollback; active configs must not be pruned.
 
 An operator can also supply `TENANT_PLUGIN_INSTALLATIONS` and read-only mounts
 outside this workflow, using the same contract and explicit tenant binding.
+
+## Proxy reachability checks
+
+Generated application routes check each replica at `/api/health/ready` every five
+seconds, with a two-second timeout and the application hostname. These checks run
+from each Traefik proxy, independently of Docker's in-container health check. A
+healthy container can still be unreachable from one proxy after a Swarm overlay
+forwarding fault. The proxy removes an unreachable replica from its own rotation
+until connectivity returns. Inspect every proxy's service status after rollout;
+a single successful public readiness request does not verify every backend.
+
+If connectivity fails, derive the live endpoint IP, MAC, hosting node and overlay
+namespace before comparing forwarding entries. Repair only the proven missing or
+stale entry. Proxy checks limit user impact; they do not repair Docker NetworkDB.
