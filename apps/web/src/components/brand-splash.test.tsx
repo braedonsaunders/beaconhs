@@ -77,6 +77,20 @@ describe('tab startup splash', () => {
     expect(document.documentElement.dataset.beaconSplash).toBe('show')
   })
 
+  it('plays the full animation even when document loading and hydration took longer', () => {
+    vi.mocked(performance.now).mockReturnValue(8_000)
+    initializeDocument()
+    act(() => root.render(<SplashScreen />))
+    advance(1_999)
+    expect(container.querySelector('[data-boot-splash]')?.className).toContain('opacity-100')
+    advance(1)
+    expect(container.querySelector('[data-boot-splash]')?.className).toContain('opacity-0')
+    advance(400)
+    expect(container.querySelector('[data-boot-splash]')).toBeNull()
+    initializeDocument()
+    expect(document.documentElement.dataset.beaconSplash).toBe('skip')
+  })
+
   it('still completes when browser storage is unavailable', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('Storage blocked')
@@ -88,7 +102,7 @@ describe('tab startup splash', () => {
     expect(container.querySelector('[data-boot-splash]')).toBeNull()
   })
 
-  it('respects reduced motion and streaming time under Strict Mode', () => {
+  it('respects reduced motion under Strict Mode without shortening the static display', () => {
     vi.mocked(window.matchMedia).mockReturnValue({ matches: true } as MediaQueryList)
     vi.mocked(performance.now).mockReturnValue(450)
     initializeDocument()
@@ -99,7 +113,7 @@ describe('tab startup splash', () => {
         </StrictMode>,
       ),
     )
-    advance(49)
+    advance(499)
     expect(container.querySelector('[data-boot-splash]')?.className).toContain('opacity-100')
     advance(1)
     expect(container.querySelector('[data-boot-splash]')?.className).toContain('opacity-0')

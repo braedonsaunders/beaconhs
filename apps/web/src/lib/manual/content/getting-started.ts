@@ -48,6 +48,8 @@ export const GETTING_STARTED_ARTICLES: ManualArticle[] = [
     ],
     body: `BeaconHS is where your crew reports hazards, fills out forms, and keeps safety records in one place. This article covers signing in and finding your way around.
 
+The startup logo finishes its animation once when you first open BeaconHS in a tab. Moving between pages does not replay it. If your device uses reduced motion, a static logo appears briefly instead.
+
 ## Signing in
 
 BeaconHS does not have public sign-up. Your administrator creates your account and sends an invitation to your work email.

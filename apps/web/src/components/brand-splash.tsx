@@ -21,9 +21,10 @@ export function SplashScreen() {
     const min = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       ? REDUCED_MOTION_MIN_MS
       : MIN_VISIBLE_MS
-    // Streaming time counts toward startup, rather than adding two seconds
-    // after hydration. Already-seen tabs are hidden by CSS before hydration.
-    const remaining = skip ? 0 : Math.max(0, min - performance.now())
+    // Navigation/streaming time starts before the logo is visible. Give the
+    // mounted splash its full draw-in even when hydration happens much later.
+    // Already-seen tabs remain hidden by CSS before hydration.
+    const remaining = skip ? 0 : min
     const fadeT = setTimeout(() => setPhase('fading'), remaining)
     const goneT = setTimeout(
       () => {
