@@ -141,7 +141,14 @@ export default async function ObligationsPage({
             </div>
           ) : (
             <>
-              <Table>
+              <Table className="min-w-[64rem] table-fixed">
+                <colgroup>
+                  <col className="w-60" />
+                  <col />
+                  <col className="w-56" />
+                  <col className="w-56" />
+                  <col className="w-28" />
+                </colgroup>
                 <TableHeader>
                   <TableRow>
                     <TableHead>
@@ -164,28 +171,36 @@ export default async function ObligationsPage({
                 <TableBody>
                   <GeneratedValue
                     value={rows.map((r) => (
-                      <TableRow key={`${r.kind}:${r.id}`}>
+                      <TableRow key={`${r.kind}:${r.id}`} className="h-12 [&>td]:py-2">
                         <TableCell>
-                          <Badge variant="secondary">
+                          <Badge variant="secondary" className="whitespace-nowrap">
                             <GeneratedValue value={kindLabel(r.kind)} />
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <Link
                             href={`/compliance/obligations/${r.id}`}
-                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            className="block truncate font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            title={r.title}
                           >
                             <GeneratedValue value={r.title} />
                           </Link>
                         </TableCell>
                         <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                          <GeneratedValue value={r.audience} />
+                          <span className="block truncate" title={r.audience}>
+                            <GeneratedValue value={r.audience} />
+                          </span>
                         </TableCell>
                         <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                          <GeneratedValue value={r.cadence} />
+                          <span className="block truncate" title={r.cadence}>
+                            <GeneratedValue value={r.cadence} />
+                          </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={r.enabled ? 'success' : 'secondary'}>
+                          <Badge
+                            variant={r.enabled ? 'success' : 'secondary'}
+                            className="whitespace-nowrap"
+                          >
                             <GeneratedValue
                               value={
                                 r.enabled ? (

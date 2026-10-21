@@ -20,6 +20,7 @@ type SelfStatus = 'can' | 'acked' | 'unpublished' | 'no-person' | 'no-permission
 
 export function DocumentReader({
   documentId,
+  versionId,
   title,
   documentKey,
   versionNumber,
@@ -28,6 +29,7 @@ export function DocumentReader({
   canManage,
 }: {
   documentId: string
+  versionId?: string
   title: string
   documentKey: string
   versionNumber: number | null
@@ -45,7 +47,7 @@ export function DocumentReader({
   function submitSelfAck() {
     startTransition(async () => {
       try {
-        const res = await acknowledgeDocument({ documentId, signatureDataUrl: sig })
+        const res = await acknowledgeDocument({ documentId, versionId, signatureDataUrl: sig })
         if (!res.ok) {
           toast.error(tGeneratedValue(res.error))
           return
@@ -104,7 +106,7 @@ export function DocumentReader({
       </div>
 
       <div className="min-h-0 flex-1">
-        <DocumentPdfPane documentId={documentId} readOnly />
+        <DocumentPdfPane documentId={documentId} versionId={versionId} readOnly />
       </div>
 
       <div className="shrink-0 border-t border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">

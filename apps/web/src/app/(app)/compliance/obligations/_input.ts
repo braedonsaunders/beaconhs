@@ -17,6 +17,7 @@ const recurrenceSchema = z
   .object({
     kind: z.enum(['one_time', 'frequency', 'cron']),
     evidenceWindow: z.enum(['calendar', 'rolling']).optional(),
+    journalDays: z.enum(['weekdays', 'calendar', 'worked_days']).optional(),
     deadline: z
       .object({
         month: z.number().int().min(1).max(12).optional(),
@@ -63,10 +64,23 @@ const obligationInputSchema = z
     recurrence: recurrenceSchema,
     inspectionTypeId: uuid.optional(),
     documentId: uuid.optional(),
+    documentVersionId: uuid.optional(),
     trainingItemKind: z.enum(['course', 'assessment_type']).optional(),
     courseId: uuid.optional(),
     assessmentTypeId: uuid.optional(),
     skillTypeId: uuid.optional(),
+    skillConditions: z
+      .array(
+        z
+          .object({
+            fieldId: uuid,
+            operator: z.enum(['equals', 'contains_all', 'contains_any']),
+            values: z.array(z.string().trim().min(1).max(500)).min(1).max(50),
+          })
+          .strict(),
+      )
+      .max(20)
+      .optional(),
     formTemplateId: uuid.optional(),
     ppeTypeId: uuid.optional(),
     jobTitleId: uuid.optional(),
@@ -84,6 +98,21 @@ export function parseObligationInput(raw: unknown): ObligationInputParseResult {
 
   const input = parsed.data
   const meta = KIND_META[input.kind]
+  if (input.documentVersionId && (input.kind !== 'document' || !input.documentId))
+    return { ok: false, error: 'Document versions require a document target' }
+  if (
+    input.skillConditions?.length &&
+    (input.kind !== 'skill_requirement' ||
+      !input.skillTypeId ||
+      input.skillConditions.some((c) => c.operator === 'equals' && c.values.length !== 1))
+  )
+    return { ok: false, error: 'Qualification conditions require a skill target and valid values' }
+  if (
+    input.recurrence.journalDays &&
+    (input.kind !== 'journal' || input.recurrence.frequency !== 'week')
+  )
+    return { ok: false, error: 'Daily journal requirements use a weekly calendar view' }
+
   if (!meta.audience && input.audience.length > 0) {
     return { ok: false, error: 'This obligation kind does not accept an audience' }
   }

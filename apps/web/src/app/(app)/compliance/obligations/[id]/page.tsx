@@ -271,10 +271,16 @@ export default async function ObligationDetailPage({
               </div>
             </div>
             <p className="text-sm">
-              <GeneratedValue value="Target per person" />: {quantity} ·{' '}
-              <GeneratedValue value="Due by" />{' '}
-              {formatDate(new Date(`${period.dueOn}T00:00:00Z`), 'UTC', ctx.locale)}{' '}
-              {ob.recurrence.deadline?.time}
+              {ob.recurrence.journalDays ? (
+                <GeneratedValue value="One submitted journal for each required date. Missing past dates are overdue; today is due by midnight." />
+              ) : (
+                <>
+                  <GeneratedValue value="Target per person" />: {quantity} ·{' '}
+                  <GeneratedValue value="Due by" />{' '}
+                  {formatDate(new Date(`${period.dueOn}T00:00:00Z`), 'UTC', ctx.locale)}{' '}
+                  {ob.recurrence.deadline?.time}
+                </>
+              )}
             </p>
             {minimum < quantity ? (
               <p className="text-xs text-slate-500">
@@ -403,6 +409,11 @@ export default async function ObligationDetailPage({
                         </TableCell>
                         <TableCell className="text-slate-900 dark:text-slate-100">
                           <GeneratedValue value={r.label} />
+                          {Number(r.subjectRef?.workDayFallbacks ?? 0) > 0 ? (
+                            <div className="text-xs text-amber-700 dark:text-amber-300">
+                              <GeneratedValue value="Work-day data missing; weekdays used" />
+                            </div>
+                          ) : null}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={r.status} />

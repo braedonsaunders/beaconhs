@@ -27,7 +27,12 @@ export function resolveComplianceLink(
     case 'document':
       // Worker reader: published PDF + sticky self-acknowledge. Managers
       // still reach the authoring workspace from Documents manage.
-      return ref.documentId ? { href: `/documents/${ref.documentId}/read`, prefetch: true } : null
+      return ref.documentId
+        ? {
+            href: `/documents/${ref.documentId}/read${ref.documentVersionId ? `?version=${encodeURIComponent(ref.documentVersionId)}` : ''}`,
+            prefetch: true,
+          }
+        : null
     case 'journal':
       // The journals workspace is where today's entry is logged.
       return { href: '/journals', prefetch: true }

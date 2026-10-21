@@ -129,6 +129,7 @@ describe('production cutover migration integrity', () => {
       '0077_compliance_worker_type.sql',
       '0078_equipment_compliance_boundary.sql',
       '0079_equipment_unknown_inspection_dates.sql',
+      '0080_compliance_work_days.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -214,6 +215,7 @@ describe('production cutover migration integrity', () => {
       { idx: 76, tag: '0077_compliance_worker_type' },
       { idx: 77, tag: '0078_equipment_compliance_boundary' },
       { idx: 78, tag: '0079_equipment_unknown_inspection_dates' },
+      { idx: 79, tag: '0080_compliance_work_days' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)

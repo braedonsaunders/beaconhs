@@ -169,11 +169,15 @@ export async function acknowledgeDocument(input: unknown): Promise<Ok | Err> {
   try {
     const values = inputRecord(input, 'Acknowledgment')
     const documentId = uuidInput(values.documentId, 'Document')
+    const requestedVersionId =
+      values.versionId == null ? null : uuidInput(values.versionId, 'Version')
     const signatureDataUrl = signatureInput(values.signatureDataUrl, false)
 
     const write = async (tx: TenantTx, signatureAttachmentId: string | null) => {
       await lockPublishedDocument(tx, ctx.tenantId, documentId)
-      const versionId = await currentPublishedVersionId(tx, ctx.tenantId, documentId)
+      const versionId =
+        requestedVersionId ?? (await currentPublishedVersionId(tx, ctx.tenantId, documentId))
+      await requirePublishedVersion(tx, ctx.tenantId, documentId, versionId)
       if (!ctx.personId) {
         throw new AcknowledgmentError('Your account is not linked to a person record')
       }

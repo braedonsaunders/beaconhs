@@ -310,7 +310,11 @@ function skillAssignmentSpec(patches: readonly RecordSyncPatch[]) {
             : { summary: `Updated ${change.op}` }
         },
       )
-      if (changes.some((change) => EVIDENCE_FIELDS.has(change.op))) {
+      if (
+        changes.some(
+          (change) => EVIDENCE_FIELDS.has(change.op) || change.op.startsWith(EXTRA_PREFIX),
+        )
+      ) {
         await materializeSkillEvidence(tx, ctx.tenantId, [original.skillTypeId, row.skillTypeId])
       }
     },

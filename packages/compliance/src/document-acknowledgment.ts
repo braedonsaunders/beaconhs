@@ -48,6 +48,11 @@ export async function currentDocumentAcknowledgment(
       ),
     )
   for (const obligation of obligations) {
+    if (
+      obligation.targetRef.documentVersionId &&
+      obligation.targetRef.documentVersionId !== versionId
+    )
+      continue
     if (obligation.recurrence.kind !== 'frequency' && obligation.recurrence.kind !== 'cron')
       continue
     const audience = await loadAudience(tx, tenantId, obligation.id)

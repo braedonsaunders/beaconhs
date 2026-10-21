@@ -301,6 +301,7 @@ export const TENANT_SCOPED_TABLES = [
   'tenant_nav_config',
   // Unified compliance engine — obligations + audience + dispatch ledger + status
   'compliance_obligations',
+  'person_work_days',
   'compliance_audience',
   'compliance_dispatches',
   'compliance_status',

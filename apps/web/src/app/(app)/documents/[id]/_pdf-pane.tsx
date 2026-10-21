@@ -29,6 +29,7 @@ import { flushRecordSaves } from '@/lib/pending-record-saves'
 
 export function DocumentPdfPane({
   documentId,
+  versionId,
   mode,
   onModeChange,
   readOnly = false,
@@ -36,6 +37,7 @@ export function DocumentPdfPane({
   revision = '',
 }: {
   documentId: string
+  versionId?: string
   mode?: DocumentMode
   onModeChange?: (m: DocumentMode) => void
   readOnly?: boolean
@@ -46,7 +48,7 @@ export function DocumentPdfPane({
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
-  const requestKey = `${documentId}:${draft ? `draft:${revision}` : 'published'}`
+  const requestKey = `${documentId}:${draft ? `draft:${revision}` : (versionId ?? 'published')}`
   const [resource, setResource] = useState<{
     key: string
     status: 'loading' | 'ready' | 'error'
@@ -84,7 +86,7 @@ export function DocumentPdfPane({
   const requestPdf = useCallback(() => {
     const sequence = ++requestSequence.current
     return (draft ? flushRecordSaves() : Promise.resolve())
-      .then(() => getDocumentPdfUrl(documentId, { draft }))
+      .then(() => getDocumentPdfUrl(documentId, { draft, versionId }))
       .then((result) => applyResult(sequence, result))
       .catch((error) =>
         applyResult(sequence, {
@@ -92,7 +94,7 @@ export function DocumentPdfPane({
           error: error instanceof Error ? error.message : 'Document details could not be saved.',
         }),
       )
-  }, [applyResult, documentId, draft])
+  }, [applyResult, documentId, draft, versionId])
 
   useEffect(() => {
     void requestPdf()

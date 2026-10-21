@@ -1,8 +1,10 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull, isNotNull } from 'drizzle-orm'
+import { validateSkillConditions } from './skill-conditions'
 import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
   documents,
+  documentVersions,
   formTemplates,
   inspectionTypes,
   personTitles,
@@ -138,7 +140,26 @@ export async function lockComplianceTarget(
         )
         .limit(1)
         .for('key share')
-      return unavailable(row, plan.label)
+      await unavailable(row, plan.label)
+      if (ref.documentVersionId) {
+        if (!UUID.test(ref.documentVersionId))
+          throw new ComplianceTargetError('Pick a valid document version')
+        const [version] = await tx
+          .select({ id: documentVersions.id })
+          .from(documentVersions)
+          .where(
+            and(
+              eq(documentVersions.tenantId, tenantId),
+              eq(documentVersions.documentId, plan.id),
+              eq(documentVersions.id, ref.documentVersionId),
+              isNotNull(documentVersions.publishedAt),
+            ),
+          )
+          .limit(1)
+          .for('key share')
+        await unavailable(version, 'published document version')
+      }
+      return
     }
     case 'course': {
       const [row] = await tx
@@ -178,7 +199,15 @@ export async function lockComplianceTarget(
         .where(and(eq(trainingSkillTypes.tenantId, tenantId), eq(trainingSkillTypes.id, plan.id)))
         .limit(1)
         .for('key share')
-      return unavailable(row, plan.label)
+      await unavailable(row, plan.label)
+      try {
+        await validateSkillConditions(tx, tenantId, ref)
+      } catch (error) {
+        throw new ComplianceTargetError(
+          error instanceof Error ? error.message : 'Invalid qualification conditions',
+        )
+      }
+      return
     }
     case 'form_template': {
       const [row] = await tx

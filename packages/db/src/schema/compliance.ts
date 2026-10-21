@@ -105,10 +105,16 @@ export const complianceDispatchStatus = pgEnum('compliance_dispatch_status', [
 export type ComplianceTargetRef = {
   inspectionTypeId?: string
   documentId?: string
+  documentVersionId?: string
   courseId?: string
   assessmentTypeId?: string
   trainingItemKind?: 'course' | 'assessment_type'
   skillTypeId?: string // skill_requirement satisfied by a valid training_skill_assignment
+  skillConditions?: Array<{
+    fieldId: string
+    operator: 'equals' | 'contains_all' | 'contains_any'
+    values: string[]
+  }>
   formTemplateId?: string
   ppeTypeId?: string
   jobTitleId?: string
@@ -126,6 +132,7 @@ export type ComplianceRecurrence = {
   dueOffsetMinutes?: number
   remindBeforeDays?: number
   compliantPercentage?: number
+  journalDays?: 'weekdays' | 'calendar' | 'worked_days'
   reminderBuckets?: number[]
 }
 

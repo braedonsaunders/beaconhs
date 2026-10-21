@@ -12,6 +12,8 @@ import {
 // kind is fixed after creation: it determines the subject shape, target picker
 // and evaluation adapter.
 
+import { SkillConditions } from './_skill-conditions'
+import { obligationTargetOptions } from './_target-options'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -106,6 +108,10 @@ export function ObligationForm({
   const [title, setTitle] = useState(initial?.title ?? '')
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [inspectionTypeId, setInspectionTypeId] = useState(ref.inspectionTypeId ?? '')
+  const [documentVersionId, setDocumentVersionId] = useState(ref.documentVersionId ?? '')
+  const [skillConditions, setSkillConditions] = useState<
+    NonNullable<ComplianceTargetRef['skillConditions']>
+  >(ref.skillConditions ?? [])
   const [documentId, setDocumentId] = useState(ref.documentId ?? '')
   const [trainingItemKind, setTrainingItemKind] = useState<'course' | 'assessment_type'>(
     ref.trainingItemKind ?? 'course',
@@ -157,6 +163,8 @@ export function ObligationForm({
       recurrence,
       inspectionTypeId: kind === 'inspection' ? inspectionTypeId : undefined,
       documentId: kind === 'document' ? documentId : undefined,
+      documentVersionId: kind === 'document' ? documentVersionId || undefined : undefined,
+      skillConditions: kind === 'skill_requirement' ? skillConditions : undefined,
       trainingItemKind: kind === 'training' ? trainingItemKind : undefined,
       courseId:
         kind === 'cert_requirement' || (kind === 'training' && trainingItemKind === 'course')
@@ -287,7 +295,10 @@ export function ObligationForm({
                       <TargetSelect
                         lookup="compliance-obligation-documents"
                         value={documentId}
-                        onChange={setDocumentId}
+                        onChange={(id) => {
+                          setDocumentId(id)
+                          setDocumentVersionId('')
+                        }}
                         placeholder={tGenerated('m_08927559ee23e3')}
                         options={targets.documents.map((d) => ({ id: d.id, label: d.title }))}
                       />
@@ -326,7 +337,10 @@ export function ObligationForm({
                       <TargetSelect
                         lookup="compliance-obligation-skill-types"
                         value={skillTypeId}
-                        onChange={setSkillTypeId}
+                        onChange={(id) => {
+                          setSkillTypeId(id)
+                          setSkillConditions([])
+                        }}
                         placeholder={tGenerated('m_0517043c1615d8')}
                         options={targets.skillTypes.map((s) => ({ id: s.id, label: s.name }))}
                       />
@@ -400,6 +414,37 @@ export function ObligationForm({
                     ) : null
                   }
                 />
+                {kind === 'document' && documentId ? (
+                  <div className="space-y-2">
+                    <Label>
+                      <GeneratedValue value="Required document edition" />
+                    </Label>
+                    <RemoteSearchSelect
+                      value={documentVersionId}
+                      onChange={setDocumentVersionId}
+                      contextId={documentId}
+                      loadOptions={async (input) =>
+                        obligationTargetOptions({
+                          kind: 'version',
+                          contextId: documentId,
+                          query: input.query,
+                          selected: input.selected,
+                        })
+                      }
+                      placeholder={tGeneratedValue('Latest published edition')}
+                    />
+                    <p className="text-xs text-slate-500">
+                      <GeneratedValue value="Choose an edition to keep this campaign tied to that version. Leave empty to follow the latest published edition." />
+                    </p>
+                  </div>
+                ) : null}
+                {kind === 'skill_requirement' ? (
+                  <SkillConditions
+                    typeId={skillTypeId}
+                    value={skillConditions}
+                    onChange={setSkillConditions}
+                  />
+                ) : null}
               </CardContent>
             </Card>
           ) : null
@@ -446,9 +491,57 @@ export function ObligationForm({
         }
       />
 
+      {kind === 'journal' ? (
+        <Card>
+          <CardContent className="space-y-3 pt-5">
+            <Label htmlFor="journal-days">
+              <GeneratedValue value="Journal requirement" />
+            </Label>
+            <Select
+              id="journal-days"
+              value={recurrence.journalDays ?? 'quantity'}
+              onChange={(e) => {
+                const mode = e.target.value
+                setRecurrence(
+                  mode === 'quantity'
+                    ? { ...recurrence, journalDays: undefined }
+                    : {
+                        ...recurrence,
+                        journalDays: mode as 'weekdays' | 'calendar' | 'worked_days',
+                        kind: 'frequency',
+                        frequency: 'week',
+                        quantity: 1,
+                        compliantPercentage: 100,
+                        evidenceWindow: 'calendar',
+                        deadline: { weekday: 7, time: '23:59' },
+                      },
+                )
+              }}
+            >
+              <option value="quantity">
+                <GeneratedValue value="Number of journals per period" />
+              </option>
+              <option value="weekdays">
+                <GeneratedValue value="One journal each weekday" />
+              </option>
+              <option value="calendar">
+                <GeneratedValue value="One journal every calendar day" />
+              </option>
+              <option value="worked_days">
+                <GeneratedValue value="One journal each worked day (weekdays when unknown)" />
+              </option>
+            </Select>
+            {recurrence.journalDays ? (
+              <p className="text-xs text-slate-500">
+                <GeneratedValue value="Each required date needs its own submitted journal. Extra entries on another date do not cover a missing day. Worked days can be supplied through the optional work-day API; missing data uses weekdays." />
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
       <GeneratedValue
         value={
-          showRecurrence ? (
+          showRecurrence && !recurrence.journalDays ? (
             <RecurrencePicker
               value={recurrence}
               onChange={setRecurrence}

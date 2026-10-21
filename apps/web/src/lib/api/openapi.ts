@@ -39,6 +39,8 @@ function schemaForKind(kind: ReportColumnKind): Json {
       return { type: 'string', format: 'date-time' }
     case 'number':
       return { type: 'number' }
+    case 'boolean':
+      return { type: 'boolean' }
     case 'text':
     case 'enum':
     default:

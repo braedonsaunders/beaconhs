@@ -5,7 +5,7 @@ import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { documentVersions, documents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { isUuid } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { DocumentReader } from './_reader'
 
 export const dynamic = 'force-dynamic'
@@ -15,9 +15,16 @@ export async function generateMetadata() {
   return { title: tGenerated('m_0431e4b7409595') }
 }
 
-export default async function DocumentReadPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function DocumentReadPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
-  if (!isUuid(id)) notFound()
+  const versionId = pickString((await searchParams).version)
+  if (!isUuid(id) || (versionId && !isUuid(versionId))) notFound()
 
   const ctx = await requireRequestContext()
   const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
@@ -45,10 +52,17 @@ export default async function DocumentReadPage({ params }: { params: Promise<{ i
         version: documentVersions.version,
       })
       .from(documentVersions)
-      .where(and(eq(documentVersions.documentId, id), isNotNull(documentVersions.publishedAt)))
+      .where(
+        and(
+          eq(documentVersions.documentId, id),
+          isNotNull(documentVersions.publishedAt),
+          versionId ? eq(documentVersions.id, versionId) : undefined,
+        ),
+      )
       .orderBy(desc(documentVersions.version))
       .limit(1)
 
+    if (versionId && !publishedVersion) return null
     const myAck =
       ctx.personId && publishedVersion
         ? await currentDocumentAcknowledgment(
@@ -81,6 +95,7 @@ export default async function DocumentReadPage({ params }: { params: Promise<{ i
       documentId={id}
       title={data.doc.title}
       documentKey={data.doc.key}
+      versionId={data.publishedVersion?.id}
       versionNumber={data.publishedVersion?.version ?? null}
       selfStatus={selfStatus}
       selfAckedAt={data.myAck?.acknowledgedAt.toISOString() ?? null}

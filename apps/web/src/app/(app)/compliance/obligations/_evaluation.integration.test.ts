@@ -7,6 +7,14 @@ import { and, eq, sql } from 'drizzle-orm'
 import { createClient, withTenant } from '@beaconhs/db'
 import {
   tenants,
+  documents,
+  documentVersions,
+  documentAcknowledgments,
+  trainingSkillTypes,
+  trainingSkillAuthorities,
+  trainingSkillAssignments,
+  trainingExtraFields,
+  personWorkDays,
   journalEntries,
   tenantNotificationPolicy,
   users,
@@ -38,8 +46,12 @@ import {
   materializeObligation,
   materializeIdentityAudienceObligations,
   resolveObligationAudience,
+  lockComplianceTarget,
 } from '@beaconhs/compliance'
+import { upsertWorkDay, deleteWorkDay } from '@/lib/api/work-days'
 import { obligationCompliance } from './_data'
+import { obligationTargetOptions } from './_target-options'
+import { isPickerOptionsResponse } from '@/lib/picker-options'
 import { queryPersonCompliance } from '../_hub'
 import { loadComplianceHistory } from './[id]/history/_data'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -1240,4 +1252,265 @@ it('applies worker types to groups and individuals, retires old alerts, and keep
     await materializeIdentityAudienceObligations(tx, tenantId, [contractor])
     expect(await holders()).toEqual([employee, contractor].sort())
   })
+})
+
+it('keeps document campaigns on their assigned immutable edition and rejects cross-document versions', async () => {
+  await ctx.db(async (tx) => {
+    const doc = randomUUID(),
+      otherDoc = randomUUID(),
+      old = randomUUID(),
+      latest = randomUUID()
+    await tx.insert(documents).values([
+      { id: doc, tenantId, key: doc, title: 'Versioned talk', status: 'published' },
+      { id: otherDoc, tenantId, key: otherDoc, title: 'Other talk', status: 'published' },
+    ])
+    await tx.insert(documentVersions).values([
+      { id: old, tenantId, documentId: doc, version: 1.1, publishedAt: new Date('2025-01-01') },
+      { id: latest, tenantId, documentId: doc, version: 1.2, publishedAt: new Date('2026-01-01') },
+    ])
+    await tx
+      .insert(documentAcknowledgments)
+      .values({ tenantId, documentId: doc, versionId: old, personId: alex })
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        tenantId,
+        title: 'Old edition',
+        sourceModule: 'document',
+        subjectKind: 'per_person',
+        targetRef: { documentId: doc, documentVersionId: old },
+        recurrence: { kind: 'one_time', dueOn: '2025-01-31' },
+        recurrenceKind: 'one_time',
+      })
+      .returning()
+    const audience = [{ kind: 'person' as const, entityKey: alex }]
+    const oldResult = await evaluateObligation(tx, tenantId, ob!, audience)
+    const latestResult = await evaluateObligation(
+      tx,
+      tenantId,
+      { ...ob!, targetRef: { documentId: doc, documentVersionId: latest } },
+      audience,
+    )
+    expect(oldResult.rows[0]?.status).toBe('completed')
+    expect(latestResult.rows[0]?.status).toBe('overdue')
+    await expect(
+      lockComplianceTarget(tx, tenantId, 'document', {
+        documentId: otherDoc,
+        documentVersionId: old,
+      }),
+    ).rejects.toThrow('published document version')
+  })
+})
+
+it('filters skill evidence by both required positions on the same valid ticket', async () => {
+  await ctx.db(async (tx) => {
+    const authorityId = randomUUID(),
+      type = randomUUID(),
+      field = randomUUID(),
+      ticket = randomUUID()
+    await tx
+      .insert(trainingSkillAuthorities)
+      .values({ id: authorityId, tenantId, name: authorityId })
+    await tx
+      .insert(trainingSkillTypes)
+      .values({ id: type, tenantId, authorityId, name: 'Positional qualification' })
+    await tx
+      .insert(trainingExtraFields)
+      .values({ id: field, tenantId, authorityId, fieldKey: 'Position', valueMode: 'record' })
+    await tx.insert(trainingSkillAssignments).values({
+      id: ticket,
+      tenantId,
+      skillTypeId: type,
+      personId: alex,
+      grantedOn: '2026-01-01',
+      expiresOn: '2027-01-01',
+      status: 'complete',
+    })
+    const [answer] = await tx
+      .insert(trainingExtraFields)
+      .values({ tenantId, skillAssignmentId: ticket, fieldKey: 'Position', fieldValue: 'F' })
+      .returning()
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        tenantId,
+        title: 'Both F and H',
+        sourceModule: 'skill_requirement',
+        subjectKind: 'per_person',
+        targetRef: {
+          skillTypeId: type,
+          skillConditions: [{ fieldId: field, operator: 'contains_all', values: ['F', 'H'] }],
+        },
+        recurrence: { kind: 'expiry' },
+        recurrenceKind: 'expiry',
+      })
+      .returning()
+    const audience = [{ kind: 'person' as const, entityKey: alex }]
+    await lockComplianceTarget(tx, tenantId, 'skill_requirement', ob!.targetRef)
+    expect((await evaluateObligation(tx, tenantId, ob!, audience, clock)).rows[0]?.status).toBe(
+      'pending',
+    )
+    await tx
+      .update(trainingExtraFields)
+      .set({ fieldValue: 'F,H,V,O' })
+      .where(eq(trainingExtraFields.id, answer!.id))
+    expect((await evaluateObligation(tx, tenantId, ob!, audience, clock)).rows[0]?.status).toBe(
+      'completed',
+    )
+  })
+})
+
+it('uses per-date journals and tenant-scoped optional work decisions instead of duplicate weekly totals', async () => {
+  await ctx.db(async (tx) => {
+    const dailyPerson = randomUUID()
+    await tx
+      .insert(people)
+      .values({ id: dailyPerson, tenantId, firstName: 'Daily', lastName: 'Worker' })
+    const [ob] = await tx
+      .insert(complianceObligations)
+      .values({
+        tenantId,
+        title: 'Required journal days',
+        sourceModule: 'journal',
+        subjectKind: 'per_person',
+        createdAt: new Date('2026-10-01'),
+        recurrence: {
+          kind: 'frequency',
+          frequency: 'week',
+          evidenceWindow: 'calendar',
+          deadline: { weekday: 7, time: '23:59' },
+          journalDays: 'weekdays',
+        },
+        recurrenceKind: 'frequency',
+      })
+      .returning()
+    await tx.insert(journalEntries).values(
+      [0, 1].map(() => ({
+        tenantId,
+        personId: dailyPerson,
+        reference: randomUUID(),
+        entryDate: '2026-10-20',
+        status: 'submitted' as const,
+      })),
+    )
+    const audience = [{ kind: 'person' as const, entityKey: dailyPerson }]
+    const current = await evaluateObligation(tx, tenantId, ob!, audience, clock)
+    expect(current.rows[0]).toMatchObject({
+      expected: 5,
+      count: 1,
+      status: 'overdue',
+      dueOn: '2026-10-19',
+    })
+    await tx.insert(personWorkDays).values({
+      tenantId,
+      personId: dailyPerson,
+      workDate: '2026-10-19',
+      worked: false,
+      source: 'neutral-test-provider',
+    })
+    const worked = await evaluateObligation(
+      tx,
+      tenantId,
+      { ...ob!, recurrence: { ...ob!.recurrence, journalDays: 'worked_days' } },
+      audience,
+      clock,
+    )
+    expect(worked.rows[0]).toMatchObject({
+      expected: 4,
+      count: 1,
+      status: 'in_progress',
+      dueOn: '2026-10-21',
+    })
+    expect(
+      (await tx.select().from(personWorkDays).where(eq(personWorkDays.personId, outsider))).length,
+    ).toBe(0)
+    await tx.update(people).set({ hireDate: '2026-10-20' }).where(eq(people.id, dailyPerson))
+    expect((await evaluateObligation(tx, tenantId, ob!, audience, clock)).rows[0]).toMatchObject({
+      expected: 4,
+      count: 1,
+      status: 'in_progress',
+      dueOn: '2026-10-21',
+    })
+  })
+})
+
+it('upserts optional work days idempotently, validates dates and tenant identities, and audits corrections', async () => {
+  const personId = await ctx.db(async (tx) => {
+    const [person] = await tx
+      .insert(people)
+      .values({ tenantId, firstName: 'API', lastName: 'Worker' })
+      .returning()
+    return person!.id
+  })
+  const input = { personId, workDate: '2026-10-19', worked: true, source: 'neutral-time-system' }
+  const first = await upsertWorkDay(ctx, input)
+  const second = await upsertWorkDay(ctx, { ...input, worked: false })
+  expect(first.id).toBe(second.id)
+  expect(second.worked).toBe(false)
+  await expect(upsertWorkDay(ctx, { ...input, workDate: '2026-02-30' })).rejects.toThrow(
+    'valid workDate',
+  )
+  await expect(upsertWorkDay(ctx, { ...input, personId: outsider })).rejects.toThrow(
+    'Person not found',
+  )
+  await deleteWorkDay(ctx, first.id)
+  await ctx.db(async (tx) => {
+    expect(
+      await tx.select().from(personWorkDays).where(eq(personWorkDays.id, first.id)),
+    ).toHaveLength(0)
+    expect(await tx.select().from(auditLog).where(eq(auditLog.entityId, first.id))).toHaveLength(3)
+  })
+})
+
+it('returns the shared remote-picker contract for published editions and inherited skill fields', async () => {
+  const docId = randomUUID(),
+    versionId = randomUUID(),
+    draftId = randomUUID(),
+    authorityId = randomUUID(),
+    typeId = randomUUID(),
+    fieldId = randomUUID()
+  await ctx.db(async (tx) => {
+    await tx
+      .insert(documents)
+      .values({ id: docId, tenantId, key: docId, title: 'Edition picker', status: 'published' })
+    await tx.insert(documentVersions).values([
+      { id: versionId, tenantId, documentId: docId, version: 1.1, publishedAt: clock.now },
+      { id: draftId, tenantId, documentId: docId, version: 1.2 },
+    ])
+    await tx
+      .insert(trainingSkillAuthorities)
+      .values({ id: authorityId, tenantId, name: 'Picker authority' })
+    await tx
+      .insert(trainingSkillTypes)
+      .values({ id: typeId, tenantId, authorityId, name: 'Picker skill' })
+    await tx
+      .insert(trainingExtraFields)
+      .values({ id: fieldId, tenantId, authorityId, fieldKey: 'Position', valueMode: 'record' })
+  })
+  const editions = await obligationTargetOptions({
+    kind: 'version',
+    contextId: docId,
+    query: '',
+    selected: versionId,
+  })
+  expect(isPickerOptionsResponse(editions)).toBe(true)
+  expect(editions.options).toEqual([{ value: versionId, label: 'v1.1' }])
+  const fields = await obligationTargetOptions({
+    kind: 'skill_field',
+    contextId: typeId,
+    query: '',
+    selected: fieldId,
+  })
+  expect(isPickerOptionsResponse(fields)).toBe(true)
+  expect(fields.options).toEqual([{ value: fieldId, label: 'Position' }])
+  expect(
+    (
+      await obligationTargetOptions({
+        kind: 'version',
+        contextId: randomUUID(),
+        query: '',
+        selected: versionId,
+      })
+    ).options,
+  ).toEqual([])
 })

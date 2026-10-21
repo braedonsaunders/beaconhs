@@ -19,6 +19,23 @@ export type { ReportColumnKind, ReportEntityColumn, ReportEntityCatalog }
 
 export const REPORT_ENTITIES: ReportEntity[] = [
   {
+    key: 'person_work_days',
+    label: 'Employee work days',
+    category: 'compliance',
+    description:
+      'Optional provider-neutral daily work decisions for worked-day journal requirements. Missing records are unknown, not time off.',
+    table: 'person_work_days',
+    softDelete: false,
+    columns: [
+      { key: 'person_id', label: 'Person (id)', kind: 'uuid' },
+      { key: 'work_date', label: 'Work date', kind: 'date' },
+      { key: 'worked', label: 'Worked', kind: 'boolean' },
+      { key: 'source', label: 'Source', kind: 'text' },
+      { key: 'updated_at', label: 'Updated at', kind: 'timestamp' },
+    ],
+    defaultSort: { column: 'work_date', direction: 'desc' },
+  },
+  {
     key: 'incidents',
     label: 'Incidents',
     category: 'incidents',

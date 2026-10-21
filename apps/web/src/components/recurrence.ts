@@ -10,6 +10,7 @@ export type RecurrenceKind = 'one_time' | 'frequency' | 'cron'
 
 export type RecurrenceValue = {
   kind: RecurrenceKind
+  journalDays?: ComplianceRecurrence['journalDays']
   evidenceWindow?: 'calendar' | 'rolling'
   deadline?: ComplianceRecurrence['deadline']
   frequency?: Frequency
@@ -60,6 +61,7 @@ export type RecurrenceFields = {
  */
 export function recurrenceValueFromStored(rec: {
   kind: string
+  journalDays?: ComplianceRecurrence['journalDays']
   evidenceWindow?: 'calendar' | 'rolling'
   deadline?: ComplianceRecurrence['deadline']
   frequency?: Frequency
@@ -79,6 +81,7 @@ export function recurrenceValueFromStored(rec: {
     const isPresetCron = Boolean(rec.cron) && rec.cron === frequencyToCron(frequency)
     return {
       kind: 'frequency',
+      journalDays: rec.journalDays,
       evidenceWindow: rec.evidenceWindow ?? 'calendar',
       deadline: rec.deadline,
       frequency,

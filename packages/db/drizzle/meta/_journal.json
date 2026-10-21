@@ -554,6 +554,13 @@
       "when": 1792545238759,
       "tag": "0079_equipment_unknown_inspection_dates",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1792550886007,
+      "tag": "0080_compliance_work_days",
+      "breakpoints": true
     }
   ]
 }

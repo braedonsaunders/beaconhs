@@ -5,15 +5,17 @@
 // policy still validates every remotely callable input before opening a
 // transaction so callers receive useful errors instead of database failures.
 
-import { and, eq, type SQL } from 'drizzle-orm'
+import { and, eq, isNull, ne, sql, type SQL } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import type { Database } from '@beaconhs/db'
 import {
   trainingExtraFields,
+  complianceObligations,
   trainingSkillAssignments,
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
+import { materializeSkillEvidence } from '../skills/_skill-evidence'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAuditInTransaction } from '@/lib/audit'
@@ -22,6 +24,26 @@ import {
   parseExtraFieldInput,
   type TrainingExtraFieldOwnerType as OwnerType,
 } from './extra-field-policy'
+
+async function refreshOwnerEvidence(tx: Database, tenantId: string, type: OwnerType, id: string) {
+  const types =
+    type === 'skill_type'
+      ? [id]
+      : type === 'authority'
+        ? (
+            await tx
+              .select({ id: trainingSkillTypes.id })
+              .from(trainingSkillTypes)
+              .where(
+                and(
+                  eq(trainingSkillTypes.tenantId, tenantId),
+                  eq(trainingSkillTypes.authorityId, id),
+                ),
+              )
+          ).map((row) => row.id)
+        : []
+  await materializeSkillEvidence(tx, tenantId, types)
+}
 
 function ownerPath(type: OwnerType, id: string): string {
   switch (type) {
@@ -161,6 +183,7 @@ export async function addExtraField(input: {
       summary: `Added additional field "${parsed.fieldKey}"`,
       after: { fieldKey: parsed.fieldKey, fieldValue: parsed.fieldValue },
     })
+    await refreshOwnerEvidence(tx, ctx.tenantId, parsed.ownerType, parsed.ownerId)
     return { ok: true as const }
   })
   if (result.ok) revalidatePath(ownerPath(parsed.ownerType, parsed.ownerId))
@@ -200,6 +223,24 @@ export async function deleteExtraField(input: {
       .for('update')
     if (!existing) return { ok: false as const, error: 'Field not found.' }
 
+    const [dependency] = await tx
+      .select({ id: complianceObligations.id })
+      .from(complianceObligations)
+      .where(
+        and(
+          eq(complianceObligations.tenantId, ctx.tenantId),
+          isNull(complianceObligations.deletedAt),
+          ne(complianceObligations.status, 'archived'),
+          sql`${complianceObligations.targetRef}->'skillConditions' @> ${JSON.stringify([{ fieldId: parsed.id }])}::jsonb`,
+        ),
+      )
+      .limit(1)
+    if (dependency)
+      return {
+        ok: false as const,
+        error:
+          'This field is used by a compliance obligation. Remove its qualification condition first.',
+      }
     const [deleted] = await tx
       .delete(trainingExtraFields)
       .where(predicate)
@@ -212,6 +253,7 @@ export async function deleteExtraField(input: {
       summary: `Removed additional field "${existing.fieldKey}"`,
       before: { fieldKey: existing.fieldKey, fieldValue: existing.fieldValue },
     })
+    await refreshOwnerEvidence(tx, ctx.tenantId, parsed.ownerType, parsed.ownerId)
     return { ok: true as const }
   })
   if (result.ok) revalidatePath(ownerPath(parsed.ownerType, parsed.ownerId))

@@ -36,6 +36,14 @@ export function cadenceLabel(
   translate: (value: string) => string = (value) => value,
 ): string {
   if (!rec) return '—'
+  if (rec.journalDays)
+    return translate(
+      rec.journalDays === 'weekdays'
+        ? 'One journal each weekday'
+        : rec.journalDays === 'calendar'
+          ? 'One journal every calendar day'
+          : 'One journal each worked day (weekdays when unknown)',
+    )
   if (rec.kind === 'frequency' && rec.deadline) {
     const deadline = rec.deadline
     const frequency = rec.frequency ?? 'year'

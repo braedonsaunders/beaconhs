@@ -10,7 +10,11 @@ export function journalProgressPercent(
   if (!rows.length) return 0
   return Math.round(
     (rows.reduce(
-      (sum, row) => sum + Math.min(1, Math.max(0, row.count ?? 0) / Math.max(1, row.expected ?? 1)),
+      (sum, row) =>
+        sum +
+        (row.expected === 0
+          ? 1
+          : Math.min(1, Math.max(0, row.count ?? 0) / Math.max(1, row.expected ?? 1))),
       0,
     ) /
       rows.length) *
@@ -33,7 +37,10 @@ export function JournalProgress({
         <GeneratedValue value={count} /> / <GeneratedValue value={expected} />{' '}
         <GeneratedValue value="submitted" />
       </div>
-      <PercentBar percent={Math.min(100, (count / Math.max(1, expected)) * 100)} progress />
+      <PercentBar
+        percent={expected === 0 ? 100 : Math.min(100, (count / Math.max(1, expected)) * 100)}
+        progress
+      />
       {met && count < expected ? (
         <div className="text-xs text-slate-500">
           <GeneratedValue value="Minimum met" />

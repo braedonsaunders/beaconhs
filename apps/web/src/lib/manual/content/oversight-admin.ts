@@ -550,6 +550,16 @@ For recurring training, choose **Completion window** → **Rolling period since 
 
 A missing, expired, or expiring certificate requirement shows **Booked** when the person is registered for an upcoming, unfinished class for that course. The class date appears beside the status. Booking uses the same active class roster as **Training — Missing**. It is a remediation plan and does not count as a completed certificate in the compliance percentage. A person with a current certificate keeps **Completed**, their compliance percentage, and the upcoming class date. Removing the booking, cancelling the class, or moving it to a different course updates the status. A cancelled attendee or no-show is not booked.
 
+The **Obligations** table uses even-height rows and single-line kind labels. Long titles, audiences and cadences show their full text on hover. On a narrow screen, swipe the table sideways to reach every column. Open a title to review its complete details.
+
+## Document editions and skill conditions
+
+For a document obligation, choose **Required document edition** to pin the campaign to a published version. Leaving it empty follows the latest published edition. **Acknowledge** opens and signs the required edition. A signature on another edition does not satisfy a pinned campaign. Keep separate campaigns when their editions or deadlines differ.
+
+For a skill requirement, choose the skill type, then **Add qualification condition**. Select an existing **Additional field**, comparison and required values. **Equals** compares the whole value. **Contains every item** requires all comma-separated items; **Contains any item** accepts one. Existing values such as F/H/V/O or F,H,V,O are treated as separate items. To require Flat and Horizontal, use **Position**, **Contains every item**, and **F, H**. All conditions must match the same valid ticket. Missing values do not qualify. Type-wide constants and inherited authority fields use the same effective values shown on the employee ticket. A field used by an obligation cannot be deleted until its condition is removed.
+
+Certificate requirements accept valid earned or manually recorded credentials. A quiz that grants a certificate can satisfy that rule through the resulting credential; assigning a separate quiz obligation is an additional requirement. Turning off a quiz obligation keeps the quiz, attempts and certificate issuance available.
+
 ## Fixed calendar deadlines
 
 Use **Calendar schedule** when everyone must finish in the same calendar period by a particular date. For example, to require a quiz annually by December 31:
@@ -565,6 +575,12 @@ Use **Calendar schedule** when everyone must finish in the same calendar period 
 Choose **Rolling period since completion** instead when a qualification must remain current. The supported periods are one day, one week, one calendar month, three calendar months, and 12 calendar months. Each person’s next due date follows their own last successful completion. A monthly completion on January 31 is valid through February 28 in a non-leap year. Choose **One-time (single due date)** for a requirement with one specific due date that does not repeat.
 
 ## Track journal targets
+
+Choose **Journal requirement** → **One journal each weekday**, **One journal every calendar day**, or **One journal each worked day (weekdays when unknown)**. Each required date needs its own submitted journal. Two journals on Tuesday do not cover a missing Monday. Drafts and future-dated journals do not count yet. A missing past date is overdue; today's journal is due by midnight in the compliance timezone. The weekly view shows completed required dates against the week's target. Required dates start when the obligation starts and no earlier than the employee's recorded hire date.
+
+**One journal each weekday** means Monday to Friday. **One journal every calendar day** also includes weekends. **One journal each worked day (weekdays when unknown)** uses optional work-day decisions supplied through the public API. An explicit day off removes that date; an explicit worked Saturday includes it. Missing decisions use Monday–Friday and show **Work-day data missing; weekdays used**. The app does not guess time off from a missing feed. This feature does not require a particular payroll provider.
+
+Choose **Number of journals per period** for a quantity target rather than a per-date requirement. Existing history keeps its original rule.
 
 A journal target such as **5 per week** counts submitted journals from Monday through Sunday. The default deadline is Sunday at **23:59** in the compliance timezone. It is not overdue on Monday morning. Drafts do not count; submitted journals still count after archiving.
 

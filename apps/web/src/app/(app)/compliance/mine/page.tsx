@@ -323,6 +323,11 @@ export default async function MyCompliancePage({
                                   </TableCell>
                                   <TableCell>
                                     <StatusBadge status={r.status} />
+                                    {Number(r.subjectRef?.workDayFallbacks ?? 0) > 0 ? (
+                                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                                        <GeneratedValue value="Work-day data missing; weekdays used" />
+                                      </p>
+                                    ) : null}
                                     {r.kind === 'journal' ? (
                                       <div className="mt-2 space-y-1">
                                         <JournalProgress

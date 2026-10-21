@@ -1,3 +1,4 @@
+import { upsertWorkDay, deleteWorkDay, WORK_DAY_BODY } from './work-days'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 // Write handlers for the public API. Writes do NOT go through the read registry
 // (that includes views and only a reporting subset of columns) — each writable
@@ -2384,6 +2385,12 @@ const TRAINING_RECORD_PATCH_BODY = optionalObjectSchema(TRAINING_RECORD_BODY)
 // --- registry ----------------------------------------------------------------
 
 const WRITES: Record<string, WriteRegistration> = {
+  person_work_days: {
+    permission: 'compliance.manage',
+    handler: upsertWorkDay,
+    bodySchema: WORK_DAY_BODY,
+    delete: { permission: 'compliance.manage', handler: deleteWorkDay },
+  },
   incidents: {
     permission: 'incidents.create',
     handler: createIncident,

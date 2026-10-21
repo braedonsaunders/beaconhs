@@ -19,6 +19,7 @@ import {
   assertUploadedDocumentPdf,
   documentVersionVisibilityWhere,
 } from '@/lib/document-version-policy'
+import { isUuid } from '@/lib/list-params'
 import { requireRecordInput, requireUuidInput } from '@/lib/mutation-input'
 
 type DocumentPdfUrlResult =
@@ -32,7 +33,7 @@ type DocumentPdfUrlResult =
 // renders the document on demand.
 export async function getDocumentPdfUrl(
   documentId: string,
-  opts: { draft?: boolean } = {},
+  opts: { draft?: boolean; versionId?: string } = {},
 ): Promise<DocumentPdfUrlResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.read')
@@ -42,6 +43,10 @@ export async function getDocumentPdfUrl(
 
   // Managers previewing an authored document get a FRESH render of the
   // current working master (the /pdf route dispatches the worker job).
+  if (opts.versionId && !isUuid(opts.versionId))
+    return { ok: false, error: 'Invalid document version.' }
+  if (opts.draft && opts.versionId)
+    return { ok: false, error: 'Choose a draft or a published version.' }
   if (opts.draft) {
     if (!canManage) return { ok: false, error: 'Not allowed' }
     const [doc] = await ctx.db((tx) =>
@@ -85,7 +90,12 @@ export async function getDocumentPdfUrl(
         renderError: documentVersions.renderError,
       })
       .from(documentVersions)
-      .where(documentVersionVisibilityWhere(documentId, canManage))
+      .where(
+        and(
+          documentVersionVisibilityWhere(documentId, opts.versionId ? false : canManage),
+          opts.versionId ? eq(documentVersions.id, opts.versionId) : undefined,
+        ),
+      )
       .orderBy(desc(documentVersions.version))
       .limit(1),
   )

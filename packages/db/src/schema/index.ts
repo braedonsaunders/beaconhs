@@ -76,3 +76,5 @@ export * from './walkthroughs'
 export * from './domain-events'
 
 export * from './compliance-periods'
+
+export * from './work-days'

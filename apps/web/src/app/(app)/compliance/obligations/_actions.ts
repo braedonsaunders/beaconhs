@@ -76,7 +76,7 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
       return { ref: { inspectionTypeId: input.inspectionTypeId } }
     case 'document':
       if (!input.documentId) return { ref: {}, error: 'Pick a document' }
-      return { ref: { documentId: input.documentId } }
+      return { ref: { documentId: input.documentId, documentVersionId: input.documentVersionId } }
     case 'training': {
       const k = input.trainingItemKind ?? 'course'
       if (k === 'course' && !input.courseId) return { ref: {}, error: 'Pick a course' }
@@ -95,7 +95,7 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
       return { ref: { courseId: input.courseId, trainingItemKind: 'course' } }
     case 'skill_requirement':
       if (!input.skillTypeId) return { ref: {}, error: 'Pick a skill type' }
-      return { ref: { skillTypeId: input.skillTypeId } }
+      return { ref: { skillTypeId: input.skillTypeId, skillConditions: input.skillConditions } }
     case 'form':
       if (!input.formTemplateId) return { ref: {}, error: 'Pick an app / form template' }
       return { ref: { formTemplateId: input.formTemplateId } }
@@ -142,6 +142,7 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
   // Inspection / journal / hazard assessment → frequency.
   return {
     kind: 'frequency',
+    journalDays: kind === 'journal' ? r.journalDays : undefined,
     frequency: r.frequency ?? 'week',
     cron: kind === 'journal' ? undefined : cronFor(),
     evidenceWindow: kind === 'journal' ? 'calendar' : undefined,

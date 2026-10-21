@@ -36,6 +36,7 @@ import {
   jobTitleTasks,
   journalEntries,
   people,
+  personWorkDays,
   personTitleAssignments,
   ppeItems,
   ppeTypes,
@@ -47,6 +48,12 @@ import {
   trainingRecords,
   trainingSkillAssignments,
 } from '@beaconhs/db/schema'
+import { journalDayProgress } from './journal-days'
+import {
+  effectiveSkillFieldValue,
+  loadSkillConditionFields,
+  skillFieldMatches,
+} from './skill-conditions'
 import { type AudienceItem, type ResolvedMember, resolveObligationAudience } from './audience'
 import {
   complianceDate,
@@ -400,6 +407,7 @@ async function evalTraining(
     // A skill requirement accepts only completed, live tickets of its skill type.
     const rows = await tx
       .select({
+        id: trainingSkillAssignments.id,
         personId: trainingSkillAssignments.personId,
         grantedOn: trainingSkillAssignments.grantedOn,
         status: trainingSkillAssignments.status,
@@ -415,7 +423,29 @@ async function evalTraining(
           isNull(trainingSkillAssignments.deletedAt),
         ),
       )
+    const conditions = ref.skillConditions ?? []
+    const fields = conditions.length
+      ? await loadSkillConditionFields(
+          tx,
+          tid,
+          ref.skillTypeId,
+          rows.map((r) => r.id),
+        )
+      : []
     for (const r of rows) {
+      if (
+        !conditions.every((condition) => {
+          const definition = fields.find((f) => f.id === condition.fieldId && !f.skillAssignmentId)
+          return (
+            definition &&
+            skillFieldMatches(
+              effectiveSkillFieldValue(definition, fields, ref.skillTypeId!, r.id),
+              condition,
+            )
+          )
+        })
+      )
+        continue
       if (r.personId)
         remember(r.personId, {
           completedOn: r.grantedOn,
@@ -472,6 +502,9 @@ async function evalDocument(
       and(
         eq(documentVersions.tenantId, tid),
         eq(documentVersions.documentId, ob.targetRef.documentId),
+        ob.targetRef.documentVersionId
+          ? eq(documentVersions.id, ob.targetRef.documentVersionId)
+          : undefined,
         isNotNull(documentVersions.publishedAt),
         lte(documentVersions.publishedAt, window.evidenceEndAt ?? clock.now),
       ),
@@ -540,6 +573,80 @@ async function evalJournal(
   const names = await loadNames(tx, tid, ids)
   const window = resolveFrequencyWindow(ob.recurrence, clock, ob.createdAt)
   if (window.periodEndAt <= ob.createdAt) return empty()
+  if (ob.recurrence.journalDays) {
+    const employment = await tx
+      .select({ id: people.id, hireDate: people.hireDate })
+      .from(people)
+      .where(and(eq(people.tenantId, tid), inArray(people.id, ids)))
+    const hireDates = new Map(employment.map((person) => [person.id, person.hireDate]))
+    const activeFrom = complianceDate({ ...clock, now: ob.createdAt })
+    const entries = await tx
+      .select({ personId: journalEntries.personId, entryDate: journalEntries.entryDate })
+      .from(journalEntries)
+      .where(
+        and(
+          eq(journalEntries.tenantId, tid),
+          inArray(journalEntries.personId, ids),
+          gte(journalEntries.entryDate, window.periodStart),
+          lte(journalEntries.entryDate, window.periodEnd),
+          inArray(journalEntries.status, ['submitted', 'archived']),
+          isNull(journalEntries.deletedAt),
+        ),
+      )
+    const workDays =
+      ob.recurrence.journalDays === 'worked_days'
+        ? await tx
+            .select({
+              personId: personWorkDays.personId,
+              date: personWorkDays.workDate,
+              worked: personWorkDays.worked,
+            })
+            .from(personWorkDays)
+            .where(
+              and(
+                eq(personWorkDays.tenantId, tid),
+                inArray(personWorkDays.personId, ids),
+                gte(personWorkDays.workDate, window.periodStart),
+                lte(personWorkDays.workDate, window.periodEnd),
+              ),
+            )
+        : []
+    const byPerson = new Map<string, string[]>()
+    for (const entry of entries)
+      if (entry.personId)
+        byPerson.set(entry.personId, [...(byPerson.get(entry.personId) ?? []), entry.entryDate])
+    const workByPerson = new Map<string, Map<string, boolean>>()
+    for (const day of workDays) {
+      const days = workByPerson.get(day.personId) ?? new Map<string, boolean>()
+      days.set(day.date, day.worked)
+      workByPerson.set(day.personId, days)
+    }
+    return tally(
+      ids.map((pid) => {
+        const progress = journalDayProgress({
+          mode: ob.recurrence.journalDays!,
+          start: [window.periodStart, activeFrom, hireDates.get(pid) ?? window.periodStart]
+            .sort()
+            .at(-1)!,
+          end: window.periodEnd,
+          today: complianceDate(clock),
+          completedDates: byPerson.get(pid) ?? [],
+          workDays: workByPerson.get(pid) ?? new Map(),
+        })
+        return personRow(pid, names.get(pid) ?? '(unnamed)', progress.status, {
+          ...progress,
+          subjectRef: {
+            journalDays: ob.recurrence.journalDays!,
+            workDayFallbacks: String(progress.fallbackDays),
+            ...(progress.completedOn ? { lastActivityOn: progress.completedOn } : {}),
+          },
+          periodStart: window.periodStart,
+          periodEnd: window.periodEnd,
+        })
+      }),
+      window.nextDueAt,
+    )
+  }
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
   const threshold = ob.recurrence?.compliantPercentage ?? 100
   const counts = await tx
