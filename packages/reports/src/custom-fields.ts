@@ -4,6 +4,7 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   customFieldDefinitions,
+  complianceObligations,
   departments,
   equipmentCategories,
   equipmentTypes,
@@ -151,6 +152,7 @@ export async function loadBeaconReportCatalog(
     tradeRows,
     appRows,
     hazidRows,
+    obligationRows,
   ] = await Promise.all([
     loadEnumOptionsByColumn(tx),
     tx
@@ -229,6 +231,13 @@ export async function loadBeaconReportCatalog(
       .from(hazidAssessments)
       .where(isNull(hazidAssessments.deletedAt))
       .orderBy(asc(hazidAssessments.reference)),
+    tx
+      .select({ value: complianceObligations.id, label: complianceObligations.title })
+      .from(complianceObligations)
+      .where(
+        and(eq(complianceObligations.status, 'active'), isNull(complianceObligations.deletedAt)),
+      )
+      .orderBy(asc(complianceObligations.title)),
   ])
   const personIdOptions = personRows.map((row) => ({
     value: row.value,
@@ -373,6 +382,8 @@ export async function loadBeaconReportCatalog(
     ['vehicle_log_monthly.driver_name', holderNameOptions],
     ['vehicle_log_monthly.employee_no', employeeNumberOptions],
     ['compliance_status.person_name', personNameOptions],
+    ['compliance_status.person_uuid', personIdOptions],
+    ['compliance_status.obligation_id', obligationRows],
     ['monitored_sessions.subject_person_id', personNameOptions],
     ['monitored_sessions.site_org_unit_id', locationNameOptions],
     ['monitored_sessions.app_name', appRows.map((row) => ({ value: row.label, label: row.label }))],

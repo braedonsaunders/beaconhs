@@ -270,6 +270,8 @@ The seeded catalogue replaces the former Beacon reports for training certificate
 
 ## Export a report
 
+Compliance reports can filter by **Requirement**, **Employee**, **Department**, and **Person group**. A person-group filter follows current group membership. Keep these audience filters on a schedule when it should cover only part of a larger requirement.
+
 1. Open the report.
 2. Set the filters and grouping, then click **Apply and run**.
 3. Click **CSV**, **Excel**, or **PDF**. On **Training — Wallet cards**, **PDF** prints the designed CR80 card fronts (one card per page, printer size). The on-screen preview stays the filter table so you can pick who prints.

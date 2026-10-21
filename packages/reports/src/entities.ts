@@ -445,6 +445,16 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       SELECT
         status.id,
         status.tenant_id,
+        status.obligation_id,
+        status.person_id,
+        person.department_id,
+        department.name AS department_name,
+        array_to_string(ARRAY(
+          SELECT membership.group_id::text FROM person_group_memberships membership
+          WHERE membership.tenant_id = status.tenant_id
+            AND membership.person_id = status.person_id
+          ORDER BY membership.group_id
+        ), ',') AS group_id_list,
         obligation.source_module,
         obligation.title AS obligation_title,
         status.subject_key,
@@ -466,16 +476,42 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         ON obligation.tenant_id = status.tenant_id
        AND obligation.id = status.obligation_id
        AND obligation.deleted_at IS NULL
+       AND obligation.status = 'active'
       LEFT JOIN people person
         ON person.tenant_id = status.tenant_id
        AND person.id = status.person_id
        AND person.deleted_at IS NULL
+      LEFT JOIN departments department
+        ON department.tenant_id = status.tenant_id
+       AND department.id = person.department_id
     ) AS "report_compliance_status"`,
     columns: [
       { key: 'source_module', label: 'Module', kind: 'enum' },
-      { key: 'obligation_title', label: 'Requirement', kind: 'text' },
+      { key: 'obligation_title', label: 'Requirement title', kind: 'text' },
+      {
+        key: 'obligation_id',
+        label: 'Requirement',
+        kind: 'text',
+        expression: '"report_compliance_status"."obligation_title"',
+        filterExpression: '"report_compliance_status"."obligation_id"',
+      },
+      {
+        key: 'person_uuid',
+        label: 'Employee',
+        kind: 'text',
+        expression: '"report_compliance_status"."person_name"',
+        filterExpression: '"report_compliance_status"."person_id"',
+      },
+      {
+        key: 'department_id',
+        label: 'Department',
+        kind: 'text',
+        expression: '"report_compliance_status"."department_name"',
+        filterExpression: '"report_compliance_status"."department_id"',
+      },
+      { key: 'group_id_list', label: 'Person group', kind: 'text', filterValueMode: 'csv-set' },
       { key: 'subject_key', label: 'Subject', kind: 'text' },
-      { key: 'person_name', label: 'Employee', kind: 'text' },
+      { key: 'person_name', label: 'Employee name', kind: 'text' },
       { key: 'status', label: 'Status', kind: 'enum' },
       { key: 'period_start', label: 'Period start', kind: 'date' },
       { key: 'period_end', label: 'Period end', kind: 'date' },
@@ -555,6 +591,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       SELECT
         signature.id,
         signature.tenant_id,
+        person.department_id,
+        department.name AS department_name,
         assessment.reference AS assessment_id,
         signature.signature_type,
         CASE
@@ -572,6 +610,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         ON person.tenant_id = signature.tenant_id
        AND person.id = signature.person_id
        AND person.deleted_at IS NULL
+      LEFT JOIN departments department
+        ON department.tenant_id = signature.tenant_id
+       AND department.id = person.department_id
     ) AS "hazid_assessment_signatures"`,
     columns: [
       { key: 'assessment_id', label: 'Assessment', kind: 'text' },
@@ -579,6 +620,13 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'person_id', label: 'Employee', kind: 'text' },
       { key: 'external_name', label: 'External signer', kind: 'text' },
       { key: 'signed_at', label: 'Signed at', kind: 'timestamp' },
+      {
+        key: 'department_id',
+        label: 'Department',
+        kind: 'text',
+        expression: '"hazid_assessment_signatures"."department_name"',
+        filterExpression: '"hazid_assessment_signatures"."department_id"',
+      },
     ],
     defaultSort: { column: 'signed_at', direction: 'desc' },
   },
