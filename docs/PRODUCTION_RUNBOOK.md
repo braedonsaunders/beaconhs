@@ -278,6 +278,15 @@ render job.
 - After recovery, restart the scheduler to re-register repeatable jobs and
   reconcile durable pending/outbox records before declaring recovery complete.
 
+Durable domain events retry transient failures indefinitely. Before repairing a
+historical event, establish whether its email or automation should still run.
+If delivery is no longer authorized, lock that tenant's pending outbox row and
+set its status to `cancelled` in an audited transaction. Preserve its payload,
+attempt count, last error, and delivery timestamps; do not mark it published.
+Cancelled rows are excluded from worker claims, and the signed web handler
+rejects them. Never cancel a live publishing lease without first resolving its
+in-flight delivery. Account IDs are text; membership and person IDs are UUIDs.
+
 ## Error monitoring
 
 BeaconHS initializes Sentry only when `SENTRY_DSN` is non-empty. Set the same

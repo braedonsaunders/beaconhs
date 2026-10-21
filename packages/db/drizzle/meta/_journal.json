@@ -568,6 +568,13 @@
       "when": 1792589400000,
       "tag": "0081_flow_recipient_audiences",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1792595827623,
+      "tag": "0082_domain_event_cancellation",
+      "breakpoints": true
     }
   ]
 }

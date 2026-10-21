@@ -106,6 +106,7 @@ export const domainEventOutboxStatus = pgEnum('domain_event_outbox_status', [
   'pending',
   'publishing',
   'published',
+  'cancelled',
 ])
 
 export const domainEventOutbox = pgTable(

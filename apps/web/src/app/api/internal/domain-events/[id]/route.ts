@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { domainEventOutbox, tenants, tenantUsers } from '@beaconhs/db/schema'
+import { domainEventOutbox, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import { verifyDomainEventRequest } from '@beaconhs/events'
 import { resolveLocalePreferences } from '@beaconhs/i18n'
 import { makeTenantContext } from '@beaconhs/tenant'
@@ -49,12 +49,18 @@ export async function POST(
   const command = event.payload.web
   const actor = command.actor
   if (
-    !isUuid(actor.userId) ||
+    typeof actor.userId !== 'string' ||
+    !actor.userId.trim() ||
     (actor.membershipId && !isUuid(actor.membershipId)) ||
     (actor.personId && !isUuid(actor.personId))
   ) {
     return new Response('Invalid command actor', { status: 422 })
   }
+  // Authentication account IDs are text; only membership and person IDs are UUIDs.
+  const [account] = await withSuperAdmin(db, (tx) =>
+    tx.select({ id: users.id }).from(users).where(eq(users.id, actor.userId)).limit(1),
+  )
+  if (!account) return new Response('Command actor no longer exists', { status: 422 })
   const localeState = await withSuperAdmin(db, async (tx) => {
     const [tenant] = await tx
       .select({
