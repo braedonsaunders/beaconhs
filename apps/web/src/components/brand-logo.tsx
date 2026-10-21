@@ -251,7 +251,7 @@ export function Logo({ animated, draw, className, ...rest }: LogoProps) {
 }
 
 /** Full-screen brand splash: the logo draws itself in, then the beacon keeps
- *  sweeping. Used as the root route-loading fallback. */
+ *  sweeping. Used only by the tab's startup overlay. */
 export function BrandSplash() {
   return (
     <div className="flex h-dvh w-full items-center justify-center bg-slate-50 dark:bg-slate-950">

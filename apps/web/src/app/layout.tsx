@@ -9,6 +9,7 @@ import { SplashScreen } from '@/components/brand-splash'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { PRODUCT_NAME } from '@/lib/brand'
 import { getClientMessages } from '@/i18n/client-messages'
+import { BOOT_SPLASH_INIT } from '@/lib/boot-splash'
 
 export async function generateMetadata(): Promise<Metadata> {
   const tGenerated = await getGeneratedTranslations()
@@ -68,6 +69,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: THEME_INIT }}
         />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: BOOT_SPLASH_INIT }} />
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
         <NextIntlClientProvider

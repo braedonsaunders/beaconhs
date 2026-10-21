@@ -71,6 +71,8 @@ A normal password or magic-link sign-in does not activate a pending invitation. 
 
 ## Finding your way around
 
+The startup logo plays once when you first open BeaconHS in a browser tab. Moving between pages or refreshing that tab does not replay it. A short placeholder may appear while a page loads.
+
 The left menu lists everything you can use. Items are grouped:
 
 - **Overview** — the **Dashboard**, your [Workspace](/my), and the activity feed.

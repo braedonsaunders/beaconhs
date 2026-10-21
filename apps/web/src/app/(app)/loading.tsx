@@ -3,8 +3,8 @@ import { useGeneratedTranslations } from '@/i18n/generated'
 import { ListPageLayout } from '@/components/page-layout'
 
 // In-shell loading fallback for routes without their own skeleton. The brand
-// splash belongs to the first document load only (root layout + root
-// loading.tsx); navigating, searching, or filtering inside the app shows this
+// splash belongs to the tab's first load only (root layout); navigating,
+// searching, or filtering inside the app shows this
 // quiet page-shaped placeholder instead.
 export default function Loading() {
   const tGenerated = useGeneratedTranslations()
