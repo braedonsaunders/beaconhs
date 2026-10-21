@@ -333,11 +333,13 @@ export async function stationScanCore(
       return { ok: false, error: 'Scan or pick a person before checking out' }
     }
     const destinationOrgUnitId = args.destinationOrgUnitId ?? null
-    if (!destinationOrgUnitId) {
-      return { ok: false, error: 'Pick a check-out destination before checking out' }
+    if (!destinationOrgUnitId && !holderPersonId) {
+      return { ok: false, error: 'Pick a person or a check-out destination before checking out' }
     }
-    const destinationName = await locationName(tx, destinationOrgUnitId)
-    if (!destinationName) {
+    const destinationName = destinationOrgUnitId
+      ? await locationName(tx, destinationOrgUnitId)
+      : null
+    if (destinationOrgUnitId && !destinationName) {
       return { ok: false, error: 'Pick a valid check-out destination' }
     }
     const holderName = holderPersonId ? await personName(tx, holderPersonId) : null

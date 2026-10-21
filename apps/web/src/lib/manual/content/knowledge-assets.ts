@@ -746,7 +746,7 @@ To check a unit in or out yourself, use the station. See [Equipment check-in / c
 
 1. Open the unit and select **Location & custody**.
 2. Select **Transfer** to change its site or holder. Add a note, then select **Record transfer**. When changing only the holder, you can leave the current location as it is, including an imported customer location. New locations can be active customers, projects, sites, or areas. New holders must be active people. The movement is added to **Custody history**, and the drawer closes after saving.
-3. Select **Check out** to issue an available unit. A **Destination site** is required; the person and expected return date are optional.
+3. Select **Check out** to issue an available unit. Select a person or a **Destination site**. For a truck that stays with an employee, select the person and leave the destination and expected return date blank. The open checkout stays with that person until an explicit check-in, even across multiple job sites. GPS and last-known positions do not change the holder.
 4. Select **Check in** to return equipment that has an open check-out, a holder, or a location away from base. This also works for imported equipment without a check-out record. Choose its condition and add a note. The unit returns to the default check-in location configured for the station and its holder is cleared. A worker can return equipment issued to them; managers can return any unit they manage.
 
 An open check-out must be checked in before you can use **Transfer** or a bulk site/holder change. Every check-in, check-out, and transfer appears in the same **Custody history** table. Equipment at a base or the default check-in location, without a holder or open check-out, is checked in. Repair, missing, and retired statuses prevent check-out but do not by themselves mean a unit is checked out.
@@ -878,7 +878,7 @@ Open **Equipment** in the left menu, then go to the **Check-in / out station** a
 
 1. Open the [station](/equipment/station).
 2. Scan your badge first, type your name in the scan box, or search **Active holder**. You will see **Active holder set** — that is you.
-3. Search **Check-out destination** and choose where the unit is going.
+3. If the unit is going to a fixed site, choose **Check-out destination**. Leave this blank when it stays with the selected person, such as a foreman’s truck. No expected return date is needed for an ongoing assignment.
 4. Scan the unit's tag, or type its asset tag and tap it in the list.
 5. You will see **Checked out** with the asset tag and name. The unit is now on you.
 

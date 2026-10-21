@@ -569,6 +569,9 @@ export function StationClient(props: StationClientProps) {
               ariaLabel="Destination"
               disabled={surface === 'kiosk' && !locationOptionsLoader}
             />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedValue value="Optional when a person is selected. Leave blank for equipment that stays with them." />
+            </p>
           </div>
           <div className="space-y-1">
             <Label dark={dark}>

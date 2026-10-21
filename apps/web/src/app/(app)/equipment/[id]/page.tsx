@@ -299,10 +299,13 @@ async function checkOutFromItem(formData: FormData) {
   assertCan(ctx, 'equipment.manage')
   const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
   const holderPersonId = optionalUuidInput(formData.get('holderPersonId'), 'Holder')
-  const destinationOrgUnitId = requireUuidInput(
+  const destinationOrgUnitId = optionalUuidInput(
     formData.get('destinationOrgUnitId'),
     'Check-out destination',
   )
+  if (!holderPersonId && !destinationOrgUnitId) {
+    throw new Error('Select a holder or a check-out destination')
+  }
   const expectedReturnOn = optionalDateInput(
     formData.get('expectedReturnOn'),
     'Expected return date',
@@ -320,12 +323,14 @@ async function checkOutFromItem(formData: FormData) {
     }
     if (item.isMissing) throw new Error('Report this item found before checking it out')
     if (item.isCheckedOut) throw new Error('Check this item in before checking it out again')
-    const [destination] = await tx
-      .select({ id: orgUnits.id })
-      .from(orgUnits)
-      .where(and(eq(orgUnits.id, destinationOrgUnitId), isNull(orgUnits.deletedAt)))
-      .limit(1)
-    if (!destination) throw new Error('Select an active check-out destination')
+    if (destinationOrgUnitId) {
+      const [destination] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(and(eq(orgUnits.id, destinationOrgUnitId), isNull(orgUnits.deletedAt)))
+        .limit(1)
+      if (!destination) throw new Error('Select an active check-out destination')
+    }
     if (holderPersonId) {
       const [person] = await tx
         .select({ id: people.id })
@@ -3377,7 +3382,7 @@ export default async function EquipmentDetailPage({
                 emptyLabel={tGenerated('m_1edbadeea60fca')}
               />
             </Field>
-            <Field label={tGenerated('m_0dd23138b5c807')} required>
+            <Field label={tGenerated('m_0dd23138b5c807')}>
               <RemoteSelectField
                 name="destinationOrgUnitId"
                 defaultValue=""
@@ -3385,9 +3390,12 @@ export default async function EquipmentDetailPage({
                 placeholder={tGenerated('m_015c668f21e7b9')}
                 searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
                 sheetTitle="Select destination"
-                clearable={false}
+                clearable
               />
             </Field>
+            <p className="text-xs text-slate-500 sm:col-span-2 dark:text-slate-400">
+              <GeneratedValue value="Choose a person or destination. For a truck kept by an employee, select the person and leave destination and return date blank." />
+            </p>
             <Field label={tGenerated('m_141f9dc55f5052')}>
               <Input name="expectedReturnOn" type="date" />
             </Field>
