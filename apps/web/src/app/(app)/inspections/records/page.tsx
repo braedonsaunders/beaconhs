@@ -571,6 +571,7 @@ export default async function InspectionRecordsPage({
                           const pass = Number(r.passCount ?? 0)
                           const fail = Number(r.failCount ?? 0)
                           const na = Number(r.naCount ?? 0)
+                          const criteriaTotal = Number(r.totalCount ?? 0)
                           const passPct = inspectionCompliancePercent(pass, fail)
                           return (
                             <TableRow key={r.record.id}>
@@ -621,7 +622,7 @@ export default async function InspectionRecordsPage({
                               <TableCell className="text-xs tabular-nums">
                                 <GeneratedValue
                                   value={
-                                    total === 0 ? (
+                                    criteriaTotal === 0 ? (
                                       <span className="text-slate-400">—</span>
                                     ) : (
                                       <div className="flex items-center gap-2">
@@ -638,7 +639,7 @@ export default async function InspectionRecordsPage({
                                             <GeneratedValue value={na} />
                                           </span>
                                           <span className="ml-1 text-slate-400">
-                                            (<GeneratedValue value={total} />)
+                                            (<GeneratedValue value={criteriaTotal} />)
                                           </span>
                                         </span>
                                         <GeneratedValue

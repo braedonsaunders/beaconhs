@@ -6,8 +6,34 @@ export type RecipientOptions = {
   departments: { id: string; name: string }[]
   personGroups: { id: string; name: string }[]
   contacts: { id: string; name: string; orgUnitName: string; email: string | null }[]
-  obligations: { id: string; name: string }[]
+  obligations: {
+    id: string
+    name: string
+    audience: Extract<EmailTarget, { type: 'audience_recipient' }>['audience']
+    workerType: 'all' | 'employee' | 'contractor'
+  }[]
   spreadsheetTemplates: { id: string; name: string }[]
+}
+
+/** JSONB key order and selector order do not change an audience's meaning. */
+export function matchingAudienceSource(
+  target: Extract<EmailTarget, { type: 'audience_recipient' }>,
+  options: RecipientOptions['obligations'],
+): string {
+  const key = (audience: typeof target.audience) =>
+    JSON.stringify(
+      audience
+        .map((row) => JSON.stringify([row.kind, row.entityKey, Boolean(row.excluded)]))
+        .sort(),
+    )
+  return (
+    options.find(
+      (source) =>
+        source.name === target.audienceName &&
+        source.workerType === target.workerType &&
+        key(source.audience) === key(target.audience),
+    )?.id ?? ''
+  )
 }
 
 /** Recipient predicates are part of the shared delivery engine, independent of subject/channel. */
@@ -36,7 +62,7 @@ export function recipientPresentation(
         configured: Boolean(target.contactId && target.orgUnitField),
       }
     }
-    case 'compliance_recipient':
+    case 'audience_recipient':
       return {
         label:
           target.recipient.type === 'person'
@@ -44,13 +70,10 @@ export function recipientPresentation(
             : target.recipient.email || message('Enter an email address'),
         condition: message('{value0} is in the audience for {value1}', {
           value0: field(target.personField) || message('Choose a field'),
-          value1:
-            (options.obligations.find((item) => item.id === target.obligationId)?.name ??
-              target.obligationId) ||
-            message('Choose an assignment'),
+          value1: target.audienceName || message('Choose an assignment'),
         }),
         configured: Boolean(
-          target.obligationId &&
+          target.audience.length > 0 &&
           target.personField &&
           (target.recipient.type === 'person' ? target.recipient.personId : target.recipient.email),
         ),

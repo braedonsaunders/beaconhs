@@ -1,12 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { recipientPresentation, type RecipientOptions } from './recipient-presentation'
+import {
+  matchingAudienceSource,
+  recipientPresentation,
+  type RecipientOptions,
+} from './recipient-presentation'
 const options: RecipientOptions = {
   people: [{ id: 'worker', name: 'Worker' }],
   roles: [],
   departments: [],
   personGroups: [{ id: 'team', name: 'Safety team' }],
   contacts: [{ id: 'client', name: 'Client rep', orgUnitName: 'Site A', email: 'rep@example.com' }],
-  obligations: [{ id: 'training', name: 'Training assignment' }],
+  obligations: [
+    {
+      id: 'training',
+      name: 'Training assignment',
+      workerType: 'employee',
+      audience: [{ kind: 'person', entityKey: 'worker' }],
+    },
+  ],
   spreadsheetTemplates: [],
 }
 const fields = [
@@ -34,8 +45,10 @@ describe('shared flow recipient presentation', () => {
     expect(
       recipientPresentation(
         {
-          type: 'compliance_recipient',
-          obligationId: 'training',
+          type: 'audience_recipient',
+          audienceName: 'Training assignment',
+          workerType: 'employee',
+          audience: [{ kind: 'person', entityKey: 'worker' }],
           personField: 'who',
           recipient: { type: 'person', personId: 'worker' },
         },
@@ -66,4 +79,22 @@ describe('shared flow recipient presentation', () => {
       false,
     )
   })
+})
+
+it('recognizes a saved audience after JSONB reorders properties and rejects a broadened source', () => {
+  const target = {
+    type: 'audience_recipient',
+    audienceName: 'Training assignment',
+    workerType: 'employee',
+    audience: [{ excluded: false, entityKey: 'worker', kind: 'person' }],
+    personField: 'who',
+    recipient: { type: 'person', personId: 'worker' },
+  } as const
+  const mutable = { ...target, audience: target.audience.map((row) => ({ ...row })) }
+  expect(matchingAudienceSource(mutable, options.obligations)).toBe('training')
+  expect(
+    matchingAudienceSource(mutable, [
+      { ...options.obligations[0]!, audience: [{ kind: 'everyone', entityKey: '' }] },
+    ]),
+  ).toBe('')
 })

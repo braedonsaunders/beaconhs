@@ -176,8 +176,10 @@ describe('contextual email recipients', () => {
           orgUnitField: 'site_org_unit_id',
         },
         {
-          type: 'compliance_recipient',
-          obligationId: 'journal-assignment',
+          type: 'audience_recipient',
+          audienceName: 'Electrical',
+          workerType: 'employee',
+          audience: [{ kind: 'person_group', entityKey: 'electrical' }],
           personField: 'person_id',
           recipient: { type: 'person', personId: 'safety-manager' },
         },

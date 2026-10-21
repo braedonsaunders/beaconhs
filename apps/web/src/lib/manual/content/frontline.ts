@@ -245,6 +245,8 @@ People with permission to review hazard assessments can record an advisory decis
 
 In **Photos**, tap **Take photo or upload** to take a new photo or choose pictures from your phone's photo library. Use the pencil button for a caption or markup, the trash button to remove a photo, and the arrow buttons to change the order. The editor keeps the photo's original shape while you add captions or markup. Large camera photos are optimized automatically when they upload. Unlock a submitted assessment before making photo changes. Locking it again runs the submit flows for the revised assessment.
 
+Use **Delete** only for an assessment you are allowed to remove. Confirming returns you to the list. Repeating a completed deletion also returns to the list and keeps the original audit entry.
+
 ## Working without signal
 
 Once an assessment is open, keep working with no signal. The **General Information** fields, PPE **Yes** / **No** / **N/A** answers, question answers, and each checklist hazard's **Applicable** switch and site-specific controls save to this device first and send when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**.
@@ -303,7 +305,7 @@ Regular inspections catch unsafe conditions before they hurt someone. The record
 
 Open **Site Inspections** in the left menu. Records live at [Inspection records](/inspections/records).
 
-On **Inspection records**, use **All inspection types**, **All locations**, and **All inspectors** to search across the records you are allowed to open. The **Location** column shows the selected company location. If a picker says more results exist, add more of the type, location, inspector name, or email to the search. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list.
+On **Inspection records**, use **All inspection types**, **All locations**, and **All inspectors** to search across the records you are allowed to open. The **Location** column shows the selected company location. If a picker says more results exist, add more of the type, location, inspector name, or email to the search. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list. The total in parentheses beside **Pass / Fail / N-A** is the number of checks on that inspection.
 
 Inspecting a unit or tool instead of a site? Those live separately — see [Equipment checks](/help/equipment-inspections).
 

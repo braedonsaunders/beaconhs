@@ -8,6 +8,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   attachments,
   complianceObligations,
+  complianceAudience,
   customerContacts,
   departments,
   orgUnits,
@@ -51,7 +52,11 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
         .innerJoin(orgUnits, eq(orgUnits.id, customerContacts.orgUnitId))
         .orderBy(asc(orgUnits.name), asc(customerContacts.name)),
       tx
-        .select({ id: complianceObligations.id, name: complianceObligations.title })
+        .select({
+          id: complianceObligations.id,
+          name: complianceObligations.title,
+          workerType: complianceObligations.workerType,
+        })
         .from(complianceObligations)
         .where(
           and(eq(complianceObligations.status, 'active'), isNull(complianceObligations.deletedAt)),
@@ -71,13 +76,27 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
         )
         .orderBy(asc(attachments.filename)),
     ])
+    const audience = await tx
+      .select({
+        obligationId: complianceAudience.obligationId,
+        kind: complianceAudience.kind,
+        entityKey: complianceAudience.entityKey,
+        excluded: complianceAudience.excluded,
+      })
+      .from(complianceAudience)
+      .where(eq(complianceAudience.tenantId, ctx.tenantId))
     return {
       people: ppl.map((p) => ({ id: p.id, name: `${p.first} ${p.last}`.trim() })),
       roles: rls,
       departments: depts,
       personGroups: pGroups,
       contacts,
-      obligations,
+      obligations: obligations.map((obligation) => ({
+        ...obligation,
+        audience: audience
+          .filter((item) => item.obligationId === obligation.id)
+          .map(({ kind, entityKey, excluded }) => ({ kind, entityKey, excluded })),
+      })),
       spreadsheetTemplates,
     }
   })

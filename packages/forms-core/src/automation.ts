@@ -57,11 +57,30 @@ export const emailTargetSchema = z.discriminatedUnion('type', [
     contactId: z.string(),
     orgUnitField: z.string(),
   }),
-  // A recipient that applies only when the record person belongs to a selected
-  // compliance obligation's audience (for assignment-specific completion copy).
+  // A recipient with its own audience selectors. Copying selectors from an
+  // obligation must never bind delivery scope to later compliance edits.
   z.object({
-    type: z.literal('compliance_recipient'),
-    obligationId: z.string(),
+    type: z.literal('audience_recipient'),
+    audienceName: z.string().max(300),
+    workerType: z.enum(['all', 'employee', 'contractor']),
+    audience: z
+      .array(
+        z.object({
+          kind: z.enum([
+            'everyone',
+            'person',
+            'role',
+            'trade',
+            'department',
+            'org_unit',
+            'crew',
+            'person_group',
+          ]),
+          entityKey: z.string().max(128),
+          excluded: z.boolean().optional(),
+        }),
+      )
+      .max(100),
     personField: z.string(),
     recipient: z.discriminatedUnion('type', [
       z.object({ type: z.literal('person'), personId: z.string() }),

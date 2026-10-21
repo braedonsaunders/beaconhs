@@ -39,12 +39,14 @@ export const ASSESSMENT_LOCKED_MESSAGE = 'This assessment is locked. Unlock it t
  * Lock the tenant-owned assessment row (FOR UPDATE) and re-scope it to the
  * caller: a self/site-tier user must not drive an assessment they cannot see
  * by guessing its id (prefix 'hazid', owner = reporter, site). Null when the
- * assessment is missing, soft-deleted, or not visible.
+ * assessment is missing, soft-deleted, or not visible. Deletion retries can
+ * explicitly include soft-deleted rows while keeping the same visibility check.
  */
 export async function lockVisibleAssessmentRow(
   ctx: HazidCtx,
   tx: Database,
   assessmentId: string,
+  options: { includeDeleted?: boolean } = {},
 ): Promise<HazidAssessmentRow | null> {
   const [row] = await tx
     .select()
@@ -53,7 +55,7 @@ export async function lockVisibleAssessmentRow(
       and(
         eq(hazidAssessments.tenantId, ctx.tenantId),
         eq(hazidAssessments.id, assessmentId),
-        isNull(hazidAssessments.deletedAt),
+        options.includeDeleted ? undefined : isNull(hazidAssessments.deletedAt),
       ),
     )
     .limit(1)

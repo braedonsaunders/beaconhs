@@ -20,8 +20,6 @@ import {
 import { db, withSuperAdmin } from '@beaconhs/db'
 import {
   domainEventEffects,
-  complianceAudience,
-  complianceObligations,
   customerContacts,
   people,
   personGroupMemberships,
@@ -293,52 +291,24 @@ export async function executeFlowPlan(
       .filter((id): id is string => Boolean(id))
   }
 
-  const complianceRecipientApplies = async (
-    obligationId: string,
-    personField: string,
+  const audienceMatchCache = new Map<string, Set<string>>()
+  const audienceRecipientApplies = async (
+    target: Extract<EmailTarget, { type: 'audience_recipient' }>,
   ): Promise<boolean> => {
-    const subjectIdentities = await Promise.all(fieldIds(personField).map(personIdentity))
-    const subjectPersonIds = new Set(
-      subjectIdentities
-        .map((identity) => identity?.personId)
-        .filter((id): id is string => Boolean(id)),
-    )
-    if (subjectPersonIds.size === 0) return false
-    return ctx.db(async (tx) => {
-      const [obligation] = await tx
-        .select({ id: complianceObligations.id, workerType: complianceObligations.workerType })
-        .from(complianceObligations)
-        .where(
-          and(
-            eq(complianceObligations.tenantId, ctx.tenantId),
-            eq(complianceObligations.id, obligationId),
-            eq(complianceObligations.status, 'active'),
-            isNull(complianceObligations.deletedAt),
-          ),
-        )
-        .limit(1)
-      if (!obligation) return false
-      const audience = await tx
-        .select({
-          kind: complianceAudience.kind,
-          entityKey: complianceAudience.entityKey,
-          excluded: complianceAudience.excluded,
-        })
-        .from(complianceAudience)
-        .where(
-          and(
-            eq(complianceAudience.tenantId, ctx.tenantId),
-            eq(complianceAudience.obligationId, obligationId),
-          ),
-        )
-      const members = await resolveObligationAudience(
-        tx,
-        ctx.tenantId,
-        audience,
-        obligation.workerType,
+    const identities = await Promise.all(fieldIds(target.personField).map(personIdentity))
+    const key = JSON.stringify([target.workerType, target.audience])
+    let members = audienceMatchCache.get(key)
+    if (!members) {
+      members = new Set(
+        (
+          await ctx.db((tx) =>
+            resolveObligationAudience(tx, ctx.tenantId, target.audience, target.workerType),
+          )
+        ).map((member) => member.personId),
       )
-      return members.some((member) => subjectPersonIds.has(member.personId))
-    })
+      audienceMatchCache.set(key, members)
+    }
+    return identities.some((identity) => identity && members.has(identity.personId))
   }
 
   const resolveEmails = async (targets: EmailTarget[]): Promise<string[]> => {
@@ -419,8 +389,8 @@ export async function executeFlowPlan(
           )
           add(contact?.email)
         }
-      } else if (t.type === 'compliance_recipient') {
-        if (await complianceRecipientApplies(t.obligationId, t.personField)) {
+      } else if (t.type === 'audience_recipient') {
+        if (await audienceRecipientApplies(t)) {
           if (t.recipient.type === 'person') add(await personEmail(t.recipient.personId))
           else for (const part of t.recipient.email.split(/[,;\s]+/)) add(part)
         }
@@ -485,11 +455,8 @@ export async function executeFlowPlan(
         for (const member of await scopedPersonGroupMembers(t.groupId, t.personField)) {
           add(member.userId)
         }
-      } else if (t.type === 'compliance_recipient') {
-        if (
-          t.recipient.type === 'person' &&
-          (await complianceRecipientApplies(t.obligationId, t.personField))
-        ) {
+      } else if (t.type === 'audience_recipient') {
+        if (t.recipient.type === 'person' && (await audienceRecipientApplies(t))) {
           add(await personUserId(t.recipient.personId))
         }
       }

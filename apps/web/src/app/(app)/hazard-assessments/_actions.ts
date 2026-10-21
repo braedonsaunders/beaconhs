@@ -63,6 +63,7 @@ import {
   createAutoAssessmentApps,
   lockEditableAssessment,
   lockVisibleAssessment,
+  lockVisibleAssessmentRow,
   updateAssessmentHazardRow,
   type AssessmentHazardUpdate,
   type HazidCtx,
@@ -692,14 +693,17 @@ export async function unlockAssessment(formData: FormData) {
 export async function deleteAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
   const id = String(formData.get('id') ?? '')
-  await assertCanSeeAssessment(ctx, id)
   await ctx.db(async (tx) => {
-    const record = await lockVisibleAssessment(ctx, tx, id)
+    const record = await lockVisibleAssessmentRow(ctx, tx, id, { includeDeleted: true })
+    if (!record) throw new Error('Assessment not found')
     if (
       !canManageModule(ctx, 'hazid') &&
       !canDeleteOwnRecord(ctx, 'hazid.delete.own', record.reportedByTenantUserId)
     )
       throw new Error('You cannot delete this assessment.')
+    // A repeated phone submission must not fail after the first delete committed.
+    // Authorization still runs against the original tenant-owned record.
+    if (record.deletedAt) return
     await tx
       .update(hazidAssessments)
       .set({ deletedAt: new Date() })

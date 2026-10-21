@@ -12,7 +12,11 @@ import {
 } from '@/i18n/generated'
 import { generatedMessageKey } from '@/i18n/generated-key'
 import type { GeneratedMessageKey } from '@/i18n/generated'
-import { recipientPresentation, type RecipientOptions } from '@/lib/flows/recipient-presentation'
+import {
+  matchingAudienceSource,
+  recipientPresentation,
+  type RecipientOptions,
+} from '@/lib/flows/recipient-presentation'
 
 const RECIPIENT_LABEL: Record<EmailTarget['type'], string> = {
   submitter: 'The submitter',
@@ -26,7 +30,7 @@ const RECIPIENT_LABEL: Record<EmailTarget['type'], string> = {
   field: 'A record field',
   person_group_for_record_person: "A People group in the record person's department",
   org_unit_contact: 'A contact for the record location',
-  compliance_recipient: 'A recipient for a matching compliance assignment',
+  audience_recipient: 'A recipient for a matching audience',
 }
 
 function defaultTarget(type: EmailTarget['type'], firstField: string): EmailTarget {
@@ -49,10 +53,12 @@ function defaultTarget(type: EmailTarget['type'], firstField: string): EmailTarg
       return { type: 'record_person_manager', personField: firstField }
     case 'org_unit_contact':
       return { type: 'org_unit_contact', contactId: '', orgUnitField: firstField }
-    case 'compliance_recipient':
+    case 'audience_recipient':
       return {
-        type: 'compliance_recipient',
-        obligationId: '',
+        type: 'audience_recipient',
+        audienceName: '',
+        workerType: 'all',
+        audience: [],
         personField: firstField,
         recipient: { type: 'person', personId: '' },
       }
@@ -241,15 +247,32 @@ export function RecipientsEditor({
         />
         <GeneratedValue
           value={
-            t.type === 'compliance_recipient' ? (
+            t.type === 'audience_recipient' ? (
               <div className="space-y-2">
+                <p className="text-xs text-slate-500">
+                  <GeneratedValue value="Audience selectors are copied when chosen. Later assignment edits do not change email recipients. Group membership stays current." />
+                </p>
+                {t.audienceName && (
+                  <p className="text-xs">
+                    <GeneratedValue value={t.audienceName} /> · {t.workerType}
+                  </p>
+                )}
                 <div className="grid gap-2 sm:grid-cols-2">
                   <SearchSelect
-                    value={t.obligationId}
+                    value={matchingAudienceSource(t, options.obligations)}
                     disabled={readOnly}
                     options={obligationOpts}
                     placeholder={tGenerated('m_1f1c58a54a4d66')}
-                    onChange={(obligationId) => update(i, { ...t, obligationId })}
+                    onChange={(obligationId) => {
+                      const source = options.obligations.find((item) => item.id === obligationId)
+                      if (source)
+                        update(i, {
+                          ...t,
+                          audienceName: source.name,
+                          audience: structuredClone(source.audience),
+                          workerType: source.workerType,
+                        })
+                    }}
                   />
                   <Select
                     value={t.personField}
