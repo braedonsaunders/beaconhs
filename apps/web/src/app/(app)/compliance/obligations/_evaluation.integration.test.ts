@@ -1503,6 +1503,38 @@ it('returns the shared remote-picker contract for published editions and inherit
   })
   expect(isPickerOptionsResponse(fields)).toBe(true)
   expect(fields.options).toEqual([{ value: fieldId, label: 'Position' }])
+  const overrideId = randomUUID()
+  await ctx.db((tx) =>
+    tx.insert(trainingExtraFields).values({
+      id: overrideId,
+      tenantId,
+      skillTypeId: typeId,
+      fieldKey: 'Position',
+      valueMode: 'type',
+      fieldValue: 'F/H',
+    }),
+  )
+  expect(
+    (
+      await obligationTargetOptions({
+        kind: 'skill_field',
+        contextId: typeId,
+        query: '',
+        selected: fieldId,
+      })
+    ).options,
+  ).toEqual([{ value: fieldId, label: 'Position' }])
+  expect(
+    (
+      await obligationTargetOptions({
+        kind: 'skill_field',
+        contextId: typeId,
+        query: '',
+        selected: null,
+      })
+    ).options,
+  ).toEqual([{ value: overrideId, label: 'Position' }])
+
   expect(
     (
       await obligationTargetOptions({
@@ -1514,3 +1546,70 @@ it('returns the shared remote-picker contract for published editions and inherit
     ).options,
   ).toEqual([])
 })
+
+it('rejects a qualification field deleted while the requirement save waits for its lock', async () => {
+  const authorityId = randomUUID(),
+    typeId = randomUUID(),
+    fieldId = randomUUID()
+  await ctx.db(async (tx) => {
+    await tx
+      .insert(trainingSkillAuthorities)
+      .values({ id: authorityId, tenantId, name: 'Concurrent authority' })
+    await tx
+      .insert(trainingSkillTypes)
+      .values({ id: typeId, tenantId, authorityId, name: 'Concurrent skill' })
+    await tx
+      .insert(trainingExtraFields)
+      .values({ id: fieldId, tenantId, authorityId, fieldKey: 'Position', valueMode: 'record' })
+  })
+  let releaseDeletion!: () => void
+  const holdDeletion = new Promise<void>((resolve) => {
+    releaseDeletion = resolve
+  })
+  let reportDeleted!: () => void
+  const deleted = new Promise<void>((resolve) => {
+    reportDeleted = resolve
+  })
+  const deleting = ctx.db(async (tx) => {
+    await tx.delete(trainingExtraFields).where(eq(trainingExtraFields.id, fieldId))
+    reportDeleted()
+    await holdDeletion
+  })
+  await deleted
+  let savingPid = 0
+  const saving = ctx
+    .db(async (tx) => {
+      const rows = await tx.execute(sql`SELECT pg_backend_pid() AS pid`)
+      savingPid = Number(rows[0]?.pid)
+      await lockComplianceTarget(tx, tenantId, 'skill_requirement', {
+        skillTypeId: typeId,
+        skillConditions: [{ fieldId, operator: 'contains_all', values: ['F', 'H'] }],
+      })
+    })
+    .then(
+      () => null,
+      (error: unknown) => error,
+    )
+  let blocked = false
+  try {
+    for (let i = 0; i < 200; i++) {
+      if (savingPid) {
+        const rows = await admin.db.execute(
+          sql`SELECT cardinality(pg_blocking_pids(${savingPid})) > 0 AS blocked`,
+        )
+        if (rows[0]?.blocked) {
+          blocked = true
+          break
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  } finally {
+    releaseDeletion()
+    await deleting
+  }
+  const failure = await saving
+  expect(blocked).toBe(true)
+  expect(failure).toBeInstanceOf(Error)
+  expect((failure as Error).message).toMatch(/additional field/)
+}, 15_000)

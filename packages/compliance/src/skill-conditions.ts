@@ -108,7 +108,7 @@ export async function validateSkillConditions(
       throw new Error('Choose a valid additional field, comparison and value for this skill type')
   }
   // Lock definitions so a concurrent deletion cannot orphan newly saved conditions.
-  await tx
+  const locked = await tx
     .select({ id: trainingExtraFields.id })
     .from(trainingExtraFields)
     .where(
@@ -121,4 +121,6 @@ export async function validateSkillConditions(
       ),
     )
     .for('key share')
+  if (locked.length !== new Set(ref.skillConditions.map((condition) => condition.fieldId)).size)
+    throw new Error('Choose a valid additional field, comparison and value for this skill type')
 }

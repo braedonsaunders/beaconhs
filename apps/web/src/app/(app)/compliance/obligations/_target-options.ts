@@ -60,7 +60,9 @@ export async function obligationTargetOptions(input: {
     )
     const byKey = new Map<string, (typeof fields)[number]>()
     for (const f of fields.sort(
-      (a, b) => Number(Boolean(b.skillTypeId)) - Number(Boolean(a.skillTypeId)),
+      (a, b) =>
+        Number(b.id === input.selected) - Number(a.id === input.selected) ||
+        Number(Boolean(b.skillTypeId)) - Number(Boolean(a.skillTypeId)),
     ))
       if (!byKey.has(f.fieldKey.toLowerCase())) byKey.set(f.fieldKey.toLowerCase(), f)
     const matched = [...byKey.values()]
