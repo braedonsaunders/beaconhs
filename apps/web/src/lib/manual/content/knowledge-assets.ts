@@ -30,6 +30,16 @@ export const KNOWLEDGE_ASSETS_ARTICLES: ManualArticle[] = [
     ],
     body: `Training is where you take courses and where your tickets live.
 
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Training** to return to everyday work.
+
+Under **Automations**, choose **Assessments** or **Classes**.
+
 ## What this is for
 
 Your company assigns you courses — online lessons, quizzes, and classroom sessions. When you finish one, a training record is logged and a certificate is issued. This page also shows when your tickets expire, so nothing lapses on the job.
@@ -87,7 +97,7 @@ To filter first, then print, open **Reports → Training — Wallet cards**. Add
 
 Creating or editing a class does not send an initial email. A manager sends it when the class is confirmed and its roster is ready.
 
-1. Open the Manage hub at [Training manage](/training/manage) and tap **Class automations**.
+1. Open the Manage workspace at [Training manage](/training/manage) and tap **Automations** → **Classes**.
 2. For the initial email, choose **A manager clicks Email class**. For an optional reminder, choose **A class reminder is due**. Cancellation and completion notices can still use a status change to **Cancelled** or **Completed**.
 3. Connect actions like **Send email** or **Notify role**. To email everyone on the roster, set the recipient to the **Attendee emails** field.
 4. Turn the flow on.
@@ -424,6 +434,16 @@ Use PowerPoint's own controls inside the presentation to move through the deck. 
     ],
     body: `Documents holds your company's safe work practices, procedures, policies, and manuals.
 
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Documents** to return to everyday work.
+
+Under **Automations**, choose **Sign-offs** or **Management reviews**.
+
 ## What this is for
 
 Instead of paper binders, every published document lives in one place. You can search it, read it on your phone, and sign off when the company needs proof you read something.
@@ -626,14 +646,14 @@ Periodic reviews on an individual document also record the exact published versi
 
 ## Automate completed group sign-offs
 
-1. Open [Documents manage](/documents/manage) and choose **Sign-off automations**.
+1. Open [Documents manage](/documents/manage) and choose **Automations** → **Sign-offs**.
 2. Use **When submitted** for the completed-session event.
 3. Add **Send email** and choose the facilitator, People groups, the facilitator's manager, a People group in the facilitator's department, or contacts for the selected site.
 4. Turn on **Attach PDF** to include the completed sign-off record.
 5. Under **Spreadsheet attachments**, choose an uploaded XLSX template. Add a condition on **Site (id)** when a client-specific workbook should be included only for one site.
 6. Turn the Flow on.
 
-Management review automations are separate. Open **Management review automations** when the trigger should be creation of a governance management-review record rather than completion of a toolbox-talk sign-off.
+Management review automations are separate. Open **Automations** → **Management reviews** when the trigger should be creation of a governance management-review record rather than completion of a toolbox-talk sign-off.
 
 ## Build and publish a document book
 
@@ -684,6 +704,16 @@ The **Overview** details save to this device first and send when signal comes ba
       'custom fields',
     ],
     body: `Equipment is the registry of every unit and tool your company tracks.
+
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Equipment** to return to everyday work.
+
+**Assets** groups types, categories, and custom fields. **Inspections** contains inspection types. **Operations** contains station settings and vehicle log modes. **Printing** contains QR label design. **Automations** groups **Assets**, **Work orders**, **Inspections**, and **Vehicle log**.
 
 ## Oil changes and inspection schedules
 
@@ -1012,7 +1042,7 @@ In the inspection type builder, open **Settings → Behaviour** and set **Allow 
 
 If you manage equipment, submitted inspections can send emails on their own — for example, the result (with a PDF copy) to the shop.
 
-1. Open the Manage hub at [Equipment manage](/equipment/manage) and tap **Inspection automations**.
+1. Open the Manage workspace at [Equipment manage](/equipment/manage) and tap **Automations** → **Inspections**.
 2. Add the **A record is submitted** trigger.
 3. Connect actions like **Send email**, **Notify role**, or **Create CAPA**.
 4. Turn the flow on. It runs every time an inspection is submitted.
@@ -1060,6 +1090,16 @@ You need signal to submit the inspection, use **Pass all**, reopen, delete, or a
       'supplied by',
     ],
     body: `PPE tracks the protective gear issued to you — harnesses, hard hats, gloves, glasses — through its whole life.
+
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to PPE** to return to everyday work.
+
+Under **Automations**, choose **Inspections**.
 
 ## What this is for
 
@@ -1155,7 +1195,7 @@ When you leave a site or swap out gear, hand the item back to your supervisor or
 
 If you manage PPE, recorded inspections can send emails on their own — for example, a failed harness check straight to the safety manager. Email and PDF templates can include the saved checklist and inspection photos.
 
-1. Open the Manage hub at [PPE manage](/ppe/manage) and tap **Automations**.
+1. Open the Manage workspace at [PPE manage](/ppe/manage) and tap **Automations** → **Inspections**.
 2. Add the **A record is submitted** trigger.
 3. Connect actions like **Send email**, **Notify role**, or **Create CAPA**.
 4. Turn the flow on. It runs every time an inspection is recorded, including other PPE. Use the **Other PPE (not in the register)** and **Supplied by** fields in conditions and templates. A flow cannot change an item status for other PPE, because there is no item.

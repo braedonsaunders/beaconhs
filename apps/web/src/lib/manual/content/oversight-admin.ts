@@ -31,6 +31,14 @@ export const OVERSIGHT_ADMIN_ARTICLES: ManualArticle[] = [
     ],
     body: `The People directory lists everyone in your company — workers, contractors, and supervisors.
 
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to People** to return to everyday work.
+
 ## Employees and contractors
 
 **People** includes both employees and contractors. Use **Worker type** to filter the directory. The worker type appears beside the person’s status. Both types can have safety records, equipment, PPE, and training. The inbound connector’s **Employment type** mapping keeps this classification current. People without a known source classification show **Unclassified**.
@@ -165,6 +173,14 @@ On a person's page, every field — including groups, job titles, and company-sp
       'custom fields',
     ],
     body: `Locations describe where your work happens: customers at the top, then projects, then sites.
+
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Locations** to return to everyday work.
 
 ## What this is for
 
@@ -1086,11 +1102,11 @@ On a sync run, use the record-decision search and the **Action** and **Entity** 
 
 ## Modules
 
-The **Modules** section shows one tile per module you can administer — like Incidents, Journals, or Equipment. Each opens that module's Manage hub with its records, taxonomies, and settings. This is where you rename categories, adjust module settings, and tidy data.
+The **Modules** section shows one tile per module you can administer — like Incidents, Journals, or Equipment. Each opens that module's first available management page. Use the grouped list on the left to switch settings while keeping the page beside it. On a phone, use **Management page** above the content. This is where you rename categories, adjust module settings, and tidy data.
 
 ## Tips
 
-- Cannot find a setting? Check the module's own Manage tile first, then **Tenant settings**.
+- Cannot find a setting? Check the module's own **Manage** workspace first, then **Tenant settings**.
 - Changes here affect everyone, and the **Audit log** records them. Make one change at a time and check the result.
 - Guided tours have their own admin page — see [Configuring guided tours](/help/walkthroughs-admin).`,
   },

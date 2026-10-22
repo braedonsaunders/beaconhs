@@ -28,6 +28,16 @@ export const FRONTLINE_ARTICLES: ManualArticle[] = [
     ],
     body: `Your journal is a daily record of what happened on the job: work done, hazards spotted, visitors, weather, anything worth remembering.
 
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Journals** to return to everyday work.
+
+**Configuration** contains **Tags**. Under **Automations**, choose **Journals**.
+
 ## What this is for
 
 A journal entry protects you and your crew. If a question comes up months later, your entry shows what happened that day. Supervisors also read journals to stay on top of site conditions.
@@ -36,7 +46,7 @@ A journal entry protects you and your crew. If a question comes up months later,
 
 Open **Journals** in the left menu. Today’s entry opens directly in the full editor. If none exists, BeaconHS creates a draft automatically and opens the same editor. **Date**, **Log type**, **Location**, and **Supervisor** are available immediately. On a desktop your past entries sit in a list on the left. On a phone, tap **Browse** to see them.
 
-Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **Records**, on a phone. This follows their assigned reading scope. **Manage** is only for journal administrators; on a phone it is **Browse** → **Manage journals**. The Manage hub contains tags and automations. The standard **Foreman / Supervisor** role can edit its own journals and read its assigned scope; it does not administer journals.
+Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **Records**, on a phone. This follows their assigned reading scope. **Manage** is only for journal administrators; on a phone it is **Browse** → **Manage journals**. The Manage workspace opens **Tags** with the grouped navigation beside it. The standard **Foreman / Supervisor** role can edit its own journals and read its assigned scope; it does not administer journals.
 
 ## Writing today's entry
 
@@ -156,6 +166,14 @@ Because the kiosk is shared and no member is signed in, it uses the workspace's 
       'PPE',
     ],
     body: `A hazard assessment (your company may call it a JSA, JSHA, FLHA, FLRA, or hazard card) captures the hazards of a planned task and the controls that make it safe — before the crew starts work.
+
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Hazard Assessments** to return to everyday work.
 
 ## What this is for
 
@@ -297,6 +315,14 @@ Tap a crew member’s **Tap to sign** space to open their signature pad. Draw an
     ],
     body: `An inspection is a checklist you walk through on site. Items can ask for **Pass** / **Fail** / **N/A**, **Yes** / **No**, or one answer from a company-defined list. Failures capture what was wrong and what was done about it.
 
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Site Inspections** to return to everyday work.
+
 ## What this is for
 
 Regular inspections catch unsafe conditions before they hurt someone. The record proves the check happened and tracks anything found.
@@ -389,6 +415,14 @@ You need signal to add photos, capture the customer signature, use **Mark remain
       'investigation',
     ],
     body: `Report every incident: injuries, illnesses, near misses, property damage, environmental spills, and security events. If it went wrong — or almost went wrong — it belongs here.
+
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Incidents** to return to everyday work.
 
 ## What this is for
 
@@ -490,6 +524,16 @@ You need signal to change the status, lock or unlock the incident, add or edit p
       'close out',
     ],
     body: `A corrective action is a fix that came out of an incident, inspection, or hazard assessment — with an owner and a due date. If one is assigned to you, it is your job to do the work and record it.
+
+## Manage this module
+
+If **Manage** is available to your role:
+
+1. Select **Manage** to open the first setting you can use.
+2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
+3. Choose **Back to Corrective Actions** to return to everyday work.
+
+Under **Automations**, choose **Corrective actions** to edit what happens when an action is created or changes status.
 
 ## What this is for
 

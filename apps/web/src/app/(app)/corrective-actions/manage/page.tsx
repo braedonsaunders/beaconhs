@@ -1,12 +1,5 @@
 import { getGeneratedTranslations } from '@/i18n/generated.server'
-// /corrective-actions/manage — the Corrective Actions administration hub, driven
-// by the module-admin registry. Gated to CA managers.
-
-import { redirect } from 'next/navigation'
-import { can } from '@beaconhs/tenant'
-import { requireRequestContext } from '@/lib/auth'
-import { moduleAdminByKey } from '@/lib/module-admin/registry'
-import { ModuleManageHub } from '@/components/module-admin/module-manage-hub'
+import { redirectToModuleManagement } from '@/lib/module-admin/guard'
 
 export const dynamic = 'force-dynamic'
 export async function generateMetadata() {
@@ -15,8 +8,5 @@ export async function generateMetadata() {
 }
 
 export default async function CorrectiveActionsManagePage() {
-  const ctx = await requireRequestContext()
-  const mod = moduleAdminByKey('corrective-actions')!
-  if (!ctx.isSuperAdmin && !can(ctx, mod.permission)) redirect('/corrective-actions')
-  return <ModuleManageHub module={mod} />
+  return redirectToModuleManagement('corrective-actions')
 }

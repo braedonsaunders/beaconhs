@@ -1,18 +1,9 @@
-// Registry-driven module nav strip. Encapsulates the "operate vs administer"
-// split so every module's *-sub-nav.tsx collapses to a one-line delegate:
-//   - on an operational page → the module's operational tabs + a manager-only
-//     "Manage" pill (hidden from viewers without the module's admin permission)
-//   - on an admin/config page → a back pill up to the module home + the admin
-//     section tabs
-// Everything renders through the single shared <ModuleSubNav>; nothing is
-// bespoke per module. The active key decides which face to show: any key that
-// matches an admin section renders the admin face, otherwise the operational
-// one. Server component — it resolves the (request-memoized) context itself so
-// call sites stay one-liners.
+// Operational module tabs and a permission-aware Manage link. Configuration
+// pages use the persistent management sidebar supplied by the app layout.
 
 import { ModuleSubNav } from './module-sub-nav'
 import { moduleAdminByKey } from '@/lib/module-admin/registry'
-import { canManageModule } from '@/lib/module-admin/guard'
+import { canManageModule, moduleManagementNavigation } from '@/lib/module-admin/guard'
 import { getRequestContext } from '@/lib/auth'
 import { can } from '@beaconhs/tenant'
 
@@ -21,18 +12,14 @@ export async function ModuleNav({ moduleKey, active }: { moduleKey: string; acti
   if (!m) return null
 
   const isAdmin = m.sections.some((s) => s.key === active)
-  if (isAdmin) {
-    return (
-      <ModuleSubNav
-        active={active}
-        back={{ href: m.href, label: m.label }}
-        tabs={m.sections.map((s) => ({ key: s.key, label: s.label, href: s.href }))}
-      />
-    )
-  }
+  // The persistent management sidebar owns navigation on configuration pages.
+  if (isAdmin) return null
 
   const ctx = await getRequestContext()
   const canManage = ctx ? canManageModule(ctx, moduleKey) : false
+  const hasManagementPages = ctx
+    ? moduleManagementNavigation(ctx).some((entry) => entry.managePath === m.managePath)
+    : false
   const visibleTabs = ctx
     ? m.tabs.filter(
         (tab) =>
@@ -46,7 +33,7 @@ export async function ModuleNav({ moduleKey, active }: { moduleKey: string; acti
     <ModuleSubNav
       tabs={visibleTabs}
       active={active}
-      manageHref={canManage ? m.managePath : undefined}
+      manageHref={hasManagementPages ? m.managePath : undefined}
     />
   )
 }

@@ -3,23 +3,26 @@
 // both server pages and client nav can import it. Mirrors lib/nav/registry.ts.
 //
 // The admin CRUD pages themselves already live under each module; this registry
-// only DESCRIBES them so a shared shell (the per-module Manage hub, the global
-// /admin rollup, and the shared sub-nav) can render them consistently. Adding a
+// describes them so the management sidebar, /admin rollup, and operational
+// navigation can render them consistently. Adding a
 // module's administration = one entry here — nothing is hand-built per module.
 //
 // Cross-cutting concerns stay where they belong: assignment/compliance lives in
 // the global /compliance hub, and form building lives in the global Builder —
 // module sections may LINK to those, never re-own them.
 
+import type { AppMessages } from '@beaconhs/i18n/messages'
+
 type AdminSection = {
-  /** Stable key; also the sub-nav `active` value for this section's page. */
+  /** Group heading in the management sidebar. */
+  group: keyof AppMessages['ManageWorkspace']['groups']
+  /** Stable key; also the navigation `active` value for this section’s page. */
   key: string
-  label: string
+  label: keyof AppMessages['ManageWorkspace']['pages']
   /** Existing route the section already lives at. */
   href: string
   /** Key into the ICONS map (components/sidebar-nav.tsx). */
   iconKey: string
-  desc: string
   /** Optional finer-grained gate; defaults to the module's `permission`. */
   permission?: string
 }
@@ -41,11 +44,11 @@ export type ModuleAdmin = {
   /** Manage-hub route. */
   managePath: string
   iconKey: string
-  /** Gates the Manage hub, the /admin rollup tile, and the manager-only nav pill. */
+  /** Default permission for the module’s management pages and navigation. */
   permission: string
   /** Operational tab(s) everyone with module access sees (e.g. the workspace). */
   tabs: ModuleAdminTab[]
-  /** Admin/config tiles surfaced in the Manage hub + /admin rollup. */
+  /** Admin/config pages in the management sidebar and /admin rollup. */
   sections: AdminSection[]
 }
 
@@ -68,18 +71,18 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     ],
     sections: [
       {
+        group: 'Configuration',
         key: 'tags',
         label: 'Tags',
         href: '/journals/tags',
         iconKey: 'tag',
-        desc: 'Govern the tag vocabulary — colours, rename, merge, prune.',
       },
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Automations',
+        label: 'Journals',
         href: '/journals/flows',
         iconKey: 'workflow',
-        desc: 'On submit, send emails, notify roles, raise CAPAs or require approval.',
       },
     ],
   },
@@ -99,32 +102,32 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     ],
     sections: [
       {
+        group: 'Classification',
         key: 'classifications',
         label: 'Classifications',
         href: '/incidents/classifications',
         iconKey: 'layers',
-        desc: 'Tenant-defined taxonomy used to bucket and trend incidents.',
       },
       {
+        group: 'Classification',
         key: 'injury-types',
         label: 'Injury types',
         href: '/incidents/injury-types',
         iconKey: 'alert',
-        desc: 'The list of injury labels (laceration, strain, …) for reporting.',
       },
       {
+        group: 'Reporting',
         key: 'hours',
         label: 'Hours worked',
         href: '/incidents/hours',
         iconKey: 'timer',
-        desc: 'Periodic hours-worked tallies that drive every frequency rate.',
       },
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Automations',
+        label: 'Incidents',
         href: '/incidents/flows',
         iconKey: 'workflow',
-        desc: 'On status change, send emails, notify roles, raise CAPAs or require approval.',
       },
     ],
   },
@@ -138,11 +141,11 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     tabs: [{ key: 'records', label: 'Corrective Actions', href: '/corrective-actions' }],
     sections: [
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Automations',
+        label: 'Corrective actions',
         href: '/corrective-actions/flows',
         iconKey: 'workflow',
-        desc: 'On create or status change, send emails, notify roles or require approval.',
       },
     ],
   },
@@ -156,25 +159,25 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     tabs: [{ key: 'records', label: 'Site Inspections', href: '/inspections/records' }],
     sections: [
       {
+        group: 'Inspections',
         key: 'types',
         label: 'Types',
         href: '/inspections/types',
         iconKey: 'layers',
-        desc: 'Define the kinds of inspection your teams carry out.',
       },
       {
+        group: 'Inspections',
         key: 'banks',
         label: 'Criteria banks',
         href: '/inspections/banks',
         iconKey: 'library',
-        desc: 'Reusable criteria question banks shared across inspection types.',
       },
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Automations',
+        label: 'Site inspections',
         href: '/inspections/flows',
         iconKey: 'workflow',
-        desc: 'On submit or status change, send emails, notify roles, raise CAPAs or require approval.',
       },
     ],
   },
@@ -188,53 +191,53 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     tabs: [{ key: 'assessments', label: 'Assessments', href: '/hazard-assessments' }],
     sections: [
       {
+        group: 'Libraries',
         key: 'hazards',
         label: 'Hazard library',
         href: '/hazard-assessments/hazards',
         iconKey: 'library',
-        desc: 'Reusable hazard records with default controls and risk prompts.',
       },
       {
+        group: 'Libraries',
         key: 'tasks',
         label: 'Task library',
         href: '/hazard-assessments/tasks',
         iconKey: 'clipboard',
-        desc: 'Reusable task templates that preload hazards and controls.',
       },
       {
+        group: 'Libraries',
         key: 'hazard-types',
         label: 'Hazard types',
         href: '/hazard-assessments/hazards/types',
         iconKey: 'radiation',
-        desc: 'The master taxonomy of hazard categories.',
       },
       {
+        group: 'Libraries',
         key: 'hazard-sets',
         label: 'Hazard sets',
         href: '/hazard-assessments/hazards/sets',
         iconKey: 'layers',
-        desc: 'Reusable bundles of hazards to seed new assessments.',
       },
       {
+        group: 'Assessments',
         key: 'assessment-types',
         label: 'Assessment types',
         href: '/hazard-assessments/types',
         iconKey: 'clipboard',
-        desc: 'Templates that define each kind of hazard assessment.',
       },
       {
+        group: 'Assessments',
         key: 'risk-matrix',
         label: 'Risk matrix',
         href: '/hazard-assessments/risk-matrix',
         iconKey: 'grid',
-        desc: 'The severity × likelihood scale, risk bands and colours used to score every assessment.',
       },
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Automations',
+        label: 'Hazard assessments',
         href: '/hazard-assessments/flows',
         iconKey: 'workflow',
-        desc: 'On sign or lock, send emails, notify roles, raise CAPAs or require approval.',
       },
     ],
   },
@@ -291,83 +294,83 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     ],
     sections: [
       {
+        group: 'Assets',
         key: 'types',
         label: 'Types',
         href: '/equipment/types',
         iconKey: 'layers',
-        desc: 'The make/model catalogue every asset is classified against.',
       },
       {
+        group: 'Assets',
         key: 'categories',
         label: 'Categories',
         href: '/equipment/categories',
         iconKey: 'library',
-        desc: 'Top-level groupings used to organise the asset register.',
       },
       {
+        group: 'Inspections',
         key: 'inspection-types',
         label: 'Inspection types',
         href: '/equipment/inspection-types',
         iconKey: 'clipboard',
-        desc: 'Define the recurring inspections each asset class requires.',
       },
       {
+        group: 'Operations',
         key: 'station-settings',
         label: 'Station settings',
         href: '/equipment/station/settings',
         iconKey: 'settings',
-        desc: 'Home location, what counts as checked in, scan behaviour and the mounted-tablet kiosk.',
       },
       {
+        group: 'Assets',
         key: 'custom-fields',
         label: 'Custom fields',
         href: '/equipment/custom-fields',
         iconKey: 'settings',
-        desc: 'Tenant-defined extra attributes captured on each asset, optionally scoped to a type.',
         permission: 'equipment.manage',
       },
       {
+        group: 'Printing',
         key: 'label-design',
         label: 'QR label design',
         href: '/equipment/labels/design',
         iconKey: 'tag',
-        desc: 'Design the printed equipment tag — label size, layout, fields, and QR placement.',
         permission: 'equipment.manage',
       },
       {
+        group: 'Automations',
         key: 'asset-flows',
-        label: 'Asset automations',
+        label: 'Assets',
         href: '/equipment/assets/flows',
         iconKey: 'workflow',
-        desc: 'When an asset is registered or its status changes, send emails, notify roles or call a webhook.',
       },
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Work order automations',
+        label: 'Work orders',
         href: '/equipment/flows',
         iconKey: 'workflow',
-        desc: 'On work-order create or status change, send emails, notify roles or require approval.',
       },
       {
+        group: 'Automations',
         key: 'inspection-flows',
-        label: 'Inspection automations',
+        label: 'Inspections',
         href: '/equipment/inspections/flows',
         iconKey: 'workflow',
-        desc: 'When an inspection is submitted, email the result (with PDF), notify roles, raise CAPAs or call a webhook.',
       },
       {
+        group: 'Operations',
         key: 'vehicle-log-settings',
         label: 'Vehicle log modes',
         href: '/equipment/vehicle-log/settings',
         iconKey: 'gauge',
-        desc: 'Which entry modes drivers use (destination, odometer or both) and per-driver defaults.',
       },
       {
+        group: 'Automations',
         key: 'vehicle-log-flows',
-        label: 'Vehicle log automations',
+        label: 'Vehicle log',
         href: '/equipment/vehicle-log/flows',
         iconKey: 'workflow',
-        desc: 'When a log entry is saved — or on demand — email the month as a PDF, notify roles or call a webhook.',
       },
     ],
   },
@@ -425,33 +428,33 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     ],
     sections: [
       {
+        group: 'Inspections',
         key: 'types',
         label: 'Types',
         href: '/ppe/types',
         iconKey: 'layers',
-        desc: 'Catalogue of PPE kinds — build each type’s inspection checklist with sections and banks.',
       },
       {
+        group: 'Inspections',
         key: 'banks',
         label: 'Criteria banks',
         href: '/ppe/banks',
         iconKey: 'library',
-        desc: 'Reusable criteria question banks shared across PPE types.',
       },
       {
+        group: 'Configuration',
         key: 'custom-fields',
         label: 'Custom fields',
         href: '/ppe/custom-fields',
         iconKey: 'settings',
-        desc: 'Tenant-defined extra attributes captured on each PPE item, optionally scoped to a type.',
         permission: 'ppe.manage',
       },
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Automations',
+        label: 'Inspections',
         href: '/ppe/flows',
         iconKey: 'workflow',
-        desc: 'When a PPE inspection is recorded, email the result (with PDF), notify roles, raise CAPAs or call a webhook.',
       },
     ],
   },
@@ -486,32 +489,32 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     ],
     sections: [
       {
+        group: 'Library',
         key: 'types',
         label: 'Types',
         href: '/documents/types',
         iconKey: 'layers',
-        desc: 'Classify controlled documents (policy, procedure, form, …).',
       },
       {
+        group: 'Library',
         key: 'categories',
         label: 'Categories',
         href: '/documents/categories',
         iconKey: 'library',
-        desc: 'Top-level groupings for the document library.',
       },
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Sign-off automations',
+        label: 'Sign-offs',
         href: '/documents/flows',
         iconKey: 'workflow',
-        desc: 'When a group sign-off is completed, send its PDF and filled spreadsheets.',
       },
       {
+        group: 'Automations',
         key: 'management-review-flows',
-        label: 'Management review automations',
+        label: 'Management reviews',
         href: '/documents/management-reviews/flows',
         iconKey: 'workflow',
-        desc: 'When a management review is created, send emails or notify roles.',
       },
     ],
   },
@@ -538,53 +541,54 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     ],
     sections: [
       {
+        group: 'Learning resources',
         key: 'library',
         label: 'Library',
         href: '/training/library',
         iconKey: 'library',
-        desc: 'Reusable lessons, videos, files and embeds for your courses.',
       },
       {
+        group: 'Learning resources',
         key: 'credential-designs',
         label: 'Card studio',
         href: '/training/credential-designs',
         iconKey: 'award',
-        desc: 'Design the certificate and wallet-card layouts issued from training.',
       },
       {
+        group: 'Qualifications',
         key: 'skill-types',
         label: 'Skill types',
         href: '/training/skills/types',
         iconKey: 'star',
-        desc: 'The catalogue of competencies tracked across the workforce.',
       },
       {
+        group: 'Qualifications',
         key: 'authorities',
         label: 'Authorities',
         href: '/training/authorities',
         iconKey: 'shield',
-        desc: 'Issuing bodies that certify skills and qualifications.',
       },
       {
+        group: 'Qualifications',
         key: 'assessment-types',
         label: 'Assessment types',
         href: '/training/assessments/types',
         iconKey: 'clipboard',
-        desc: 'Reusable question sets backing competency assessments.',
       },
       {
+        group: 'Automations',
         key: 'flows',
-        label: 'Automations',
+        label: 'Assessments',
         href: '/training/flows',
         iconKey: 'workflow',
-        desc: 'On assessment submit, send emails, notify roles or require approval.',
       },
       {
+        group: 'Automations',
         key: 'class-flows',
-        label: 'Class automations',
+        label: 'Classes',
         href: '/training/classes/flows',
+        permission: 'training.class.manage',
         iconKey: 'workflow',
-        desc: 'Send class emails manually, opt into reminders, or notify the roster when a class is cancelled or completed.',
       },
     ],
   },
@@ -611,60 +615,60 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     tabs: [{ key: 'directory', label: 'Directory', href: '/people' }],
     sections: [
       {
+        group: 'Organisation',
         key: 'departments',
         label: 'Departments',
         href: '/people/departments',
         iconKey: 'layers',
-        desc: 'The departments people belong to — one per person.',
       },
       {
+        group: 'Organisation',
         key: 'groups',
         label: 'Groups',
         href: '/people/groups',
         iconKey: 'users',
-        desc: 'Cross-cutting groupings used for audiences and reporting.',
       },
       {
+        group: 'Organisation',
         key: 'titles',
         label: 'Job titles',
         href: '/people/titles',
         iconKey: 'label',
-        desc: 'Job titles, with their task lists and acknowledgements.',
       },
       {
+        group: 'Organisation',
         key: 'trades',
         label: 'Trades',
         href: '/people/trades',
         iconKey: 'wrench',
-        desc: 'The trades people practise — one per person.',
       },
       {
+        group: 'Organisation',
         key: 'crews',
         label: 'Crews',
         href: '/people/crews',
         iconKey: 'users',
-        desc: 'The crews people are assigned to — one per person.',
       },
       {
+        group: 'Organisation',
         key: 'org-chart',
         label: 'Org chart',
         href: '/people/org-chart',
         iconKey: 'users',
-        desc: 'Reporting lines across the organisation, built from each person’s manager.',
       },
       {
+        group: 'Printing',
         key: 'badge-design',
         label: 'ID badge design',
         href: '/people/badges/design',
         iconKey: 'label',
-        desc: 'The printed employee ID badge — photo, details, and the live-transcript QR.',
       },
       {
+        group: 'Configuration',
         key: 'custom-fields',
         label: 'Custom fields',
         href: '/people/custom-fields',
         iconKey: 'settings',
-        desc: 'Tenant-defined extra attributes captured on each person record.',
         permission: 'admin.org.manage',
       },
     ],
@@ -679,18 +683,18 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     tabs: [{ key: 'locations', label: 'Locations', href: '/locations' }],
     sections: [
       {
+        group: 'Organisation',
         key: 'units',
         label: 'Org units',
         href: '/locations/units',
         iconKey: 'layers',
-        desc: 'The full customer / project / site / area tree in one flat, searchable list.',
       },
       {
+        group: 'Configuration',
         key: 'custom-fields',
         label: 'Custom fields',
         href: '/locations/custom-fields',
         iconKey: 'settings',
-        desc: 'Tenant-defined extra attributes captured on each location record.',
       },
     ],
   },

@@ -9,9 +9,27 @@
 import { redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { moduleAdminByKey } from './registry'
+import { MODULE_ADMIN, moduleAdminByKey } from './registry'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
+
+/** Navigation only; each page and action still enforces its own permission. */
+export function moduleManagementNavigation(ctx: Ctx) {
+  return MODULE_ADMIN.map((module) => ({
+    ...module,
+    sections: module.sections.filter(
+      (section) => ctx.isSuperAdmin || can(ctx, section.permission ?? module.permission),
+    ),
+  })).filter((module) => module.sections.length > 0)
+}
+
+/** Open a permitted management page immediately; viewers return to the module. */
+export async function redirectToModuleManagement(moduleKey: string): Promise<never> {
+  const ctx = await requireRequestContext()
+  const config = moduleAdminByKey(moduleKey)
+  const visible = moduleManagementNavigation(ctx).find((entry) => entry.moduleKey === moduleKey)
+  redirect(visible?.sections[0]?.href ?? config?.href ?? '/')
+}
 
 const FLOW_SUBJECT_MODULE: Record<string, string> = {
   'document-signoffs': 'documents',

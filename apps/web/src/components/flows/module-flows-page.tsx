@@ -49,7 +49,7 @@ export async function ModuleFlowsPage({ moduleKey }: { moduleKey: string }) {
         flows={flowsRaw as FlowSummary[]}
         canEdit
         canGenerate={false}
-        backHref={mod.managePath}
+        backHref={mod.href}
       />
     </div>
   )

@@ -1,13 +1,5 @@
 import { getGeneratedTranslations } from '@/i18n/generated.server'
-// /incidents/manage — the Incidents administration hub. Tiles for the module's
-// taxonomies (classifications, injury types, hours), driven by the module-admin
-// registry. Gated to managers; everyone else lands on the incident log.
-
-import { redirect } from 'next/navigation'
-import { can } from '@beaconhs/tenant'
-import { requireRequestContext } from '@/lib/auth'
-import { moduleAdminByKey } from '@/lib/module-admin/registry'
-import { ModuleManageHub } from '@/components/module-admin/module-manage-hub'
+import { redirectToModuleManagement } from '@/lib/module-admin/guard'
 
 export const dynamic = 'force-dynamic'
 export async function generateMetadata() {
@@ -16,8 +8,5 @@ export async function generateMetadata() {
 }
 
 export default async function IncidentsManagePage() {
-  const ctx = await requireRequestContext()
-  const mod = moduleAdminByKey('incidents')!
-  if (!ctx.isSuperAdmin && !can(ctx, mod.permission)) redirect(mod.href)
-  return <ModuleManageHub module={mod} />
+  return redirectToModuleManagement('incidents')
 }

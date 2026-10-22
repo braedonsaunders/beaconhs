@@ -28,7 +28,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
 import { NavIcon } from '@/components/sidebar-nav'
-import { MODULE_ADMIN } from '@/lib/module-admin/registry'
+import { moduleManagementNavigation } from '@/lib/module-admin/guard'
 import { mergeHref, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -259,12 +259,9 @@ export default async function AdminPage({
   const query = (pickString(sp.q) ?? '').trim().toLowerCase()
 
   // Per-module administration, driven by the module-admin registry — one tile per
-  // module the viewer may administer, linking to that module's Manage hub.
-  // Guard-only entries (sections: [] — flow subjects like 'vehicle-log' whose
-  // admin surfaces live under a parent module's hub) contribute no tile.
-  const moduleTiles: Tile[] = MODULE_ADMIN.filter(
-    (m) => m.sections.length > 0 && (ctx.isSuperAdmin || can(ctx, m.permission)),
-  ).map((m) => ({
+  // module with available management pages. Guard-only flow subjects share
+  // their parent module's workspace and contribute no separate tile.
+  const moduleTiles: Tile[] = moduleManagementNavigation(ctx).map((m) => ({
     href: m.managePath,
     title: m.label,
     desc: 'Records, taxonomies & settings',

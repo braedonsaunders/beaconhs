@@ -28,6 +28,8 @@ import { resolveWalkthroughs } from '@/lib/walkthroughs/service'
 import { getPlatformFeedbackSettings } from '@/lib/feedback-config'
 import { RegulatoryTerminologyProvider } from '@/components/regulatory-terminology'
 import { OfflineDraftsProvider } from '@/lib/offline-drafts/provider'
+import { moduleManagementNavigation } from '@/lib/module-admin/guard'
+import { ModuleManagementWorkspace } from '@/components/module-admin/module-management-workspace'
 
 // Every page in the authenticated app shell requires the per-request context
 // (auth + tenant + RLS-scoped DB), so none can be statically prerendered.
@@ -143,7 +145,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               >
                 <BackNavProviders>
                   <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
-                    <GeneratedValue value={children} />
+                    <ModuleManagementWorkspace modules={moduleManagementNavigation(ctx)}>
+                      <GeneratedValue value={children} />
+                    </ModuleManagementWorkspace>
                   </Fragment>
                 </BackNavProviders>
               </RegulatoryTerminologyProvider>
