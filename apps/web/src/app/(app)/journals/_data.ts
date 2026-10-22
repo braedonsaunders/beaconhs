@@ -1,3 +1,4 @@
+import { resolveJournalDefault } from '@/lib/journal-default'
 // Read layer for the Journals workspace. Plain server functions (ctx, …) shared
 // by the page (SSR) and the action layer (client refetch). No 'use server'.
 
@@ -713,6 +714,14 @@ export async function getOrCreateEntryForDate(
       .limit(1)
     if (existing) return existing.id
 
+    const [author] = authorPersonId
+      ? await tx
+          .select({ metadata: people.metadata })
+          .from(people)
+          .where(eq(people.id, authorPersonId))
+          .limit(1)
+      : []
+    const definition = resolveJournalDefault(author?.metadata ?? {})
     const reference = await nextJournalReference(tx, ctx.tenantId, Number(today.slice(0, 4)))
     const [created] = await tx
       .insert(journalEntries)
@@ -722,6 +731,7 @@ export async function getOrCreateEntryForDate(
         personId: authorPersonId,
         createdByTenantUserId: tenantUserId,
         entryDate: today,
+        definition,
         status: 'draft',
       })
       .returning({ id: journalEntries.id })
@@ -731,7 +741,13 @@ export async function getOrCreateEntryForDate(
         entityId: created.id,
         action: 'create',
         summary: 'Created journal draft',
-        after: { reference, entryDate: today, personId: authorPersonId, status: 'draft' },
+        after: {
+          reference,
+          entryDate: today,
+          personId: authorPersonId,
+          definition,
+          status: 'draft',
+        },
       })
     }
     return created?.id ?? null

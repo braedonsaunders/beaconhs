@@ -48,7 +48,7 @@ export function SignatureRequest({
           <GeneratedValue value="I have reviewed this assessment, understand the hazards and controls, and am signing my own name." />
         </span>
       </label>
-      <SignaturePad value={ink} onChange={setInk} disabled={pending} />
+      <SignaturePad reuseOwnSignature value={ink} onChange={setInk} disabled={pending} />
       {error ? (
         <p role="alert" className="text-sm text-red-600">
           <GeneratedValue value={error} />

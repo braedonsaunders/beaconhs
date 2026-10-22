@@ -51,6 +51,7 @@ export type EvalContext = {
     now?: Date
     currentUserPersonId?: string | null
     currentUserName?: string | null
+    currentUserSignature?: { attachmentId: string; url: string } | null
   }
 }
 
@@ -387,6 +388,8 @@ export function resolveDefaultValue(expr: DefaultValueExpression, ctx: EvalConte
       return ctx.requestContext?.currentUserPersonId ?? null
     case 'current_user_name':
       return ctx.requestContext?.currentUserName ?? null
+    case 'current_user_signature':
+      return ctx.requestContext?.currentUserSignature ?? null
     case 'expression': {
       const v = evaluateFormulaTree(expr.expr, ctx)
       return v ?? undefined

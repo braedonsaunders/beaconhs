@@ -165,6 +165,7 @@ export type DefaultValueExpression =
   | { kind: 'now' }
   | { kind: 'current_user_person_id' }
   | { kind: 'current_user_name' }
+  | { kind: 'current_user_signature' }
   | { kind: 'expression'; expr: FormulaExpression }
 
 export const defaultValueExpressionSchema: z.ZodType<DefaultValueExpression> = z.lazy(() =>
@@ -174,6 +175,7 @@ export const defaultValueExpressionSchema: z.ZodType<DefaultValueExpression> = z
     z.object({ kind: z.literal('now') }),
     z.object({ kind: z.literal('current_user_person_id') }),
     z.object({ kind: z.literal('current_user_name') }),
+    z.object({ kind: z.literal('current_user_signature') }),
     z.object({ kind: z.literal('expression'), expr: formulaExpressionSchema }),
   ]),
 )
@@ -1080,6 +1082,13 @@ function schemaInvariantIssues(schema: z.infer<typeof formSchemaV1Base>): Schema
             message: `Validation pattern ${patternError}`,
           })
         }
+      }
+
+      if (field.defaultValue?.kind === 'current_user_signature' && field.type !== 'signature') {
+        issues.push({
+          path: [...fieldBasePath, 'defaultValue'],
+          message: 'The creator signature default is only available on signature fields',
+        })
       }
 
       if (!storesResponseValue(field)) {

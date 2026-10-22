@@ -586,3 +586,16 @@ describe('resolveDefaultValue', () => {
     ).toBe(5)
   })
 })
+
+describe('creator saved signature default', () => {
+  it('uses only an explicitly supplied authorized signature and otherwise stays empty', () => {
+    const signature = { attachmentId: 'own-attachment', url: '/api/attachments/own-attachment' }
+    expect(
+      resolveDefaultValue(
+        { kind: 'current_user_signature' },
+        makeCtx({ requestContext: { currentUserSignature: signature } }),
+      ),
+    ).toEqual(signature)
+    expect(resolveDefaultValue({ kind: 'current_user_signature' }, makeCtx())).toBeNull()
+  })
+})

@@ -3259,6 +3259,9 @@ function FieldDefaultTab({
       case 'current_user_name':
         onChange({ defaultValue: { kind: 'current_user_name' } })
         break
+      case 'current_user_signature':
+        onChange({ defaultValue: { kind: 'current_user_signature' } })
+        break
     }
   }
   return (
@@ -3273,6 +3276,9 @@ function FieldDefaultTab({
         <option value="now">{'Right now'}</option>
         <option value="current_user_person_id">{"Current user's person id"}</option>
         <option value="current_user_name">{"Current user's name"}</option>
+        {field.type === 'signature' ? (
+          <option value="current_user_signature">{"Creator's saved signature"}</option>
+        ) : null}
       </Select>
       <GeneratedValue
         value={

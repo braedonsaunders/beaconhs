@@ -1,4 +1,5 @@
 'use client'
+import { SignaturePad } from '@/components/signature-pad'
 
 import {
   GeneratedText,
@@ -18,7 +19,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Check, ChevronDown, ChevronRight, PenLine, Trash2, UserPlus, Users } from 'lucide-react'
-import { Button, Input, Label, SignaturePad, Textarea } from '@beaconhs/ui'
+import { Button, Input, Label, Textarea } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { addSignOffSigner, completeSignOffSession, removeSignOffSigner } from '../_ack-actions'
 import { RawImage } from '@/components/raw-image'
@@ -262,7 +263,10 @@ export function SignOffSheet({
               <RemoteSearchSelect
                 lookup="document-signoff-people"
                 value={personId}
-                onChange={setPersonId}
+                onChange={(id) => {
+                  setPersonId(id)
+                  setSig(null)
+                }}
                 excludedValues={[...signedIds]}
                 placeholder={tGenerated('m_0be39d3a196b5b')}
                 searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
@@ -274,7 +278,14 @@ export function SignOffSheet({
               <div className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <PenLine size={14} /> <GeneratedText id="m_0c0bc02db58371" />
               </div>
-              <SignaturePad value={sig} onChange={setSig} height={180} />
+              <SignaturePad
+                key={personId}
+                reuseOwnSignature={!!personId}
+                signerPersonId={personId || undefined}
+                value={sig}
+                onChange={setSig}
+                height={180}
+              />
             </div>
             <Button
               type="button"

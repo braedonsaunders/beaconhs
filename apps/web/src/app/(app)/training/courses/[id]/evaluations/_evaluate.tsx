@@ -1,4 +1,5 @@
 'use client'
+import { SignaturePad } from '@/components/signature-pad'
 
 import {
   GeneratedText,
@@ -18,7 +19,6 @@ import {
   Button,
   Drawer,
   Label,
-  SignaturePad,
   Table,
   TableBody,
   TableCell,
@@ -381,7 +381,12 @@ function EvaluateDrawer({
                 <Label>
                   <GeneratedText id="m_0d66ed8505bf25" />
                 </Label>
-                <SignaturePad value={signature} onChange={setSignature} height={140} />
+                <SignaturePad
+                  reuseOwnSignature
+                  value={signature}
+                  onChange={setSignature}
+                  height={140}
+                />
               </div>
             ) : null
           }

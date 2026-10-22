@@ -1,3 +1,4 @@
+import { employeeJournalDefault } from '@/lib/journal-default'
 import { RecordActionMenu } from '@/components/record-action-menu'
 import { TableToolbar } from '@/components/table-toolbar'
 import { FilterChips } from '@/components/filter-bar'
@@ -968,6 +969,17 @@ export default async function PersonDetailPage({
                                 label: title.name,
                               }))}
                               disabled={!canEdit || titlesManagedBySync}
+                            />
+                            <LiveSelect
+                              field="journalDefinition"
+                              label={tGeneratedValue('Default journal type')}
+                              initialValue={employeeJournalDefault(person.metadata)}
+                              emptyLabel={tGeneratedValue('Worker (default)')}
+                              options={[
+                                { value: 'worker', label: 'Worker' },
+                                { value: 'supervisor', label: 'Supervisor' },
+                              ]}
+                              disabled={!canEdit}
                             />
                             <LiveSelect
                               field="status"

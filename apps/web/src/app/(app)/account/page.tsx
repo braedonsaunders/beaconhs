@@ -1,3 +1,4 @@
+import { signatureReuseMode } from '@/lib/saved-signature'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 import { GeneratedValue } from '@/i18n/generated'
 import { headers } from 'next/headers'
@@ -45,7 +46,7 @@ export default async function AccountPage() {
   const signatureRow = ctx.personId
     ? await ctx.db(async (tx) => {
         const [row] = await tx
-          .select({ id: attachments.id })
+          .select({ id: attachments.id, metadata: people.metadata })
           .from(people)
           .leftJoin(attachments, eq(attachments.id, people.signatureAttachmentId))
           .where(eq(people.id, ctx.personId!))
@@ -107,7 +108,11 @@ export default async function AccountPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SignatureSection currentUrl={signatureUrl} linked={ctx.personId != null} />
+            <SignatureSection
+              currentUrl={signatureUrl}
+              linked={ctx.personId != null}
+              reuseMode={signatureReuseMode(signatureRow?.metadata.signatureReuseMode)}
+            />
           </CardContent>
         </Card>
 

@@ -113,7 +113,9 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 - Write your entry through the day, not from memory at quitting time. It autosaves, so short visits are fine.
 - A photo of a hazard is worth a paragraph. Add both.
-- If you missed a day, pick that date in the list to create an entry for it.`,
+- If you missed a day, pick that date in the list to create an entry for it.
+
+New journals use the employee’s **Default journal type** from their People record. If no type is set, the journal starts as **Worker**, regardless of the employee’s access role. You can still change the type on a draft. Changing the employee default does not change existing journals.`,
   },
   {
     slug: 'people-kiosk',
@@ -296,7 +298,9 @@ You need signal to add, edit, move, or delete tasks, hazards, PPE, and questions
 **Print / PDF** and **Send email** include the assessment and its applicable attached plans in one PDF. Unfinished plans are marked **DRAFT** or **NOT STARTED**. Email delivery includes the same complete PDF as an attachment.
 
 Tap a crew member’s **Tap to sign** space to open their signature pad. Draw and tap **Done**; the next unsigned person appears in the same drawer.
-`,
+
+
+When signing as yourself, your Account signature-reuse setting can offer **Use my saved signature** or fill your empty pad. Review it and finish the usual signing action. When collecting a signature from another person, ask that person to sign; your saved signature is not offered for their slot.`,
   },
   {
     slug: 'inspections',
@@ -591,7 +595,9 @@ You need signal to change the status, add a step or signature, verify, close, re
 ## Tips
 
 - Write **Action taken** like you are explaining it to someone who was not there.
-- A before-and-after photo pair tells the whole story.`,
+- A before-and-after photo pair tells the whole story.
+
+When signing as yourself, your Account signature-reuse setting can offer **Use my saved signature** or fill your empty pad. Review it and finish the usual signing action. When collecting a signature from another person, ask that person to sign; your saved signature is not offered for their slot.`,
   },
   {
     slug: 'vehicle-log',

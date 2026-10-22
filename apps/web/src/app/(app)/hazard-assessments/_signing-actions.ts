@@ -245,7 +245,7 @@ async function performStartSigningCollection(assessmentId: string, preferredSign
       revision: parent.signingRevision,
       signers: rows
         .filter((r) => !r.personId || (r.person?.status === 'active' && !r.person.deletedAt))
-        .map((r) => ({ id: r.id, name: r.name ?? 'Crew member' })),
+        .map((r) => ({ id: r.id, personId: r.personId, name: r.name ?? 'Crew member' })),
     }
   })
   refresh(assessmentId)

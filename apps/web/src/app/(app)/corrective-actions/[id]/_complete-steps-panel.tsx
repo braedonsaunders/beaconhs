@@ -241,7 +241,7 @@ export function AddStepBody({
               <Label>
                 <GeneratedText id="m_0c0bc02db58371" />
               </Label>
-              <SignaturePad value={sig} onChange={setSig} />
+              <SignaturePad reuseOwnSignature value={sig} onChange={setSig} />
             </div>
           )
         }

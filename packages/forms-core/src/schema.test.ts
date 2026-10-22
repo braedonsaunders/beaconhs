@@ -1090,3 +1090,41 @@ describe('sketch AI draft primitives', () => {
     ).toBe(false)
   })
 })
+
+describe('creator signature defaults', () => {
+  it('accepts the setting only on a signature field', () => {
+    const schema: FormSchemaV1 = {
+      schemaVersion: 1,
+      title: { en: 'Sign' },
+      sections: [
+        {
+          id: 'main',
+          title: { en: 'Main' },
+          fields: [
+            {
+              id: 'sig',
+              type: 'signature',
+              label: { en: 'My signature' },
+              defaultValue: { kind: 'current_user_signature' },
+            },
+          ],
+        },
+      ],
+      workflow: {
+        steps: [
+          {
+            key: 'submit',
+            title: { en: 'Submit' },
+            assignee: { type: 'expression', expr: '$submitter' },
+          },
+        ],
+      },
+    }
+    expect(formSchemaV1.safeParse(schema).success).toBe(true)
+    expect(lintFormSchema(schema)).toEqual([])
+    schema.sections[0]!.fields[0]!.type = 'text'
+    expect(
+      lintFormSchema(schema).some((i) => i.includes('only available on signature fields')),
+    ).toBe(true)
+  })
+})

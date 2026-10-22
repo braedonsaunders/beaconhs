@@ -1,3 +1,4 @@
+import { employeeJournalDefault } from '@/lib/journal-default'
 // The `people` record saver: inline edits on a person's page, queued on the
 // device and applied by /api/records/sync (see lib/record-sync). Same rules
 // the inline editors have always had — the people-module manage permission,
@@ -244,6 +245,27 @@ export const personRecordSaver = defineRecordSaver<LoadedPerson>('people', {
       // Custom-field values also need the custom-field permission for people.
       if (!custom || can(ctx, entityConfig('person').permission)) return custom
       return refused(custom, 'You do not have permission to edit this field.')
+    }
+    if (op === 'journalDefinition') {
+      return recordOp<string | null>({
+        current: employeeJournalDefault(row.metadata),
+        parse: (wire) => {
+          if (wire === null || wire === '') return null
+          if (wire !== 'worker' && wire !== 'supervisor')
+            throw new RecordEditRejection(
+              'Choose Worker or Supervisor, or leave the default unset.',
+            )
+          return wire
+        },
+        format: (value) => value,
+        write: async (value) => {
+          const metadata = { ...row.metadata }
+          if (value === null) delete metadata.journalDefinition
+          else metadata.journalDefinition = value
+          await personColumnUpdate(tx, ctx, row, { metadata })
+          row.metadata = metadata
+        },
+      })
     }
     if (op === 'groups') {
       const [names, current] = await Promise.all([groupNames(tx), heldGroupIds(tx, row.id)])

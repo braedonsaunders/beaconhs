@@ -11,14 +11,13 @@ import { getTranslations } from 'next-intl/server'
 import { and, eq } from 'drizzle-orm'
 import { getAuth, withAuthEmailContext } from '@beaconhs/auth'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { attachments, people, tenantUsers, users } from '@beaconhs/db/schema'
+import { people, tenantUsers, users } from '@beaconhs/db/schema'
 import { parseAppLocale } from '@beaconhs/i18n'
 import { assertNotImpersonating } from '@beaconhs/tenant'
-import { newAttachmentKey, putObject } from '@beaconhs/storage'
+import { withStoredSignatureAttachment } from '@/lib/signature-storage'
+import { signatureReuseMode } from '@/lib/saved-signature'
 import { getSessionUser, requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
-
-const DATA_URL_RE = /^data:([^;,]+)(?:;[^,]*)?,(.*)$/s
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 
 type Result = { ok?: boolean; error?: string }
 
@@ -146,9 +145,8 @@ export async function changePassword(_prev: Result | null, formData: FormData): 
 /**
  * Save the signed-in user's own signature, drawn on the account page's signature
  * pad. The signature lives on the linked person record (people.signature_attachment_id)
- * so every existing render site — form sign-offs, inspections, lift plans, PDFs —
- * keeps working unchanged. Decodes the pad's PNG data-url, stores the bytes in
- * object storage, and points the person at a fresh attachment row.
+ * and record signatures remain immutable when the saved profile image changes.
+ * Uses the same verified storage/transaction saga as record sign-offs.
  */
 export async function saveMySignature(dataUrl: string): Promise<Result> {
   const ctx = await requireRequestContext()
@@ -156,43 +154,32 @@ export async function saveMySignature(dataUrl: string): Promise<Result> {
   if (!ctx.personId) {
     return { error: 'Your login is not linked to a person record yet.' }
   }
-  const match = DATA_URL_RE.exec((dataUrl ?? '').trim())
-  if (!match) return { error: 'Could not read the signature. Draw it again.' }
-  const contentType = match[1] || 'image/png'
-  const body = Buffer.from(match[2] ?? '', 'base64')
-  if (body.length === 0) return { error: 'Draw your signature before saving.' }
-
-  const filename = 'signature.png'
-  const key = newAttachmentKey({ tenantId: ctx.tenantId, kind: 'signature', filename })
-  await putObject({ key, body, contentType, contentDisposition: 'inline' })
-
-  await ctx.db(async (tx) => {
-    const [att] = await tx
-      .insert(attachments)
-      .values({
-        tenantId: ctx.tenantId,
-        uploadedBy: ctx.userId,
-        kind: 'signature',
-        r2Key: key,
-        contentType,
-        sizeBytes: body.length,
-        filename,
-      })
-      .returning({ id: attachments.id })
-    if (att) {
+  try {
+    await withStoredSignatureAttachment(ctx, dataUrl, async (tx, attachmentId) => {
+      if (!attachmentId) throw new Error('Draw your signature before saving.')
+      const [person] = await tx
+        .select()
+        .from(people)
+        .where(and(eq(people.id, ctx.personId!), eq(people.tenantId, ctx.tenantId)))
+        .limit(1)
+        .for('update')
+      if (!person) throw new Error('Your employee record could not be found.')
       await tx
         .update(people)
-        .set({ signatureAttachmentId: att.id })
-        .where(eq(people.id, ctx.personId!))
-    }
-  })
-
-  await recordAudit(ctx, {
-    entityType: 'person',
-    entityId: ctx.personId,
-    action: 'update',
-    summary: 'Updated signature (self-service)',
-  })
+        .set({ signatureAttachmentId: attachmentId })
+        .where(eq(people.id, person.id))
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'person',
+        entityId: person.id,
+        action: 'update',
+        summary: 'Updated signature (self-service)',
+        before: { signatureAttachmentId: person.signatureAttachmentId },
+        after: { signatureAttachmentId: attachmentId },
+      })
+    })
+  } catch {
+    return { error: 'Could not save your signature. Draw it again and try saving.' }
+  }
   revalidatePath('/account')
   return { ok: true }
 }
@@ -202,15 +189,34 @@ export async function clearMySignature(): Promise<Result> {
   const ctx = await requireRequestContext()
   assertNotImpersonating(ctx, 'account')
   if (!ctx.personId) return { error: 'Your login is not linked to a person record yet.' }
-  await ctx.db((tx) =>
-    tx.update(people).set({ signatureAttachmentId: null }).where(eq(people.id, ctx.personId!)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'person',
-    entityId: ctx.personId,
-    action: 'update',
-    summary: 'Cleared signature (self-service)',
-  })
+  try {
+    await ctx.db(async (tx) => {
+      const [person] = await tx
+        .select()
+        .from(people)
+        .where(and(eq(people.id, ctx.personId!), eq(people.tenantId, ctx.tenantId)))
+        .limit(1)
+        .for('update')
+      if (!person) throw new Error('Your employee record could not be found.')
+      await tx
+        .update(people)
+        .set({
+          signatureAttachmentId: null,
+          metadata: { ...person.metadata, signatureReuseMode: 'off' },
+        })
+        .where(eq(people.id, person.id))
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'person',
+        entityId: person.id,
+        action: 'update',
+        summary: 'Cleared signature (self-service)',
+        before: { signatureAttachmentId: person.signatureAttachmentId },
+        after: { signatureAttachmentId: null, signatureReuseMode: 'off' },
+      })
+    })
+  } catch {
+    return { error: 'Could not clear your signature. Try again.' }
+  }
   revalidatePath('/account')
   return { ok: true }
 }
@@ -237,4 +243,42 @@ export async function sendPasswordResetEmail(): Promise<Result> {
     // Swallow — never surface mail/lookup failures.
   }
   return { ok: true }
+}
+
+/** Personal consent, isolated from managers editing employee settings. */
+export async function saveMySignatureReuseMode(value: string): Promise<Result> {
+  const ctx = await requireRequestContext()
+  assertNotImpersonating(ctx, 'account')
+  if (!ctx.personId) return { error: 'Your login is not linked to a person record yet.' }
+  if (!['off', 'manual', 'automatic'].includes(value))
+    return { error: 'Choose a saved signature setting.' }
+  try {
+    return await ctx.db(async (tx) => {
+      const [person] = await tx
+        .select()
+        .from(people)
+        .where(and(eq(people.id, ctx.personId!), eq(people.tenantId, ctx.tenantId)))
+        .limit(1)
+        .for('update')
+      if (!person) return { error: 'Your employee record could not be found.' }
+      if (value !== 'off' && !person.signatureAttachmentId)
+        return { error: 'Save your signature before enabling reuse.' }
+      await tx
+        .update(people)
+        .set({ metadata: { ...person.metadata, signatureReuseMode: value } })
+        .where(eq(people.id, person.id))
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'person',
+        entityId: person.id,
+        action: 'update',
+        summary: 'Changed own saved signature reuse',
+        before: { signatureReuseMode: signatureReuseMode(person.metadata.signatureReuseMode) },
+        after: { signatureReuseMode: value },
+      })
+      revalidatePath('/account')
+      return { ok: true }
+    })
+  } catch {
+    return { error: 'Could not save signature settings.' }
+  }
 }

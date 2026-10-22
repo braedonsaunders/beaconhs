@@ -18,7 +18,7 @@ export function CrewSignatureDrawer({
 }: {
   revision: number
   ready: boolean
-  signers: { id: string; name: string }[]
+  signers: { id: string; name: string; personId?: string | null }[]
   onSaved: () => Promise<void>
   onClose: () => void
 }) {
@@ -80,6 +80,8 @@ export function CrewSignatureDrawer({
     >
       <SignaturePad
         key={signer?.id}
+        reuseOwnSignature={ready && !!signer?.personId}
+        signerPersonId={signer?.personId ?? undefined}
         value={ink}
         onChange={setInk}
         height={200}

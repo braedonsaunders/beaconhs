@@ -513,7 +513,7 @@ function ActiveStepActions({
         value={
           mode === 'sign' ? (
             <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
-              <SignaturePad value={signature} onChange={setSignature} />
+              <SignaturePad reuseOwnSignature value={signature} onChange={setSignature} />
               <Textarea
                 rows={1}
                 value={comment}

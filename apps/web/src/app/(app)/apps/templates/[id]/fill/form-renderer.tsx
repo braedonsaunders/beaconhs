@@ -143,6 +143,10 @@ import { attachmentIdsEqual } from './photo-field-state'
 type CurrentUser = {
   personId: string | null
   name: string | null
+  savedSignature?: {
+    mode: 'manual' | 'automatic'
+    signature: { attachmentId: string; url: string }
+  } | null
 }
 
 // Cycle a tasteful tone palette across the dynamic schema sections so the fill
@@ -184,6 +188,8 @@ const OrgUnitOptionsCacheContext = createContext<Record<
 
 // Cursor for a response whose draft the server has never saved.
 const NO_SERVER_DRAFT: DraftServerCursor = { revision: 0, sessionId: null, sequence: 0 }
+
+const SavedSignatureContext = createContext<CurrentUser['savedSignature']>(null)
 
 const FIELD_MODE_STORAGE_KEY = 'bhs_field_mode'
 const FIELD_MODE_CHANGE_EVENT = 'beaconhs:field-mode-change'
@@ -451,6 +457,10 @@ export function FormRenderer({
       now: new Date(),
       currentUserPersonId: currentUser.personId,
       currentUserName: currentUser.name,
+      currentUserSignature:
+        !initialResponseId && currentUser.savedSignature?.mode === 'automatic'
+          ? currentUser.savedSignature.signature
+          : null,
     }
     // Materialize per-row formula fields into the rows the
     // evaluator sees, so `sum_section` / `avg_section` can roll up a computed
@@ -486,7 +496,7 @@ export function FormRenderer({
       if (!(k in materializedRows)) materializedRows[k] = v
     }
     return { values, rows: materializedRows, entities: entitiesByField, requestContext }
-  }, [values, rowsByStep, entitiesByField, currentUser, schema])
+  }, [values, rowsByStep, entitiesByField, currentUser, schema, initialResponseId])
 
   // Apply default values on first render of a step. Tracked via a ref so we
   // don't re-apply when the user clears the field intentionally.
@@ -884,144 +894,146 @@ export function FormRenderer({
       : schema.sections
 
     return (
-      <FillReadOnlyContext.Provider value={readOnly}>
-        <SketchAiDraftContext.Provider value={{ enabled: aiDraftEnabled, templateId }}>
-          <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
-            <GeneratedValue
-              value={
-                recordEdits.state ? (
-                  <div className="mb-3 flex justify-end empty:hidden">
-                    <DraftSyncIndicator state={recordEdits.state} onRetry={recordEdits.retry} />
-                  </div>
-                ) : null
-              }
-            />
-            <DraftRecoveryBanner
-              restored={recordEdits.restored}
-              conflict={recordEdits.conflict}
-              onDismiss={recordEdits.dismissRestored}
-              onDiscard={recordEdits.discardDeviceCopy}
-              onTakeDeviceCopy={recordEdits.takeDeviceCopy}
-              onTakeSavedVersion={recordEdits.takeSavedVersion}
-            />
-            <fieldset
-              disabled={readOnly || recordEdits.awaitingChoice}
-              className="m-0 min-w-0 space-y-5 border-0 p-0"
-            >
+      <SavedSignatureContext.Provider value={currentUser.savedSignature ?? null}>
+        <FillReadOnlyContext.Provider value={readOnly}>
+          <SketchAiDraftContext.Provider value={{ enabled: aiDraftEnabled, templateId }}>
+            <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
               <GeneratedValue
                 value={
-                  inlineTabbed ? (
-                    <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
-                      <GeneratedValue
-                        value={appTabs.map((t) => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => setActiveTabId(t.id)}
-                            className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                              t.id === activeTabId
-                                ? 'border-teal-600 bg-teal-600 text-white'
-                                : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                            }`}
-                          >
-                            <GeneratedValue value={localizeText(t.title, locale, t.id)} />
-                          </button>
-                        ))}
-                      />
+                  recordEdits.state ? (
+                    <div className="mb-3 flex justify-end empty:hidden">
+                      <DraftSyncIndicator state={recordEdits.state} onRetry={recordEdits.retry} />
                     </div>
                   ) : null
                 }
               />
-              <GeneratedValue
-                value={inlineSections.map((sec) => {
-                  if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
-                  return (
-                    <Section
-                      key={sec.id}
-                      title={tGeneratedValue(localizeText(sec.title, locale, sec.id))}
-                      subtitle={tGeneratedValue(
-                        localizeText(
-                          sec.description,
-                          locale,
-                          sec.repeating ? 'Repeatable section' : '',
-                        ) || undefined,
-                      )}
-                    >
-                      <div className="space-y-4">
+              <DraftRecoveryBanner
+                restored={recordEdits.restored}
+                conflict={recordEdits.conflict}
+                onDismiss={recordEdits.dismissRestored}
+                onDiscard={recordEdits.discardDeviceCopy}
+                onTakeDeviceCopy={recordEdits.takeDeviceCopy}
+                onTakeSavedVersion={recordEdits.takeSavedVersion}
+              />
+              <fieldset
+                disabled={readOnly || recordEdits.awaitingChoice}
+                className="m-0 min-w-0 space-y-5 border-0 p-0"
+              >
+                <GeneratedValue
+                  value={
+                    inlineTabbed ? (
+                      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
                         <GeneratedValue
-                          value={
-                            sec.repeating ? (
-                              <RepeatingSection
-                                section={sec}
-                                rows={rowsByStep[sec.id] ?? []}
-                                onAdd={() => {
-                                  addRow(sec)
-                                  // addRow mutates state async; persist the resulting array.
-                                  const existing = rowsByStep[sec.id] ?? []
-                                  if (sec.maxRows !== undefined && existing.length >= sec.maxRows)
-                                    return
-                                  const next: Record<string, unknown> = {}
-                                  for (const f of sec.fields) {
-                                    if (!f.defaultValue) continue
-                                    const dv = resolveDefaultValue(
-                                      f.defaultValue as DefaultValueExpression,
-                                      evalCtx,
-                                    )
-                                    if (dv !== undefined && dv !== null) next[f.id] = dv
-                                  }
-                                  void saveArray(sec.id, [...existing, next])
-                                }}
-                                onRemove={(i) => {
-                                  removeRow(sec, i)
-                                  const arr = (rowsByStep[sec.id] ?? []).filter(
-                                    (_, idx) => idx !== i,
-                                  )
-                                  void saveArray(sec.id, arr)
-                                }}
-                                onUpdate={(i, patch) => {
-                                  updateRow(sec, i, patch)
-                                  const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
-                                    idx === i ? { ...r, ...patch } : r,
-                                  )
-                                  void saveArray(sec.id, arr)
-                                }}
-                                people={people}
-                                evalCtx={evalCtx}
-                                errors={errors}
-                                sectionError={errors.get(`__section_${sec.id}`) ?? null}
-                              />
-                            ) : (
-                              sec.fields.map((f) => {
-                                if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
-                                return (
-                                  <InlineFieldRow
-                                    key={f.id}
-                                    field={f}
-                                    value={values[f.id]}
-                                    onChange={(v) => setValue(f.id, v)}
-                                    onSetFieldValue={setValue}
-                                    error={errors.get(f.id)}
-                                    people={people}
-                                    evalCtx={evalCtx}
-                                    loading={pickerLoading.has(f.id)}
-                                    readOnly={readOnly}
-                                    saveField={saveField}
-                                    saveArray={saveArray}
-                                  />
-                                )
-                              })
-                            )
-                          }
+                          value={appTabs.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setActiveTabId(t.id)}
+                              className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                                t.id === activeTabId
+                                  ? 'border-teal-600 bg-teal-600 text-white'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                              }`}
+                            >
+                              <GeneratedValue value={localizeText(t.title, locale, t.id)} />
+                            </button>
+                          ))}
                         />
                       </div>
-                    </Section>
-                  )
-                })}
-              />
-            </fieldset>
-          </OrgUnitOptionsCacheContext.Provider>
-        </SketchAiDraftContext.Provider>
-      </FillReadOnlyContext.Provider>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={inlineSections.map((sec) => {
+                    if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+                    return (
+                      <Section
+                        key={sec.id}
+                        title={tGeneratedValue(localizeText(sec.title, locale, sec.id))}
+                        subtitle={tGeneratedValue(
+                          localizeText(
+                            sec.description,
+                            locale,
+                            sec.repeating ? 'Repeatable section' : '',
+                          ) || undefined,
+                        )}
+                      >
+                        <div className="space-y-4">
+                          <GeneratedValue
+                            value={
+                              sec.repeating ? (
+                                <RepeatingSection
+                                  section={sec}
+                                  rows={rowsByStep[sec.id] ?? []}
+                                  onAdd={() => {
+                                    addRow(sec)
+                                    // addRow mutates state async; persist the resulting array.
+                                    const existing = rowsByStep[sec.id] ?? []
+                                    if (sec.maxRows !== undefined && existing.length >= sec.maxRows)
+                                      return
+                                    const next: Record<string, unknown> = {}
+                                    for (const f of sec.fields) {
+                                      if (!f.defaultValue) continue
+                                      const dv = resolveDefaultValue(
+                                        f.defaultValue as DefaultValueExpression,
+                                        evalCtx,
+                                      )
+                                      if (dv !== undefined && dv !== null) next[f.id] = dv
+                                    }
+                                    void saveArray(sec.id, [...existing, next])
+                                  }}
+                                  onRemove={(i) => {
+                                    removeRow(sec, i)
+                                    const arr = (rowsByStep[sec.id] ?? []).filter(
+                                      (_, idx) => idx !== i,
+                                    )
+                                    void saveArray(sec.id, arr)
+                                  }}
+                                  onUpdate={(i, patch) => {
+                                    updateRow(sec, i, patch)
+                                    const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
+                                      idx === i ? { ...r, ...patch } : r,
+                                    )
+                                    void saveArray(sec.id, arr)
+                                  }}
+                                  people={people}
+                                  evalCtx={evalCtx}
+                                  errors={errors}
+                                  sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                                />
+                              ) : (
+                                sec.fields.map((f) => {
+                                  if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                                  return (
+                                    <InlineFieldRow
+                                      key={f.id}
+                                      field={f}
+                                      value={values[f.id]}
+                                      onChange={(v) => setValue(f.id, v)}
+                                      onSetFieldValue={setValue}
+                                      error={errors.get(f.id)}
+                                      people={people}
+                                      evalCtx={evalCtx}
+                                      loading={pickerLoading.has(f.id)}
+                                      readOnly={readOnly}
+                                      saveField={saveField}
+                                      saveArray={saveArray}
+                                    />
+                                  )
+                                })
+                              )
+                            }
+                          />
+                        </div>
+                      </Section>
+                    )
+                  })}
+                />
+              </fieldset>
+            </OrgUnitOptionsCacheContext.Provider>
+          </SketchAiDraftContext.Provider>
+        </FillReadOnlyContext.Provider>
+      </SavedSignatureContext.Provider>
     )
   }
 
@@ -2501,7 +2513,13 @@ function FieldInput({
     case 'area_picker':
       return <OrgUnitPickerInput level="area" value={value} onChange={onChange} />
     case 'signature':
-      return <SignatureField value={(value as string | null) ?? null} onChange={onChange} />
+      return (
+        <SignatureField
+          value={(value as string | null) ?? null}
+          onChange={onChange}
+          allowSavedSignature={field.defaultValue?.kind === 'current_user_signature'}
+        />
+      )
     case 'sketch': {
       const symbols = sketchConfigSchema.safeParse(field.config ?? {}).data?.symbols ?? []
       return (
@@ -4390,52 +4408,69 @@ function AddressInput({ value, onChange }: { value: unknown; onChange: (v: unkno
 
 // --- Signature -------------------------------------------------------------
 //
-// The signature pad lives in @beaconhs/ui and is being built by a parallel
-// agent; we render the existing component and stash an {attachmentId, url}
-// pair on the field value (the response viewer reads the url for display,
-// the PDF renderer reads the attachmentId for embed).
+// Capture uses the shared pad and attachment upload pipeline. A creator-default
+// field may reuse only the signed-in user's explicitly enabled saved signature.
 
 function SignatureField({
   value,
   onChange,
+  allowSavedSignature,
 }: {
   value: string | null
   onChange: (v: { attachmentId: string; url: string } | null) => void
+  allowSavedSignature: boolean
 }) {
   const readOnly = useContext(FillReadOnlyContext)
   const stored = (value as unknown as { attachmentId: string; url: string } | null) ?? null
+  const saved = useContext(SavedSignatureContext)
 
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(false)
   async function persist(dataUrl: string | null) {
+    setError(false)
     if (!dataUrl) {
       onChange(null)
       return
     }
-    const file = dataUrlToFile(dataUrl, `signature-${Date.now()}.png`)
-    const req = await requestUpload({
-      kind: 'signature',
-      filename: file.name,
-      contentType: file.type,
-      sizeBytes: file.size,
-    })
-    if (!req.ok) {
-      console.warn('[signature] presign failed', req.error)
-      return
-    }
-    let finalizeInput
+    setSaving(true)
     try {
-      finalizeInput = await uploadReservedFile(req, file)
-    } catch (error) {
-      console.warn('[signature] upload failed', error)
-      return
+      const file = dataUrlToFile(dataUrl, `signature-${Date.now()}.png`)
+      const req = await requestUpload({
+        kind: 'signature',
+        filename: file.name,
+        contentType: file.type,
+        sizeBytes: file.size,
+      })
+      if (!req.ok) throw new Error('Signature upload could not start')
+      const result = await finalizeUpload(await uploadReservedFile(req, file))
+      if (!result.ok) throw new Error('Signature upload could not finish')
+      onChange({ attachmentId: result.attachmentId, url: result.url })
+    } catch {
+      setError(true)
+    } finally {
+      setSaving(false)
     }
-    const fin = await finalizeUpload(finalizeInput)
-    if (!fin.ok) return
-    onChange({ attachmentId: fin.attachmentId, url: fin.url })
   }
 
   return (
     <div>
-      <SignaturePad value={stored?.url ?? null} onChange={persist} disabled={readOnly} />
+      {!readOnly && !stored && allowSavedSignature && saved ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mb-2"
+          onClick={() => onChange({ ...saved.signature })}
+        >
+          <GeneratedValue value="Use my saved signature" />
+        </Button>
+      ) : null}
+      <SignaturePad value={stored?.url ?? null} onChange={persist} disabled={readOnly || saving} />
+      {error ? (
+        <p role="alert" className="text-sm text-red-600">
+          <GeneratedValue value="Could not save your signature. Please draw it again and retry." />
+        </p>
+      ) : null}
     </div>
   )
 }

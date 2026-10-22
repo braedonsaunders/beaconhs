@@ -177,7 +177,7 @@ export function VerifyBody({
         <Label>
           <GeneratedText id="m_13cdbd4c691489" />
         </Label>
-        <SignaturePad value={sig} onChange={setSig} />
+        <SignaturePad reuseOwnSignature value={sig} onChange={setSig} />
       </div>
       <GeneratedValue
         value={

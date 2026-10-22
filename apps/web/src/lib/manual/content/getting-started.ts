@@ -323,7 +323,7 @@ Your email address is shown here but cannot be changed yourself. Ask your admin 
 
 ## Setting your signature
 
-Your saved signature is used when you sign off forms, inspections, and lift plans — so you do not have to draw it every time.
+Save your signature in **Account → Signature**, then choose **Saved signature reuse**. **Off — draw each time** is the default. Choose **Use my saved signature button** to apply it yourself, or **Automatically fill my signing fields** to fill an empty signing pad for your own identity. You still choose the normal **Save**, **Sign**, or **Done** action. Reuse never signs for another person or completes an approval automatically. Replacing or clearing your account signature leaves signatures already saved on records unchanged. This setting belongs to your employee record in the current workspace.
 
 1. Open [Account](/account) and find the **Signature** card.
 2. Draw your signature in the box with your finger or mouse. On a phone, turn it sideways for more room.

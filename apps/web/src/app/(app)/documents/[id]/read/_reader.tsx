@@ -1,4 +1,5 @@
 'use client'
+import { SignaturePad } from '@/components/signature-pad'
 
 import {
   GeneratedText,
@@ -11,7 +12,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Check, ChevronDown, ChevronUp, PenLine } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle, Badge, Button, SignaturePad } from '@beaconhs/ui'
+import { Alert, AlertDescription, AlertTitle, Badge, Button } from '@beaconhs/ui'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { acknowledgeDocument } from '../_ack-actions'
 import { DocumentPdfPane } from '../_pdf-pane'
@@ -141,7 +142,12 @@ export function DocumentReader({
                         <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
                           <PenLine size={12} /> <GeneratedText id="m_13cdbd4c691489" />
                         </div>
-                        <SignaturePad value={sig} onChange={setSig} height={140} />
+                        <SignaturePad
+                          reuseOwnSignature
+                          value={sig}
+                          onChange={setSig}
+                          height={140}
+                        />
                       </div>
                     ) : null
                   }

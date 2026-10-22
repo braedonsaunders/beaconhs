@@ -356,7 +356,9 @@ Only an **In progress** enrollment can be evaluated. Finished, expired, or withd
 
 - A self-paced course only appears in workers' course lists once it has at least one module of content.
 - Pick which certificate designs a course issues under **Credential designs** in Overview.
-- Slideshow lessons can import PowerPoint files — see [Course slideshows & PowerPoint](/help/training-slideshows).`,
+- Slideshow lessons can import PowerPoint files — see [Course slideshows & PowerPoint](/help/training-slideshows).
+
+When signing as yourself, your Account signature-reuse setting can offer **Use my saved signature** or fill your empty pad. Review it and finish the usual signing action. When collecting a signature from another person, ask that person to sign; your saved signature is not offered for their slot.`,
   },
   {
     slug: 'training-slideshows',
@@ -543,7 +545,9 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 ## Tips
 
 - If you cannot find a document, check your spelling, then try a shorter search word.
-- Need training instead of a document? See [Training & certificates](/help/training).`,
+- Need training instead of a document? See [Training & certificates](/help/training).
+
+When signing as yourself, your Account signature-reuse setting can offer **Use my saved signature** or fill your empty pad. Review it and finish the usual signing action. When collecting a signature from another person, ask that person to sign; your saved signature is not offered for their slot.`,
   },
   {
     slug: 'documents-authoring',

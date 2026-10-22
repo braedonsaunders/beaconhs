@@ -155,7 +155,9 @@ On a person's page, every field — including groups, job titles, and company-sp
 ## Tips
 
 - Some companies sync people from another system. Synced fields show as read-only and cannot be edited here. If a locked field is wrong, fix it in the source system and it will update on the next sync.
-- Overdue training and other requirements for one person live on their **Compliance** tab. For the whole company, see [Managing compliance](/help/compliance-management).`,
+- Overdue training and other requirements for one person live on their **Compliance** tab. For the whole company, see [Managing compliance](/help/compliance-management).
+
+Managers can set **Default journal type** in an employee’s profile to **Worker** or **Supervisor**. Leaving the field unset uses **Worker (default)**. This preference remains editable on synced profiles and does not change the employee’s permissions.`,
   },
   {
     slug: 'locations',
@@ -763,7 +765,9 @@ Open [Monitored sessions](/apps/sessions) to review every timed Builder session 
 
 Reviewers can open [Form transcripts](/apps/transcripts) to find a person and see every form they participated in or signed. Search and sort the people list, then open a person. Their transcript can be searched, filtered by record status, sorted, and paged without changing the all-time summary above it.
 
-Capture steps assigned only to the person filling in the form are navigation pages. They do not appear as pending approvals on a saved response unless a workflow action has been recorded or the builder explicitly enabled review. Required workflow signatures and steps assigned to another reviewer still appear in the workflow card. The Fall Protection Plan keeps its four capture sections and its Supervisor signature inside the form.`,
+Capture steps assigned only to the person filling in the form are navigation pages. They do not appear as pending approvals on a saved response unless a workflow action has been recorded or the builder explicitly enabled review. Required workflow signatures and steps assigned to another reviewer still appear in the workflow card. The Fall Protection Plan keeps its four capture sections and its Supervisor signature inside the form.
+
+For a signature field that belongs to the person creating the form, open its **Default** settings and choose **Creator's saved signature**. Automatic filling applies only to a new response when the creator has enabled it in Account. With the button setting, the creator chooses **Use my saved signature**. Existing signatures are kept. Other people’s signature fields must remain without this creator default. Workflow sign-offs still require their normal signing action.`,
   },
   {
     slug: 'user-access',

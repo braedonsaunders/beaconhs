@@ -48,7 +48,7 @@ export function SigningRoster({
   const generation = useRef(0)
   const [drawer, setDrawer] = useState<{
     revision: number
-    signers: { id: string; name: string }[]
+    signers: { id: string; name: string; personId?: string | null }[]
     ready: boolean
   } | null>(null)
   async function refresh(signal?: AbortSignal) {

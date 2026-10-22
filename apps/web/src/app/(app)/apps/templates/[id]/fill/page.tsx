@@ -1,3 +1,4 @@
+import { loadMySavedSignature } from '@/lib/saved-signature'
 import { responseInitialState } from '@/app/(app)/apps/_lib/response-initial-state'
 import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
@@ -257,6 +258,10 @@ export default async function FillTemplatePage({
   const aiDraftEnabled =
     !readOnly && can(ctx, 'forms.ai.generate') && (await getTenantAiConfig(ctx)) !== null
 
+  const savedSignature =
+    !readOnly && (!data.responseRow || data.responseRow.submittedBy === ctx.membership?.id)
+      ? await loadMySavedSignature(ctx)
+      : null
   return (
     <FormRenderer
       templateId={data.tmpl.id}
@@ -267,6 +272,7 @@ export default async function FillTemplatePage({
       people={data.people}
       entitiesByField={entitiesByField}
       currentUser={{
+        savedSignature,
         personId: data.currentPerson?.id ?? null,
         name: data.currentPerson
           ? `${data.currentPerson.firstName} ${data.currentPerson.lastName}`

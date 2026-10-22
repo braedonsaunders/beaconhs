@@ -10,24 +10,25 @@ import { GeneratedText } from '@/i18n/generated'
 
 // Self-service signature capture for the account page. The user draws their
 // signature on the shared SignaturePad and saves it to their linked person
-// record; every form sign-off / inspection / lift plan / PDF renders it from
-// there. Replaces the admin-only image-upload that used to live on the person
-// detail page.
+// record. Personal consent controls reuse; signed records keep their own
+// saved evidence when the profile image changes or is cleared.
 
 import { useState, useTransition } from 'react'
 import { Loader2 } from 'lucide-react'
-import { Button, SignaturePad } from '@beaconhs/ui'
+import { Button, SignaturePad, Label, Select } from '@beaconhs/ui'
 import { RawImage } from '@/components/raw-image'
 import { toast } from '@/lib/toast'
-import { clearMySignature, saveMySignature } from './actions'
+import { clearMySignature, saveMySignature, saveMySignatureReuseMode } from './actions'
 
 export function SignatureSection({
   currentUrl,
   linked,
+  reuseMode = 'off',
 }: {
   currentUrl: string | null
   /** False when the login is not linked to a person record — nothing to sign for. */
   linked: boolean
+  reuseMode?: 'off' | 'manual' | 'automatic'
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -94,6 +95,33 @@ export function SignatureSection({
         }
       />
 
+      <div className="space-y-2">
+        <Label htmlFor="signature-reuse">
+          <GeneratedValue value="Saved signature reuse" />
+        </Label>
+        <Select
+          id="signature-reuse"
+          value={reuseMode}
+          disabled={pending || !currentUrl}
+          onChange={(e) => {
+            const next = e.target.value
+            startTransition(async () => {
+              const result = await saveMySignatureReuseMode(next)
+              if (!result.ok)
+                toast.error(tGeneratedValue(result.error ?? 'Could not save signature settings.'))
+            })
+          }}
+        >
+          <option value="off">{tGeneratedValue('Off — draw each time')}</option>
+          <option value="manual">{tGeneratedValue('Use my saved signature button')}</option>
+          <option value="automatic">
+            {tGeneratedValue('Automatically fill my signing fields')}
+          </option>
+        </Select>
+        <p className="text-sm text-slate-500">
+          <GeneratedValue value="Reuse fills your own signing pad and form fields configured for the creator. You still choose Save or Sign. It never signs for another person or completes an approval automatically." />
+        </p>
+      </div>
       <div className="space-y-1.5">
         <p className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
           <GeneratedValue
