@@ -1,2 +1,5 @@
 # Historical UI-only example credential token, not an authentication secret.
 3e175baad5c52957402b69c24c1001a9d182f39a:apps/web/src/app/(app)/training/credential-designs/studio.tsx:generic-api-key:82
+
+# Reviewed Rassaun tenant UUID in migration 0084; a database identifier, not a credential.
+8b59bec1d756576404c2bea51a767a9b9338f22b:packages/db/drizzle/0084_hazard_signing_usability.sql:generic-api-key:103
