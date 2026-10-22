@@ -761,7 +761,9 @@ Open [Monitored sessions](/apps/sessions) to review every timed Builder session 
 
 ## Review person transcripts
 
-Reviewers can open [Form transcripts](/apps/transcripts) to find a person and see every form they participated in or signed. Search and sort the people list, then open a person. Their transcript can be searched, filtered by record status, sorted, and paged without changing the all-time summary above it.`,
+Reviewers can open [Form transcripts](/apps/transcripts) to find a person and see every form they participated in or signed. Search and sort the people list, then open a person. Their transcript can be searched, filtered by record status, sorted, and paged without changing the all-time summary above it.
+
+Capture steps assigned only to the person filling in the form are navigation pages. They do not appear as pending approvals on a saved response unless a workflow action has been recorded or the builder explicitly enabled review. Required workflow signatures and steps assigned to another reviewer still appear in the workflow card. The Fall Protection Plan keeps its four capture sections and its Supervisor signature inside the form.`,
   },
   {
     slug: 'user-access',

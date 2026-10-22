@@ -61,6 +61,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
 import { isUuid, pickString } from '@/lib/list-params'
 import { WorkflowPanel, type WorkflowStepProp } from './_workflow-panel'
+import { showResponseWorkflow } from './_workflow-visibility'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
@@ -600,6 +601,11 @@ export default async function FormResponsePage({
   // "pending review" cruft.
   const hasSignatureStep = (version.schema.workflow?.steps ?? []).some((s) => s.signatureRequired)
   const reviewEnabled = recordConfig?.tabs?.review ?? (scoreRows.length > 0 || hasSignatureStep)
+  const workflowEnabled = showResponseWorkflow({
+    steps: version.schema.workflow.steps,
+    reviewSetting: recordConfig?.tabs?.review,
+    hasRecordedSteps: steps.length > 0,
+  })
   const commentsEnabled = recordConfig?.tabs?.comments ?? true
   const auditEnabled = recordConfig?.tabs?.audit ?? true
 
@@ -995,7 +1001,7 @@ export default async function FormResponsePage({
         <GeneratedValue
           value={
             active === 'response' ? (
-              <>
+              <div className="flex flex-col gap-5">
                 <GeneratedValue
                   value={
                     response.monitorStatus ? (
@@ -1168,7 +1174,7 @@ export default async function FormResponsePage({
 
                 <GeneratedValue
                   value={
-                    reviewEnabled ? (
+                    workflowEnabled ? (
                       <Section
                         title={tGenerated('m_0297c8dcc879bc', { value0: workflowStepProps.length })}
                         defaultOpen={workflowStepProps.length > 0}
@@ -1199,7 +1205,7 @@ export default async function FormResponsePage({
                     ) : null
                   }
                 />
-              </>
+              </div>
             ) : null
           }
         />
