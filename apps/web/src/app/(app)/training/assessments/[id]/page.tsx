@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { validChoiceOptions, formatAssessmentAnswer } from '../../_lib/assessment-display'
 import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 
@@ -161,24 +162,20 @@ export default async function AssessmentAttemptDetailPage({
               </div>
             }
             actions={
-              <div className="flex items-center gap-2">
+              <RecordActionMenu>
                 <DownloadLink href={`/training/assessments/${attempt.id}/pdf`}>
-                  <Button variant="outline">
-                    <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
-                  </Button>
+                  <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
                 </DownloadLink>
                 <GeneratedValue
                   value={
                     attempt.status === 'submitted' && attempt.passed ? (
                       <Link href={`/training/assessments/${attempt.id}/certificate`}>
-                        <Button variant="outline">
-                          <Award size={14} /> <GeneratedText id="m_12069317ccd53b" />
-                        </Button>
+                        <Award size={14} /> <GeneratedText id="m_12069317ccd53b" />
                       </Link>
                     ) : null
                   }
                 />
-              </div>
+              </RecordActionMenu>
             }
           />
 

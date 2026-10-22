@@ -158,6 +158,8 @@ export const TENANT_SCOPED_TABLES = [
   'equipment_checkouts',
   'equipment_station_settings',
   'equipment_inspection_schedules',
+  'equipment_service_plans',
+  'equipment_meters',
   'equipment_reminders',
   'equipment_maintenance_dispatches',
   'domain_event_outbox',

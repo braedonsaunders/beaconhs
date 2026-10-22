@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -96,11 +97,27 @@ export default async function SafeDistanceDetailPage({
       )}
       badge={lockedBadge}
       actions={
-        <div className="flex items-center gap-2">
+        <RecordActionMenu
+          destructive={
+            <>
+              <GeneratedValue
+                value={
+                  row.locked ? null : (
+                    <form action={deleteSafeDistanceRecordAndRedirect}>
+                      <input type="hidden" name="id" value={row.id} />
+                      <input type="hidden" name="version" value={row.updatedAt.toISOString()} />
+                      <Button variant="outline" type="submit">
+                        <GeneratedText id="m_11773f3c3f7558" />
+                      </Button>
+                    </form>
+                  )
+                }
+              />
+            </>
+          }
+        >
           <Link href={`/tools/safe-distance/${row.id}/print`} target="_blank">
-            <Button variant="outline">
-              <GeneratedText id="m_016088be0b1e51" />
-            </Button>
+            <GeneratedText id="m_016088be0b1e51" />
           </Link>
           <form action={toggleLockSafeDistanceRecord}>
             <input type="hidden" name="id" value={row.id} />
@@ -118,20 +135,7 @@ export default async function SafeDistanceDetailPage({
               />
             </Button>
           </form>
-          <GeneratedValue
-            value={
-              row.locked ? null : (
-                <form action={deleteSafeDistanceRecordAndRedirect}>
-                  <input type="hidden" name="id" value={row.id} />
-                  <input type="hidden" name="version" value={row.updatedAt.toISOString()} />
-                  <Button variant="outline" type="submit">
-                    <GeneratedText id="m_11773f3c3f7558" />
-                  </Button>
-                </form>
-              )
-            }
-          />
-        </div>
+        </RecordActionMenu>
       }
     />
   )

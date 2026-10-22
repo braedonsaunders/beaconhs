@@ -9,6 +9,7 @@ import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { useRowSelection } from '@/lib/row-selection'
 import { BulkEquipmentBar } from './_bulk-bar'
+import { EQUIPMENT_STATUS_OPTIONS } from '@/lib/equipment-status'
 
 export type EquipmentTableRow = {
   id: string
@@ -70,8 +71,15 @@ export function EquipmentRecordsTable({
               person={r.holderName}
               reference={r.assetTag}
               status={
-                <Badge variant={r.status === 'in_service' ? 'success' : 'warning'}>
-                  <GeneratedValue value={r.status.replace('_', ' ')} />
+                <Badge
+                  className="whitespace-nowrap"
+                  variant={r.status === 'in_service' ? 'success' : 'warning'}
+                >
+                  <GeneratedValue
+                    value={
+                      EQUIPMENT_STATUS_OPTIONS.find((option) => option.value === r.status)!.label
+                    }
+                  />
                 </Badge>
               }
               title={tGeneratedValue(r.name)}
@@ -111,7 +119,18 @@ export function EquipmentRecordsTable({
 
       {/* Tablet/desktop: full sortable table. */}
       <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[1400px] table-fixed text-sm">
+          <colgroup>
+            {canBulk && <col className="w-10" />}
+            <col className="w-24" />
+            <col />
+            <col className="w-32" />
+            <col className="w-32" />
+            <col className="w-32" />
+            <col className="w-80" />
+            <col className="w-36" />
+            <col className="w-36" />
+          </colgroup>
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               <GeneratedValue
@@ -175,12 +194,12 @@ export function EquipmentRecordsTable({
                         ) : null
                       }
                     />
-                    <td className="px-3 py-2 font-mono text-xs">
+                    <td className="truncate px-3 py-2 font-mono text-xs" title={r.assetTag}>
                       <Link href={`/equipment/${r.id}` as any} className="hover:underline">
                         <GeneratedValue value={r.assetTag} />
                       </Link>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="truncate px-3 py-2" title={tGeneratedValue(r.name)}>
                       <Link
                         href={`/equipment/${r.id}` as any}
                         className="font-medium text-slate-900 hover:underline dark:text-slate-100"
@@ -188,42 +207,64 @@ export function EquipmentRecordsTable({
                         <GeneratedValue value={r.name} />
                       </Link>
                     </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    <td
+                      className="truncate px-3 py-2 text-slate-600 dark:text-slate-400"
+                      title={tGeneratedValue(r.categoryName ?? undefined)}
+                    >
                       <GeneratedValue value={r.categoryName ?? '—'} />
                     </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    <td
+                      className="truncate px-3 py-2 text-slate-600 dark:text-slate-400"
+                      title={tGeneratedValue(r.typeName ?? undefined)}
+                    >
                       <GeneratedValue value={r.typeName ?? '—'} />
                     </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    <td
+                      className="truncate px-3 py-2 text-slate-600 dark:text-slate-400"
+                      title={tGeneratedValue(r.departmentName ?? undefined)}
+                    >
                       <GeneratedValue value={r.departmentName ?? '—'} />
                     </td>
                     <td className="px-3 py-2">
-                      <Badge variant={r.status === 'in_service' ? 'success' : 'warning'}>
-                        <GeneratedValue value={r.status.replace('_', ' ')} />
-                      </Badge>
-                      <GeneratedValue
-                        value={
-                          r.isMissing ? (
-                            <Badge variant="destructive" className="ml-1">
-                              <GeneratedText id="m_17d4002de0d5b5" />
-                            </Badge>
-                          ) : null
-                        }
-                      />
-                      <GeneratedValue
-                        value={
-                          r.isDraft ? (
-                            <Badge variant="outline" className="ml-1">
-                              <GeneratedText id="m_13f3db1d0ca2fe" />
-                            </Badge>
-                          ) : null
-                        }
-                      />
+                      <div className="flex items-center gap-1 whitespace-nowrap">
+                        <Badge variant={r.status === 'in_service' ? 'success' : 'warning'}>
+                          <GeneratedValue
+                            value={
+                              EQUIPMENT_STATUS_OPTIONS.find((option) => option.value === r.status)!
+                                .label
+                            }
+                          />
+                        </Badge>
+                        <GeneratedValue
+                          value={
+                            r.isMissing ? (
+                              <Badge variant="destructive" className="shrink-0">
+                                <GeneratedText id="m_17d4002de0d5b5" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            r.isDraft ? (
+                              <Badge variant="outline" className="shrink-0">
+                                <GeneratedText id="m_13f3db1d0ca2fe" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
+                      </div>
                     </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    <td
+                      className="truncate px-3 py-2 text-slate-600 dark:text-slate-400"
+                      title={tGeneratedValue(r.siteName ?? undefined)}
+                    >
                       <GeneratedValue value={r.siteName ?? '—'} />
                     </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    <td
+                      className="truncate px-3 py-2 text-slate-600 dark:text-slate-400"
+                      title={tGeneratedValue(r.holderName ?? undefined)}
+                    >
                       <GeneratedValue value={r.holderName ?? '—'} />
                     </td>
                   </tr>

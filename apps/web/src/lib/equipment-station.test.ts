@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Database } from '@beaconhs/db'
 import { equipmentCheckouts, equipmentItems } from '@beaconhs/db/schema'
-import { parseStationScanInput, stationScanCore } from './equipment-station'
+import { parseStationScanInput, stationScanCore, searchStationCore } from './equipment-station'
 
 const PERSON = '00000000-0000-4000-8000-000000000001'
 
@@ -131,5 +131,68 @@ describe('person-only equipment checkout', () => {
       }),
     ).toEqual({ ok: false, error: 'Pick a valid check-out destination' })
     expect(invalid.writes).toEqual([])
+  })
+})
+
+describe('reviewed station movements', () => {
+  it('rejects a stale checkout without toggling it into a check-in', async () => {
+    const { tx, writes } = checkoutTx([[{ ...asset, isOut: true }]])
+    expect(await stationScanCore(tx, { ...checkoutArgs, activePersonId: PERSON })).toEqual({
+      ok: false,
+      error: 'TRUCK-1 is already checked out',
+    })
+    expect(writes).toEqual([])
+  })
+  it('rejects an equipment tag that has been reassigned since review', async () => {
+    const { tx, writes } = checkoutTx([[asset]])
+    expect(await stationScanCore(tx, { ...checkoutArgs, equipmentItemId: PERSON })).toEqual({
+      ok: false,
+      error: 'Equipment no longer matches this tag. Remove it and search again.',
+    })
+    expect(writes).toEqual([])
+    expect(parseStationScanInput({ code: 'TRUCK-1', equipmentItemId: 'invalid' })).toBeNull()
+    expect(parseStationScanInput({ code: 'TRUCK-1', equipmentItemId: PERSON })).toMatchObject({
+      equipmentItemId: PERSON,
+    })
+  })
+  it('enforces the configured return condition before changing custody', async () => {
+    const { tx, writes } = checkoutTx([[{ ...asset, isOut: true }]])
+    expect(
+      await stationScanCore(tx, {
+        ...checkoutArgs,
+        direction: 'in',
+        requireConditionOnCheckin: true,
+      }),
+    ).toEqual({ ok: false, error: 'Choose a return condition before checking in' })
+    expect(writes).toEqual([])
+  })
+})
+
+describe('station code lookup', () => {
+  it('resolves printed scan URLs as equipment tokens without issuing a movement', async () => {
+    const conditions: unknown[] = []
+    const equipmentRow = { ...asset, typeName: 'Truck', holderFirst: null, holderLast: null }
+    const results: unknown[][] = [[equipmentRow], []]
+    const chain = {
+      from: () => chain,
+      leftJoin: () => chain,
+      where: (condition: unknown) => {
+        conditions.push(condition)
+        return chain
+      },
+      orderBy: () => chain,
+      limit: async () => results.shift() ?? [],
+    }
+    const tx = { select: () => chain, insert: vi.fn(), update: vi.fn() } as unknown as Database
+    expect(
+      await searchStationCore(tx, 'https://beacon.example/equipment/scan/token-123', 24, 'code'),
+    ).toMatchObject({ equipment: [{ id: asset.id, assetTag: asset.assetTag }], people: [] })
+    const { PgDialect } = await import('drizzle-orm/pg-core')
+    const query = new PgDialect().sqlToQuery(conditions[0] as import('drizzle-orm').SQL)
+    expect(query.params).toContain('token-123')
+    expect(query.sql).toContain('qr_token')
+    expect(query.sql).not.toContain('ilike')
+    expect(tx.insert).not.toHaveBeenCalled()
+    expect(tx.update).not.toHaveBeenCalled()
   })
 })

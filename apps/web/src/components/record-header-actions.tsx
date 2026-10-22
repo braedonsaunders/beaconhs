@@ -8,8 +8,9 @@ import { type ReactNode, useRef, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Button } from '@beaconhs/ui'
 import { DownloadLink } from '@/components/download-link'
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { confirmDialog } from '@/lib/confirm'
-import { Copy, FileText, Lock, Mail, MoreHorizontal, Shield, Trash2, Unlock } from 'lucide-react'
+import { Copy, FileText, Lock, Mail, Shield, Trash2, Unlock } from 'lucide-react'
 import {
   GeneratedText,
   GeneratedValue,
@@ -78,12 +79,10 @@ function ConfirmedSubmitButton({
  */
 function CopySubmit({
   label,
-  className,
   iconSize,
   offerPhotoCopy = false,
 }: {
   label: string
-  className?: string
   iconSize: number
   offerPhotoCopy?: boolean
 }) {
@@ -157,18 +156,14 @@ function CopySubmit({
       {pending || preparing ? tGenerated('m_17f0584a533f66') : tGeneratedValue(label)}
     </>
   )
-  return className ? (
-    <button type="submit" className={className} disabled={pending || preparing} onClick={prepare}>
-      {content}
-    </button>
-  ) : (
+  return (
     <Button variant="outline" type="submit" disabled={pending || preparing} onClick={prepare}>
       {content}
     </Button>
   )
 }
 
-/** Shared responsive action row for auditable operational records. */
+/** Shared actions for auditable operational records, on every screen size. */
 export function RecordHeaderActions({
   id,
   locked,
@@ -217,7 +212,6 @@ export function RecordHeaderActions({
 }) {
   const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
-  const [open, setOpen] = useState(false)
   const [lockError, setLockError] = useState<Exclude<LockResult, void> | null>(null)
   async function changeLock(formData: FormData): Promise<void> {
     setLockError(null)
@@ -257,6 +251,48 @@ export function RecordHeaderActions({
           </>
         )}
       </ConfirmedSubmitButton>
+    </form>
+  )
+  // Copy and lock forms stay connected while confirmation dialogs are open.
+  const secondaryActions = (
+    <>
+      {review ? (
+        <Link href={review.href as never} scroll={false}>
+          <Shield size={15} /> {review.label ?? <GeneratedText id="m_039fc01243fb46" />}
+        </Link>
+      ) : null}
+      <DownloadLink href={pdfHref}>
+        <FileText size={15} /> <GeneratedText id="m_016088be0b1e51" />
+      </DownloadLink>
+      {canEmail ? (
+        <Link href={emailHref as never} scroll={false}>
+          <Mail size={15} /> <GeneratedText id="m_09dfca28fc95ba" />
+        </Link>
+      ) : null}
+      {canCopy ? (
+        <form action={copyAction}>
+          <input type="hidden" name="id" value={id} />
+          <input type="hidden" name="includePhotos" defaultValue="0" />
+          <CopySubmit label={copyLabel} iconSize={15} offerPhotoCopy={offerPhotoCopy} />
+        </form>
+      ) : null}
+    </>
+  )
+
+  return (
+    <>
+      <RecordActionMenu
+        destructive={
+          canDelete ? (
+            <Link href={deleteHref as never} scroll={false}>
+              <Trash2 size={15} /> <GeneratedText id="m_11773f3c3f7558" />
+            </Link>
+          ) : null
+        }
+      >
+        {secondaryActions}
+        {canLock ? lockForm : null}
+      </RecordActionMenu>
       {lockError ? (
         <div role="alert" className="mt-2 max-w-sm text-sm text-red-700 dark:text-red-300">
           <GeneratedValue value={lockError.error} />
@@ -269,131 +305,6 @@ export function RecordHeaderActions({
           ) : null}
         </div>
       ) : null}
-    </form>
-  )
-  const menuItem =
-    'flex min-h-11 w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800'
-
-  // Every sheet row closes the sheet itself. Closing from the sheet container
-  // instead would unmount the copy <form> while the tap is still being
-  // dispatched, and the browser cancels submission of a disconnected form — the
-  // copy button would silently do nothing on a phone. The copy form is left
-  // mounted on purpose: it shows its pending state and the redirect to the new
-  // record unmounts the whole header.
-  const secondaryActions = (
-    <>
-      {review ? (
-        <Link
-          href={review.href as never}
-          scroll={false}
-          className={menuItem}
-          onClick={() => setOpen(false)}
-        >
-          <Shield size={15} /> {review.label ?? <GeneratedText id="m_039fc01243fb46" />}
-        </Link>
-      ) : null}
-      <DownloadLink href={pdfHref} className={menuItem} onClick={() => setOpen(false)}>
-        <FileText size={15} /> <GeneratedText id="m_016088be0b1e51" />
-      </DownloadLink>
-      {canEmail ? (
-        <Link
-          href={emailHref as never}
-          scroll={false}
-          className={menuItem}
-          onClick={() => setOpen(false)}
-        >
-          <Mail size={15} /> <GeneratedText id="m_09dfca28fc95ba" />
-        </Link>
-      ) : null}
-      {canCopy ? (
-        <form action={copyAction}>
-          <input type="hidden" name="id" value={id} />
-          <input type="hidden" name="includePhotos" defaultValue="0" />
-          <CopySubmit
-            label={copyLabel}
-            className={menuItem}
-            iconSize={15}
-            offerPhotoCopy={offerPhotoCopy}
-          />
-        </form>
-      ) : null}
-      {canDelete ? (
-        <Link
-          href={deleteHref as never}
-          scroll={false}
-          className={`${menuItem} border-t border-slate-100 text-red-600 dark:border-slate-800 dark:text-red-400`}
-          onClick={() => setOpen(false)}
-        >
-          <Trash2 size={15} /> <GeneratedText id="m_11773f3c3f7558" />
-        </Link>
-      ) : null}
-    </>
-  )
-
-  return (
-    <>
-      <div className="hidden items-center gap-2 sm:flex">
-        {review ? (
-          <Link href={review.href as never} scroll={false}>
-            <Button variant="outline">
-              <Shield size={14} /> {review.label ?? <GeneratedText id="m_039fc01243fb46" />}
-            </Button>
-          </Link>
-        ) : null}
-        <DownloadLink href={pdfHref}>
-          <Button variant="outline">
-            <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
-          </Button>
-        </DownloadLink>
-        {canEmail ? (
-          <Link href={emailHref as never} scroll={false}>
-            <Button variant="outline">
-              <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
-            </Button>
-          </Link>
-        ) : null}
-        {canCopy ? (
-          <form action={copyAction}>
-            <input type="hidden" name="id" value={id} />
-            <input type="hidden" name="includePhotos" defaultValue="0" />
-            <CopySubmit label={copyLabel} iconSize={14} offerPhotoCopy={offerPhotoCopy} />
-          </form>
-        ) : null}
-        {canLock ? lockForm : null}
-        {canDelete ? (
-          <Link href={deleteHref as never} scroll={false}>
-            <Button variant="outline" className="text-red-600 hover:bg-red-50">
-              <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
-            </Button>
-          </Link>
-        ) : null}
-      </div>
-
-      <div className="flex items-center gap-2 sm:hidden">
-        {canLock ? lockForm : null}
-        <Button
-          variant="outline"
-          type="button"
-          aria-label={tGenerated('m_08ea20074b7d47')}
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          <MoreHorizontal size={16} />
-        </Button>
-        {open ? (
-          <>
-            <button
-              type="button"
-              aria-label={tGenerated('m_091cc178866e80')}
-              className="fixed inset-0 z-40 bg-slate-900/30"
-              onClick={() => setOpen(false)}
-            />
-            <div className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-              {secondaryActions}
-            </div>
-          </>
-        ) : null}
-      </div>
     </>
   )
 }

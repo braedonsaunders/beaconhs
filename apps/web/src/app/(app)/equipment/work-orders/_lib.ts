@@ -128,6 +128,7 @@ export async function createEquipmentWorkOrder(
     },
   })
   revalidatePath('/equipment/work-orders')
+  revalidatePath('/equipment/maintenance')
   revalidatePath(`/equipment/${parsed.itemId}`)
   return row
 }

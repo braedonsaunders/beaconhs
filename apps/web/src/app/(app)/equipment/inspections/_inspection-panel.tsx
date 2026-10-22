@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { setEquipmentInspectionDeleted } from '../_lifecycle-actions'
 import { ConfirmButton } from '@/components/confirm-button'
@@ -86,7 +87,7 @@ export async function EquipmentInspectionDrawer({
   const id = open && inspectionId && isUuid(inspectionId) ? inspectionId : null
   if (!id) {
     return (
-      <UrlDrawer open={false} closeHref={closeHref} title={tGenerated('m_039d6635ac0051')}>
+      <UrlDrawer open={false} closeHref={closeHref} title={tGenerated('m_189bb91aaf5565')}>
         {null}
       </UrlDrawer>
     )
@@ -234,7 +235,7 @@ export async function EquipmentInspectionDrawer({
 
   if (!data) {
     return (
-      <UrlDrawer open closeHref={closeHref} title={tGenerated('m_039d6635ac0051')}>
+      <UrlDrawer open closeHref={closeHref} title={tGenerated('m_189bb91aaf5565')}>
         <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
           <GeneratedText id="m_0279fd6c5a9fba" />
         </p>
@@ -313,29 +314,30 @@ export async function EquipmentInspectionDrawer({
           // under it without the list appearing to end early.
           <div className="flex w-full items-center justify-between gap-3">
             <InspectionStatusPill status={progress} answered={answered} total={total} />
-            <div className="flex flex-wrap items-center gap-2">
-              {canManage ? (
-                <form action={setEquipmentInspectionDeleted}>
-                  <input type="hidden" name="recordId" value={record.id} />
-                  <input type="hidden" name="restore" value={record.deletedAt ? '1' : '0'} />
-                  <ConfirmButton
-                    variant={record.deletedAt ? 'outline' : 'destructive'}
-                    message={
-                      record.deletedAt
-                        ? tGenerated('m_1690e5c18e011e')
-                        : tGenerated('m_1efe21aa2caf3d')
-                    }
-                  >
-                    {record.deletedAt
-                      ? tGenerated('m_19500e41842c99')
-                      : tGenerated('m_11773f3c3f7558')}
-                  </ConfirmButton>
-                </form>
-              ) : null}
+            <RecordActionMenu
+              destructive={
+                canManage ? (
+                  <form action={setEquipmentInspectionDeleted}>
+                    <input type="hidden" name="recordId" value={record.id} />
+                    <input type="hidden" name="restore" value={record.deletedAt ? '1' : '0'} />
+                    <ConfirmButton
+                      variant={record.deletedAt ? 'outline' : 'destructive'}
+                      message={
+                        record.deletedAt
+                          ? tGenerated('m_1690e5c18e011e')
+                          : tGenerated('m_1efe21aa2caf3d')
+                      }
+                    >
+                      {record.deletedAt
+                        ? tGenerated('m_19500e41842c99')
+                        : tGenerated('m_11773f3c3f7558')}
+                    </ConfirmButton>
+                  </form>
+                ) : null
+              }
+            >
               <DownloadLink href={`/equipment/inspections/${record.id}/pdf`}>
-                <Button variant="outline">
-                  <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
-                </Button>
+                <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
               </DownloadLink>
               <GeneratedValue
                 value={
@@ -378,7 +380,7 @@ export async function EquipmentInspectionDrawer({
                   ) : null
                 }
               />
-            </div>
+            </RecordActionMenu>
           </div>
         }
       >

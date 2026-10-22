@@ -381,13 +381,22 @@ export const REPORT_VIEWS_SQL: string[] = [
      e.ownership                          AS ownership,
      sched.last_inspection_on             AS last_inspection_on,
      sched.next_inspection_due            AS next_inspection_due,
-     e.requires_oil_change                AS requires_oil_change,
-     e.last_oil_change_on                 AS last_oil_change_on,
-     e.next_oil_change_due                AS next_oil_change_due,
-     e.oil_change_interval_months         AS oil_change_interval_months,
+     coalesce(oil.requires_oil_change,false) AS requires_oil_change,
+     oil.last_oil_change_on               AS last_oil_change_on,
+     oil.next_oil_change_due              AS next_oil_change_due,
+     oil.oil_change_interval_months       AS oil_change_interval_months,
      e.purchase_date                      AS purchase_date,
      usage.km_ytd                         AS km_ytd
    FROM equipment_items e
+   LEFT JOIN LATERAL (
+     SELECT bool_or(p.is_active) AS requires_oil_change,
+       max(p.last_completed_on) AS last_oil_change_on,
+       min((r.value->>'dueOn')::date) FILTER (WHERE p.is_active AND r.value->>'kind'='calendar') AS next_oil_change_due,
+       min((r.value->>'every')::integer) FILTER (WHERE p.is_active AND r.value->>'kind'='calendar' AND r.value->>'unit'='month') AS oil_change_interval_months
+     FROM equipment_service_plans p
+     CROSS JOIN LATERAL jsonb_array_elements(p.rules) r(value)
+     WHERE p.tenant_id=e.tenant_id AND p.equipment_item_id=e.id AND p.category='oil_change'
+   ) oil ON true
    LEFT JOIN equipment_types t ON t.id = e.type_id AND t.tenant_id = e.tenant_id
    LEFT JOIN equipment_categories type_category
      ON type_category.id = e.category_id AND type_category.tenant_id = e.tenant_id
@@ -407,6 +416,14 @@ export const REPORT_VIEWS_SQL: string[] = [
      WHERE tl.equipment_item_id = e.id AND tl.tenant_id = e.tenant_id
    ) usage ON true
    WHERE e.deleted_at IS NULL`,
+
+  `CREATE OR REPLACE VIEW report_equipment_items AS
+   SELECT e.*,
+     (SELECT min((r.value->>'dueOn')::date)
+      FROM equipment_service_plans p CROSS JOIN LATERAL jsonb_array_elements(p.rules) r(value)
+      WHERE p.tenant_id=e.tenant_id AND p.equipment_item_id=e.id AND p.is_active
+        AND p.category='oil_change' AND r.value->>'kind'='calendar') AS next_oil_change_due
+   FROM equipment_items e`,
 
   // PPE report projection with the legacy filter/group dimensions resolved to
   // readable names. The raw ids remain available for exact runtime filters.

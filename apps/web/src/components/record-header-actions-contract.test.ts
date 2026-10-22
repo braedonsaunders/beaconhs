@@ -10,29 +10,14 @@ function sheetSource(): string {
   return source.slice(start, end)
 }
 
-describe('record header actions mobile sheet contract', () => {
-  // Regression: the sheet used to close from its own container onClick. That
-  // unmounts the copy <form> while the tap is still dispatching, and a browser
-  // cancels submission of a disconnected form — "Copy" silently did nothing on
-  // a phone, and people reached for the neighbouring "Submit & lock" instead.
-  it('never closes the sheet from the container that wraps the copy form', () => {
-    const container = source.slice(source.indexOf('bottom-[calc(0.75rem'))
-
-    expect(container).not.toContain('onClick={() => setOpen(false)}')
-    expect(source).toContain('{secondaryActions}')
+describe('record header actions menu contract', () => {
+  it('uses one persistent action menu with destructive actions in its final section', () => {
+    expect(source).toContain('<RecordActionMenu')
+    expect(source).toContain('destructive={')
+    expect(source).not.toContain('hidden items-center gap-2 sm:flex')
   })
-
-  it('closes the sheet from each navigating row instead', () => {
+  it('keeps the copy action and photo choice on the original server-action form', () => {
     const sheet = sheetSource()
-    const rows = sheet.match(/<(?:Link|DownloadLink)\b/g) ?? []
-
-    expect(rows.length).toBeGreaterThan(0)
-    expect(sheet.match(/onClick=\{\(\) => setOpen\(false\)\}/g)).toHaveLength(rows.length)
-  })
-
-  it('keeps the copy form mounted and shows a pending state instead of closing', () => {
-    const sheet = sheetSource()
-
     expect(sheet).toContain('<form action={copyAction}>')
     expect(sheet).toContain('offerPhotoCopy={offerPhotoCopy}')
     expect(source).toContain('const { pending } = useFormStatus()')
@@ -44,7 +29,7 @@ describe('record header actions submit contract', () => {
   it('confirms before running lock or unlock flows', () => {
     const lockForm = source.slice(
       source.indexOf('const lockForm = ('),
-      source.indexOf('const menuItem ='),
+      source.indexOf('const secondaryActions ='),
     )
 
     expect(lockForm).toContain('<ConfirmedSubmitButton')

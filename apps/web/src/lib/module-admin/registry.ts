@@ -287,7 +287,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       },
       {
         key: 'inspections',
-        label: 'Equipment Checks',
+        label: 'Inspections',
         href: '/equipment/inspections',
         permission: 'equipment.read.self',
       },
@@ -402,12 +402,12 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
   },
   {
     moduleKey: 'equipment-inspections',
-    label: 'Equipment checks',
+    label: 'Inspections',
     href: '/equipment/inspections',
     managePath: '/equipment/manage',
     iconKey: 'clipboard',
     permission: 'equipment.manage',
-    tabs: [{ key: 'inspections', label: 'Equipment Checks', href: '/equipment/inspections' }],
+    tabs: [{ key: 'inspections', label: 'Inspections', href: '/equipment/inspections' }],
     sections: [],
   },
   {

@@ -1465,14 +1465,6 @@ const equipmentCreate = z.object({
   currentSiteOrgUnitId: uuid.nullish(),
   currentHolderPersonId: uuid.nullish(),
   requiresPreUseInspection: z.boolean().default(false),
-  requiresOilChange: z.boolean().default(false),
-  oilChangeIntervalMonths: z.number().int().positive().nullish(),
-  lastOilChangeOn: isoDate
-    .refine((value) => value >= '1902-01-01', 'Enter a valid oil-change date.')
-    .nullish(),
-  nextOilChangeDue: isoDate
-    .refine((value) => value >= '1902-01-01', 'Enter a valid oil-change date.')
-    .nullish(),
   metadata,
 })
 
@@ -1550,10 +1542,6 @@ async function createEquipment(ctx: RequestContext, raw: unknown): Promise<Write
         lastSeenSiteOrgUnitId: b.currentSiteOrgUnitId ?? null,
         lastSeenHolderPersonId: b.currentHolderPersonId ?? null,
         requiresPreUseInspection: b.requiresPreUseInspection,
-        requiresOilChange: b.requiresOilChange,
-        oilChangeIntervalMonths: b.oilChangeIntervalMonths ?? null,
-        lastOilChangeOn: optionalDate(b.lastOilChangeOn),
-        nextOilChangeDue: optionalDate(b.nextOilChangeDue),
         isAvailableForCheckout: !b.currentHolderPersonId && b.status === 'in_service',
         metadata: b.metadata,
       })
@@ -1613,7 +1601,6 @@ function equipmentResult(row: typeof equipmentItems.$inferSelect): WriteResult {
     serial_number: row.serialNumber,
     status: row.status,
     current_site_org_unit_id: row.currentSiteOrgUnitId,
-    next_oil_change_due: row.nextOilChangeDue,
   }
 }
 
@@ -1687,12 +1674,6 @@ async function updateEquipment(
     if (hasOwn(b, 'requiresPreUseInspection')) {
       patch.requiresPreUseInspection = b.requiresPreUseInspection
     }
-    if (hasOwn(b, 'requiresOilChange')) patch.requiresOilChange = b.requiresOilChange
-    if (hasOwn(b, 'oilChangeIntervalMonths')) {
-      patch.oilChangeIntervalMonths = b.oilChangeIntervalMonths ?? null
-    }
-    if (hasOwn(b, 'lastOilChangeOn')) patch.lastOilChangeOn = optionalDate(b.lastOilChangeOn)
-    if (hasOwn(b, 'nextOilChangeDue')) patch.nextOilChangeDue = optionalDate(b.nextOilChangeDue)
     if (hasOwn(b, 'metadata')) patch.metadata = b.metadata
 
     const nextHolder = hasOwn(b, 'currentHolderPersonId')
@@ -1844,10 +1825,6 @@ const EQUIPMENT_BODY: Json = {
     currentSiteOrgUnitId: { type: 'string', format: 'uuid' },
     currentHolderPersonId: { type: 'string', format: 'uuid' },
     requiresPreUseInspection: { type: 'boolean', default: false },
-    requiresOilChange: { type: 'boolean', default: false },
-    oilChangeIntervalMonths: { type: 'integer', minimum: 1 },
-    lastOilChangeOn: { type: 'string', format: 'date' },
-    nextOilChangeDue: { type: 'string', format: 'date' },
     metadata: { type: 'object', additionalProperties: true },
   },
 }

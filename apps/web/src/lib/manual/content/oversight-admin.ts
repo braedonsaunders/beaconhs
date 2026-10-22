@@ -135,8 +135,10 @@ To print a badge:
 
 1. Open the person's page.
 2. Flip the **ID badge preview** to check both saved sides.
-3. Click **ID badge** to open a print-ready PDF with the front and back of the card.
-4. If the design uses a direct-print provider, click its **Print with…** button to send the finished 300-DPI faces to the tenant-configured card printer. BeaconHS supports cardPresso, Zebra, Evolis, and HID FARGO and audits every accepted job.
+3. Open **Actions**, then choose **ID badge** to open a print-ready PDF with the front and back of the card.
+4. If the design uses a direct-print provider, choose its **Print with…** command under **Actions** to send the finished 300-DPI faces to the tenant-configured card printer. BeaconHS supports cardPresso, Zebra, Evolis, and HID FARGO and audits every accepted job.
+
+When you have permission to remove a person, **Delete person** is the last item under **Actions**. Its confirmation still applies.
 
 To change how badges look:
 

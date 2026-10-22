@@ -35,6 +35,7 @@ import type { PickerOptionsResponse } from '@/lib/picker-options'
 type Settings = {
   pin: string | null
   requireHolder: boolean
+  requireCondition: boolean
 } | null
 
 export type EquipmentKioskConfig = {
@@ -56,6 +57,7 @@ async function loadSettings(
     .select({
       pin: equipmentStationSettings.stationPin,
       requireHolder: equipmentStationSettings.requireHolderOnCheckout,
+      requireCondition: equipmentStationSettings.requireConditionOnCheckin,
     })
     .from(equipmentStationSettings)
     .where(eq(equipmentStationSettings.tenantId, tenantId))
@@ -67,6 +69,7 @@ export async function searchKioskScan(input: {
   tenantId: string
   pin: string
   query: string
+  match?: 'search' | 'code'
 }): Promise<{ ok: true; results: StationSearchResults } | { ok: false; error: string }> {
   if (
     !input ||
@@ -74,7 +77,8 @@ export async function searchKioskScan(input: {
     !isUuid(input.tenantId) ||
     typeof input.pin !== 'string' ||
     typeof input.query !== 'string' ||
-    input.query.length > 200
+    input.query.length > 200 ||
+    (input.match !== undefined && input.match !== 'search' && input.match !== 'code')
   ) {
     return { ok: false, error: 'Invalid kiosk request' }
   }
@@ -94,7 +98,7 @@ export async function searchKioskScan(input: {
       return { ok: false, error: 'Invalid PIN' }
     }
     await resetPublicPinRateLimit(pinLimit.handle)
-    const results = await searchStationCore(tx, input.query)
+    const results = await searchStationCore(tx, input.query, 24, input.match)
     return { ok: true, results }
   })
 }
@@ -274,6 +278,7 @@ export async function performKioskScan(
       tenantId: input.tenantId,
       actorTenantUserId: null,
       requireHolderOnCheckout: settings.requireHolder,
+      requireConditionOnCheckin: settings.requireCondition,
     })
 
     if (result.ok && (result.action === 'checked_out' || result.action === 'checked_in')) {

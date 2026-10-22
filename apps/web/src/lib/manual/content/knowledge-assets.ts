@@ -40,6 +40,10 @@ If **Manage** is available to your role:
 
 Under **Automations**, choose **Assessments** or **Classes**.
 
+## Record actions
+
+Training classes, certificates, skill tickets, and assessment attempts use **Actions** for their record-level commands. Open the menu for the available email, PDF, presentation, renewal, revocation, or certificate commands. Class **Delete** is last. Course lessons and quiz-answer controls stay in their own learning screens.
+
 ## What this is for
 
 Your company assigns you courses — online lessons, quizzes, and classroom sessions. When you finish one, a training record is logged and a certificate is issued. This page also shows when your tickets expire, so nothing lapses on the job.
@@ -104,7 +108,7 @@ Creating or editing a class does not send an initial email. A manager sends it w
 
 Class automation starter templates use the manual **Email class** trigger. Starters with actions or fields that the module cannot use are hidden.
 
-On the class, check the details and roster, then tap **Email class** and confirm. **Class email queued.** means the email is waiting for delivery; it is not a delivery receipt. Check **Admin → Email log** for delivery results.
+On the class, check the details and roster, then choose **Actions → Email class** and confirm. **Class email queued.** means the email is waiting for delivery; it is not a delivery receipt. Check **Admin → Email log** for delivery results.
 
 To send one reminder, choose **Automatic reminder email** on **Details**: **1 day before class**, **2 days before class**, or **1 week before class**. It starts **Off**. A reminder only runs after a manager queues the initial email, while the class is still upcoming and has an active roster. Cancelled and completed classes receive no reminder.
 
@@ -158,7 +162,7 @@ To start one, click **New assessment**. In the flyout, choose the person, then c
 
 Your answers save as you go, to this device first, so you can answer with no signal and come back later. **Submit for grading** and **Complete assessment** need signal. BeaconHS sends your saved answers first, then grades them.
 
-Use **Print / PDF** in the assessment header for a paper copy in the same question order as the page, including every answer choice and your selected answer. Results use a green check for correct answers and a red cross for incorrect answers. Training staff can also see the correct answer after submission. A passed assessment also offers **Certificate**.
+Use **Actions → Print / PDF** in the assessment header for a paper copy in the same question order as the page, including every answer choice and your selected answer. Results use a green check for correct answers and a red cross for incorrect answers. Training staff can also see the correct answer after submission. A passed assessment also offers **Certificate**.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -183,6 +187,10 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
     ],
     requiredPermission: 'training.course.manage',
     body: `Training managers verify externally hosted online courses before BeaconHS issues a record. They can also keep source evidence with records and build native assessments in the same visual editor used for inspections.
+
+## Record actions
+
+On a course certificate or skill ticket, choose **Actions → Renew** to start a renewal or **Actions → Revoke** to withdraw an invalid record. Revocation stays in the separated final section and asks for confirmation.
 
 ## Verify an online course
 
@@ -257,6 +265,10 @@ You need signal to start, renew, or revoke a record, attach files, add attendees
     requiredPermission: 'training.course.manage',
     body: `Courses are built right on the course page — the same page that shows the course's records, classes, and files.
 
+## Record actions
+
+On a class record, open **Actions** for **Email class**, **Print / PDF**, presentation, cancellation, or reopening. **Delete** is last when deletion is allowed.
+
 ## Create a course
 
 1. Open **Training** in the left menu, then **Courses**.
@@ -320,9 +332,9 @@ Presenting never changes anyone's records. When the class is done, issue records
 
 A person marked as a no-show cannot pass. A cancelled class is read-only; choose **Reopen class** before changing details, the roster, or completion decisions. A completed class stays locked so its issued records cannot drift.
 
-Use **Print / PDF** in the class header for a paper session sheet. Times match the timezone used on the class page. The sheet includes the entered **Class location** or selected site and omits the course description. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
+Use **Actions → Print / PDF** in the class header for a paper session sheet. Times match the timezone used on the class page. The sheet includes the entered **Class location** or selected site and omits the course description. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
 
-Once the details and roster are confirmed, choose **Email class** in the header and confirm. Initial emails are always manual. You can opt into **Automatic reminder email** on **Details** after configuring a reminder flow. Class emails use the class times and location and omit the course-description block containing qualified-instructor information. The default **Training class booking** email includes an **Attendees** table with each booked person’s name and email. Cancelled registrations are excluded. An administrator can edit the layout and table under **Admin → Email templates → Training class booking**. New workspaces receive this template and its manual email flow automatically.
+Once the details and roster are confirmed, choose **Actions → Email class** and confirm. Initial emails are always manual. You can opt into **Automatic reminder email** on **Details** after configuring a reminder flow. Class emails use the class times and location and omit the course-description block containing qualified-instructor information. The default **Training class booking** email includes an **Attendees** table with each booked person’s name and email. Cancelled registrations are excluded. An administrator can edit the layout and table under **Admin → Email templates → Training class booking**. New workspaces receive this template and its manual email flow automatically.
 
 In **Reports → Training — Missing**, anyone booked into an upcoming class appears as **Booked**, even without an earlier certificate or compliance assignment. **Booked** takes priority over **Expiring**, **Expired**, and **Missing**. A booking is a plan to train; it does not count as a completed qualification. Cancelled or completed classes do not count as upcoming bookings.
 
@@ -640,7 +652,7 @@ If your role manages Documents, use the document tabs to keep the library organi
 
 1. Open **Categories** to arrange the library into a hierarchy. Search by category, description, or parent. Use **Level** to show top-level or nested categories, and **Usage** to find categories with or without documents. Use the searchable **Parent** picker to move a category within the hierarchy. Category names must be unique under the same parent, but different branches can reuse a name.
 2. Open **Types** to manage classifications such as Policy, Procedure, SDS, and Manual. Use the search box to find a type by name, key, or description. Use **Usage** to show types that are used or unused.
-3. Open **Management reviews** to record board reviews of the safety management system. **Print / PDF** on a review gives you the minutes: attendees, documents reviewed, decisions, and actions raised. Under **Documents reviewed**, add the published documents the board reviewed, then click **Save documents**. BeaconHS pins each document to its exact published version, so a later revision cannot change the historical review record. Search by review title, or use **Next review** to show reviews that have or do not have another review scheduled.
+3. Open **Management reviews** to record board reviews of the safety management system. **Actions → Print / PDF** on a review gives you the minutes: attendees, documents reviewed, decisions, and actions raised. Under **Documents reviewed**, add the published documents the board reviewed, then click **Save documents**. BeaconHS pins each document to its exact published version, so a later revision cannot change the historical review record. Search by review title, or use **Next review** to show reviews that have or do not have another review scheduled.
 
 Periodic reviews on an individual document also record the exact published version. Open the document's **Reviews** tab, click **Record review**, and explicitly choose the outcome. Historical reviews whose old source did not capture an outcome are labelled **outcome not recorded** instead of being treated as approvals.
 
@@ -715,9 +727,25 @@ If **Manage** is available to your role:
 
 **Assets** groups types, categories, and custom fields. **Inspections** contains inspection types. **Operations** contains station settings and vehicle log modes. **Printing** contains QR label design. **Automations** groups **Assets**, **Work orders**, **Inspections**, and **Vehicle log**.
 
-## Oil changes and inspection schedules
+## Record actions
+
+Open **Actions** on a unit for **New work order**, the truck log entry, **Print / PDF**, **QR**, and **Report missing** or **Report found**. Managers find **Delete** or **Restore** in the separated final section. **Delete** is always last. Check-in, check-out, and transfer remain with **Location & custody**.
+
+## Maintenance and inspection schedules
 
 Equipment owns asset inspection schedules, servicing, oil changes, warranties, work orders and maintenance reminders. These do not appear in **Compliance → Due & expiring**. A person's requirement to submit an inspection remains in Compliance.
+
+## Plan the shop work
+
+1. Open **Equipment → Maintenance**. The **Work list** combines scheduled inspections, periodic maintenance, open reminders, upcoming warranty dates, and outstanding work orders. Pre-use checks stay with the operator on each unit.
+2. Select **Overdue**, **Ready to do**, **Next 7 days**, or **Outstanding repairs** to focus the list. **Ready to do** includes dated work due today or earlier and maintenance that has reached its usage conditions. Search by equipment, task, work-order reference, or mechanic. Use **Task** and **Category** to narrow the results.
+3. Use **Due** for a date range or **Needs setup** for missing inspection dates or maintenance settings. Choose **Show all dates** to return to the complete queue, including future reminders. Use **Prev** and **Next** below the list.
+4. Select **Start** to fill a scheduled checklist. For an outside inspection, select **Record completion**, enter the date and certificate reference or notes, and save. Managers can select **Record completed** for periodic maintenance or **Set up maintenance** when its conditions need attention.
+5. Select **Done** after completing a reminder, or **Edit reminder** to change it. Managers can use **New reminder** for one-off or repeating equipment jobs. **Reminder settings** controls reminder delivery.
+6. Select **Open work order** to review a repair, its assignee, work notes, and status. **Outstanding repairs** on another task opens the same unit's repair records. **New work order** on a task starts a repair for that equipment. Work orders do not have scheduled due dates; their opened date does not make them overdue.
+7. Use the month arrows on the calendar to plan ahead. Select a day’s count to open that day’s paginated work list. The calendar follows search, **Task**, and **Category**. The **Due** filter applies to the work list. On a phone, switch between **Work list** and **Calendar**.
+
+Maintenance conditions can use dates, engine hours, distance, or company counters. **Ready to do** and **Overdue** respect whether any condition or all conditions must be met. Upcoming warranty dates are planning notices; inspect the equipment record for warranty details.
 
 ## Review fleet inspection status
 
@@ -728,13 +756,31 @@ Equipment owns asset inspection schedules, servicing, oil changes, warranties, w
 
 ## Control equipment reminders
 
-1. Open **Equipment → Maintenance**, then choose **Reminders**.
+1. Open **Equipment → Maintenance**, then choose **Reminder settings**.
 2. Choose whether to **Send equipment maintenance reminders**, select the **Reminder schedule**, then choose **Save**.
 3. Recipients and delivery channels use the **Equipment** category under **Admin → Notifications**. The schedule uses the displayed timezone.
 
-Equipment reminders are independent of compliance reminders. Inspection dates and lists remain current when delivery is off. Turning delivery back on allows outstanding, unnotified inspection and reminder cycles to be sent once. Oil-change tracking must be enabled on the unit for it to appear as due. Unknown historical oil-change dates are left blank until a real date is entered.
+Equipment reminders are independent of compliance reminders. Inspection dates and lists remain current when delivery is off. Turning delivery back on allows outstanding, unnotified inspection and reminder cycles to be sent once. Periodic maintenance is evaluated from the latest saved dates and usage readings. Imported oil-change history is retained, including unknown dates and intervals. Migrating existing oil tracking does not send a catch-up email batch.
 
-Open the unit’s **Equipment Checks** tab, then **Oil changes**. For applicable units, enter **Last oil change**, **Interval (months)**, and **Engine hours at oil change**, then choose **Save oil change**. A new date adds a maintenance log entry and recalculates the next due date. Use a maintenance log entry for any expense or receipt as well.
+## Track periodic maintenance
+
+1. Open the unit’s **Inspections** tab, then **Periodic maintenance**.
+2. Select **Add maintenance**. A drawer opens.
+3. Enter a clear task name and instructions. Select **Oil change** as the maintenance type for oil servicing, or **Other maintenance**.
+4. Add a **Calendar interval**, **Engine hours**, **Odometer**, or a custom usage counter. Enter the repeat interval and next due date or reading. Select **Add condition** to combine conditions.
+5. Choose **Whichever comes first** or **When all conditions are met**. Select **Save maintenance**.
+
+Use **Edit** to change a task. Turn off **Track this maintenance** to pause it. Unknown intervals, due dates, and readings stay **Needs setup**. They are not counted as completed.
+
+Under **Usage counters**, select **Update reading** to update engine hours, kilometres, or a custom counter. Select **Add counter** for another cumulative measure, such as cycles, tonnes, or miles. Counter units cannot change while maintenance uses the counter. If a meter is replaced or reset, correct its reading, edit the affected task's due thresholds, select **A meter was replaced or reset**, and explain the change. Previous completion evidence stays in history.
+
+## Record maintenance that was done
+
+1. Select **Record completed** beside the task.
+2. Enter **Completed on** and the reading for each usage condition. Add **Work performed / reference** and **Cost (optional)** if available.
+3. Select **Record completed**.
+
+The next due points advance from the actual completion date and readings. A later equipment reading is kept when recording earlier work. The **Log** keeps completion notes, readings, cost, and previous conditions. Use a maintenance log entry to attach a receipt. Saving setup or editing notes does not record work as completed.
 
 In **Inspections**, schedules with a checklist have **Start**. Schedules for outside inspections have **Record completion**: enter the completion date and certificate reference or notes. Saving advances the next due date and adds history. Inspection names and intervals are configured by your company.
 
@@ -748,11 +794,15 @@ Open **Equipment** in the left menu. That opens the full list at [Equipment](/eq
 
 ## Add equipment
 
-1. Open [Equipment](/equipment) and choose **Add equipment** at the top right.
-2. The new draft opens immediately in the full equipment editor. Enter its name and details; fields save as you go.
-3. Complete the asset tag, category, type, department, and other details. Each field saves when you leave it. Editing a detail clears the **Draft** badge.
+1. Open [Equipment](/equipment) and select **Add equipment**. A guided drawer opens. Opening it does not create an equipment record.
+2. Select the equipment category from the large cards. Search or use the pages if needed. Your company’s category settings choose which detail sections appear.
+3. Choose an equipment type, or select **Add a type that is not listed**. Enter a useful **Equipment name** and unique **Asset tag**. Add a serial number, VIN, or plate; explain when identifying details are unavailable.
+4. Select **Continue** through the small detail screens. The category can show make/model, purchase, ownership, road/registration, meters, or specifications. Enter the relevant details or select **Details unavailable / not applicable** and explain why. Complete your company’s required additional fields.
+5. Answer both inspection questions. Select the pre-use checklist when required. For scheduled inspections, add the checklist, interval, and first due date. Explain when inspections are not required.
+6. Choose whether periodic maintenance is needed. Add the recurring tasks and their calendar or usage conditions, including current usage readings. Pause tasks whose due points still need review, or explain why maintenance is not required.
+7. Review the setup, check the confirmation, then select **Create equipment**.
 
-**Add equipment** requires **Manage equipment** permission. Viewing equipment or performing inspections does not grant permission to add it. If the button is missing, ask your administrator to check your role and any permission overrides under **Admin** → **Users** or **Roles & permissions**. A Foreman / Supervisor role by itself does not include this permission.
+**Back** lets you correct earlier answers. Closing or reloading keeps unfinished answers on this device; no equipment row is created until **Create equipment** succeeds. The record and its schedules save together. Retrying the same save does not create a duplicate. **Add equipment** requires **Manage equipment** permission. If the button is missing, ask an administrator to check your role and permission overrides.
 
 ## Look up a unit
 
@@ -761,6 +811,8 @@ Open **Equipment** in the left menu. That opens the full list at [Equipment](/eq
 3. Or filter by **Status** (**In service**, **Out of service**, **In repair**, **Lost**, **Retired**), by **Availability** (**Available for check-out**, **Currently checked out**), by **All departments**, or by **All holders**. Search the holder's name and select the person to show equipment they currently hold.
 4. The list shows the **Asset tag**, **Name**, **Category**, **Type**, **Department**, **Status**, **Site**, and **Holder** for each unit.
 5. Tap a row to open the unit's page.
+
+On a computer or tablet, rows stay on one line when you search or filter. Long text ends with an ellipsis; hover over it to read the full value, or open the unit. Status labels stay visible. Scroll the table sideways on a narrow screen to see the other columns.
 
 The list starts with **In service** equipment. The top-bar search also shows only **In service** equipment. Select **All statuses** on the Equipment list to find retired or other unavailable units. Search matches asset tags, names, serial numbers, licence plates, VINs, make, model, descriptions, notes, and department, category, or type names, including fields not shown in the table. Plates and other equipment identifiers match with or without spaces and hyphens. The top-bar search, equipment pickers, station search, QR-label list, inspection list, work orders, and vehicle-log summary also find equipment by these fields. Select **Department** in the table header to sort by department. Clear **Holder** to show all holders again. The holder picker only shows people holding equipment you can view. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list. **Export CSV** uses the current filters, including holder, and includes department.
 
@@ -790,7 +842,7 @@ To update several visible units, select their checkboxes and choose **Transfer t
 3. The **Inspections** tab shows the inspection history and anything marked **overdue** or **due soon**.
 4. Use the search boxes above **Inspection schedules** and **Reminders** to narrow long lists. Use **Prev** and **Next** to move through every match.
 
-The **Maintenance** cockpit opens a quick preview when you select a unit. It shows up to the first 25 open reminders and gives the exact total. Select **Open full record** to search and page through every reminder.
+Select an equipment name in the **Maintenance** work list to open its full record. Use **Inspections** for schedules, periodic maintenance, and reminders, or **Work orders** for its repairs. Each list has search and page controls.
 
 Managers can change **Type**, **Category**, and **Department** on **Overview** by searching the complete tenant catalogue. On **Inspections**, the **Pre-use checklist** (tap **Edit** on the pre-use schedule row) and **Inspection type** also search the full set that applies to that unit's type. A saved inactive choice remains visible on an older unit or schedule. If the picker says more results exist, add more of the name or description.
 
@@ -798,7 +850,7 @@ To assign a department, open the unit, select **Overview**, and choose **Departm
 
 ## View tracker locations
 
-1. Open **Equipment**, then choose **Map**. **Map** opens first. Use the **Map** / **Table** switch on the right of the search and filter row to see location details instead of the map.
+1. Open **Equipment**, then choose **Map**. **Map** opens first. The shared equipment header keeps navigation and filters above the scrolling results. Use the **Map** / **Table** switch on the right of the search and filter row to see location details instead of the map.
 2. Search for an equipment tag, name, address, or manual site. Use **Tracker health**, **Movement**, and **Source** to narrow the equipment shown.
 3. Click an equipment name in a marker or the table to open **Location & custody**. **Map** shows its last-known position with the observation time and source below it.
 4. Choose **GPS history** to search readings by date or time in UTC. Use **Movement** and the page controls to narrow the history.
@@ -854,7 +906,7 @@ The **Custom fields** count on [Equipment types](/equipment/types) shows definit
 
 ## Work orders
 
-If your role can see them, work orders track repairs.
+If your role can see them, work orders track repairs. The list uses compact, uniform rows. Long summaries are shortened in the table; open the row to read the full work order.
 
 1. On a unit, tap the **Work orders** tab to see repairs for that unit.
 2. Or open the full list at [Work orders](/equipment/work-orders).
@@ -871,8 +923,8 @@ On a unit's page, every field — including company-specific fields — saves to
 
 - A red **missing** badge means someone reported the unit missing. If you find it, tell your supervisor.
 - Each unit names the **Pre-use inspection** form its crew gets. If that form belongs to a different equipment type, the unit shows a warning — a boom lift handed the scissor-lift checklist is the classic case. Managers set which equipment type a form belongs to under **Manage** → **Inspection types**; a form left unassigned can be used on anything.
-- **Print / PDF** on a unit gives you its asset record sheet. The **QR label** button beside it prints the tag that goes on the unit — they are two different documents.
-- Need to inspect a unit before use? See [Equipment checks](/help/equipment-inspections).`,
+- **Print / PDF** on a unit gives you its asset record sheet. **Actions → QR** prints the tag that goes on the unit — they are two different documents.
+- Need to inspect a unit before use? See [Inspections](/help/equipment-inspections).`,
   },
   {
     slug: 'equipment-station',
@@ -909,16 +961,26 @@ Open **Equipment** in the left menu, then go to the **Check-in / out station** a
 1. Open the [station](/equipment/station).
 2. Scan your badge first, type your name in the scan box, or search **Active holder**. You will see **Active holder set** — that is you.
 3. If the unit is going to a fixed site, choose **Check-out destination**. Leave this blank when it stays with the selected person, such as a foreman’s truck. No expected return date is needed for an ongoing assignment.
-4. Scan the unit's tag, or type its asset tag and tap it in the list.
-5. You will see **Checked out** with the asset tag and name. The unit is now on you.
+4. Leave **Review before saving** selected. Scan a tag, or search by name, plate, VIN, or tag and select the correct unit. It appears under **Pending equipment**. Repeat for the other units. Adding the same unit twice keeps one pending item. Pending items are cleared when you leave or reload this page.
+5. Check each pending action. Use its **Check out** or **Check in** selector to change it. Use **Remove** or **Clear pending** to cancel unsaved items. Search and filter the pending list, and use its page controls for a longer batch.
+6. Select **Review movements**. Check the equipment, **Holder**, and **Destination**. You can issue equipment to a person, a destination, or both. A person-only assignment shows **Stays with the selected person**.
+7. Select **Confirm movements** to save, or **Back** to make changes. Successfully saved items leave the pending list. Rejected items stay pending with an explanation; check the equipment record if the connection failed before retrying.
 
 ## Check a unit back in
 
 1. Open the [station](/equipment/station).
-2. Scan the unit's tag or type it in.
-3. You will see **Checked in**. The unit snaps back to its home base location.
+2. Choose **In** under **Scan does**. Scan a tag or search and select equipment to add it to **Pending equipment**.
+3. Select **Review movements**. Check **Return location**: check-ins return to the configured default check-in location and clear the current holder. **Check-out destination** does not change the return location.
+4. Choose **Return condition** when required. Any return notes and condition apply to all check-ins in this batch. Use separate batches when equipment has different conditions.
+5. Select **Confirm movements**. Each saved item shows **Checked in**. If no default check-in location is configured, ask a manager to set it first.
 
-The **Scan does** setting controls what a scan means: **Toggle** flips each unit (out if it was in, in if it was out), or lock it to **Out** or **In** when you are moving a big batch one way.
+The **Scan does** setting controls the action when each unit is added: **Toggle** chooses out if it was in, or in if it was out. Choose **Out** or **In** to move a batch one way. Changing this setting does not change items already pending; use their action selectors.
+
+## Use a scan gun for immediate movements
+
+Choose **Instant scanning** when you want each scan or selection to save immediately. Set the holder and destination first, then scan the badge and equipment as usual. The mounted kiosk starts in this mode. The signed-in station starts in **Review before saving** on desktop and phone.
+
+Finish or clear pending items before switching modes. **Instant scanning** still opens the review screen for check-ins when a return condition is required.
 
 ## Configure the station (managers)
 
@@ -942,7 +1004,7 @@ Each unit's QR page has a **Download label PDF** button — a print-ready tag at
 ## Scan a QR label with your phone
 
 1. Every tagged unit has a QR label. Scan it with your phone camera.
-2. It opens the station with that unit already loaded — then check it in or out as usual.
+2. It opens the signed-in station with that unit under **Pending equipment**. Opening the link does not save a movement. Check the action, holder, and destination, then select **Review movements** and **Confirm movements**.
 3. On the station page itself, you can also tap the camera button (**Scan with camera**) and point your phone at a tag.
 
 ## Use the mounted tablet kiosk
@@ -953,18 +1015,18 @@ The shared kiosk uses the workspace's **Default language** because no member is 
 
 1. Walk up to the tablet. If it is locked, enter the yard PIN and tap **Unlock kiosk**.
 2. Scan your badge or search **Active holder**.
-3. Search **Check-out destination**, then scan your units — the same check-out steps as above.
+3. Choose a **Check-out destination** if needed. **Instant scanning** saves each scan immediately. Choose **Review before saving** to collect units and confirm them together.
 
 The kiosk locks automatically when the workspace is suspended or archived. Ask a platform administrator to restore the workspace before using it again.
 
 ## Tips
 
-- Made a mistake? Tap **Undo** next to the entry in the **This session** list.
+- Made a mistake? Tap **Undo** next to the entry in the **This session** list. Review the reverse movement, including the holder and destination for a new check-out, then select **Confirm movements**. It only shows as undone after saving.
 - Not sure who has a unit? Look it up — see [Equipment](/help/equipment).`,
   },
   {
     slug: 'equipment-inspections',
-    title: 'Equipment checks',
+    title: 'Inspections',
     group: 'Equipment & PPE',
     iconKey: 'clipboard-check',
     requiredPermission: 'equipment.read.self',
@@ -983,19 +1045,23 @@ The kiosk locks automatically when the workspace is suspended or archived. Ask a
     ],
     body: `Do your pre-use and scheduled equipment inspections here instead of on paper.
 
+## Record actions
+
+In an inspection panel, open **Actions** beside its result for the PDF, **Pass all**, submit, or reopen commands that are available. Managers find **Delete** or **Restore** at the bottom. Work-order records also use **Actions** for PDF, email, **Mark complete**, and **Reopen**, with **Delete** or **Restore** last.
+
 ## What this is for
 
 Before you run a unit — or on its service schedule — you walk through a checklist and mark each item pass or fail. Failed items get logged with details, and serious ones can automatically open a work order for the shop.
 
 ## Where to find it
 
-Open **Equipment** in the left menu, then go to [Equipment Checks](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Equipment Checks** tab. That tab is split into **Schedules**, **Reminders**, **History**, and **Oil changes**. Oil changes are recorded here, alongside other checks. **Schedules** lists every check the unit is set up for, with the pre-use check first, and each row has a **Start** link that opens that check right there.
+Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Inspections** tab. That tab is split into **Schedules**, **Periodic maintenance**, **Reminders**, and **History**. Periodic maintenance tracks recurring servicing separately from inspections and one-off reminders. **Schedules** lists every check the unit is set up for, with the pre-use check first, and each row has a **Start** link that opens that check right there.
 
 Walking a site instead of checking a unit? Those live separately — see [Site inspections](/help/inspections).
 
 ## Perform a check
 
-1. Open [Equipment Checks](/equipment/inspections) and tap **New inspection**. A panel opens — there is no separate page to fill in first.
+1. Open [Inspections](/equipment/inspections) and tap **New inspection**. A panel opens — there is no separate page to fill in first.
 2. Choose **Registered unit** to search the fleet, or **Rental / unregistered** for a unit that is not in the equipment register.
 3. For a registered unit, pick the **Equipment item**. The **Inspection** list then shows only what is set up on that unit — its pre-use checklist and its schedules. If what you expect is missing, the unit needs it set up on the **Schedules** sub-tab first.
 4. For a rental, enter the equipment name, serial or asset identifier, and provider, then choose the **Location** — the customer, project, site, or area the unit is working at. Registered-unit checks also have a **Location** field. Rentals can only take pre-use inspections; their periodic certification belongs to the rental company.
@@ -1043,7 +1109,7 @@ In the inspection type builder, open **Settings → Behaviour** and set **Allow 
 If you manage equipment, submitted inspections can send emails on their own — for example, the result (with a PDF copy) to the shop.
 
 1. Open the Manage workspace at [Equipment manage](/equipment/manage) and tap **Automations** → **Inspections**.
-2. Add the **A record is submitted** trigger.
+2. Under **Automations**, select **Inspections**, then add the **A record is submitted** trigger.
 3. Connect actions like **Send email**, **Notify role**, or **Create CAPA**.
 4. Turn the flow on. It runs every time an inspection is submitted.
 
@@ -1055,7 +1121,7 @@ You need signal to submit the inspection, use **Pass all**, reopen, delete, or a
 
 - Use the **Status** chips on the list — **All**, **Draft**, **In progress**, **Submitted**, or **Closed** — to find an inspection you started earlier.
 - The inspection picker lists the check you do most often first: pre-use at the top, then daily, weekly, monthly and annual. The annual check is never the first thing you land on.
-- Tap **Print / PDF** in the inspection panel for a paper copy with every criterion listed line by line.
+- Choose **Actions → Print / PDF** in the equipment inspection panel for a paper copy with every criterion listed line by line.
 - Never pencil-whip it. A failed item with a photo gets fixed a lot faster than a fake pass.
 - Inspecting your harness or hard hat instead? That lives in [PPE](/help/ppe).`,
   },
@@ -1100,6 +1166,10 @@ If **Manage** is available to your role:
 3. Choose **Back to PPE** to return to everyday work.
 
 Under **Automations**, choose **Inspections**.
+
+## Record actions
+
+Open **Actions** on a PPE record to issue the item, return it to service, or change its status when your role allows it. **Delete** is in the separated final section.
 
 ## What this is for
 
@@ -1159,7 +1229,7 @@ The saved checklist opens as soon as you record it. Find it later in **PPE → I
 
 Only people with permission to return PPE to service (usually health and safety or an admin) can clear an out-of-service item. People with **Inspect PPE** permission can still record ordinary pre-use checks on gear that is in service.
 
-1. Open the item. Tap **Return to service** in the header.
+1. Open the item, then choose **Actions → Return to service**.
 2. Work through the checklist as normal.
 3. If everything passes, the item goes back into service with its holder. If anything fails, it stays out of service.
 
@@ -1196,7 +1266,7 @@ When you leave a site or swap out gear, hand the item back to your supervisor or
 If you manage PPE, recorded inspections can send emails on their own — for example, a failed harness check straight to the safety manager. Email and PDF templates can include the saved checklist and inspection photos.
 
 1. Open the Manage workspace at [PPE manage](/ppe/manage) and tap **Automations** → **Inspections**.
-2. Add the **A record is submitted** trigger.
+2. Under **Automations**, select **Inspections**, then add the **A record is submitted** trigger.
 3. Connect actions like **Send email**, **Notify role**, or **Create CAPA**.
 4. Turn the flow on. It runs every time an inspection is recorded, including other PPE. Use the **Other PPE (not in the register)** and **Supplied by** fields in conditions and templates. A flow cannot change an item status for other PPE, because there is no item.
 

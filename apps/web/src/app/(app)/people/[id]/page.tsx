@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { TableToolbar } from '@/components/table-toolbar'
 import { FilterChips } from '@/components/filter-bar'
 import { currentSkillTickets, skillStanding } from '@beaconhs/compliance'
@@ -621,8 +622,13 @@ export default async function PersonDetailPage({
             }
             actions={
               canEdit ? (
-                <div className="flex flex-wrap gap-2">
-                  <DeletePersonButton id={id} synced={synced} />
+                <RecordActionMenu
+                  destructive={
+                    <>
+                      <DeletePersonButton id={id} synced={synced} />
+                    </>
+                  }
+                >
                   <Button asChild variant="outline" size="sm">
                     <DownloadLink href={`${basePath}/badge`} target="_blank" rel="noreferrer">
                       <IdCard size={14} /> <GeneratedText id="m_1036403447ff0f" />
@@ -639,7 +645,7 @@ export default async function PersonDetailPage({
                       ) : null
                     }
                   />
-                </div>
+                </RecordActionMenu>
               ) : undefined
             }
           />

@@ -4,7 +4,7 @@ export const EQUIPMENT_MAINTENANCE_BATCH_SIZE = 100
 export const EQUIPMENT_MAINTENANCE_SOURCE_LIMIT = 5_000
 
 export type EquipmentMaintenanceCycleIdentity = {
-  kind: 'inspection' | 'reminder'
+  kind: 'inspection' | 'reminder' | 'maintenance'
   id: string
   dueOn: string
 }

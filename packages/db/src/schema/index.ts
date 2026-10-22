@@ -78,3 +78,5 @@ export * from './domain-events'
 export * from './compliance-periods'
 
 export * from './work-days'
+
+export * from './equipment-service'

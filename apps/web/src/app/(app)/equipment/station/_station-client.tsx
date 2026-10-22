@@ -8,9 +8,10 @@ import {
 } from '@/i18n/generated'
 
 // StationClient — the shared scan-driven check in/out surface.
+// Review mode queues explicit movements; instant mode preserves the scan-gun flow.
 // Used by BOTH the in-app station (/equipment/station, authed) and the public
 // mounted-tablet kiosk (/equipment-kiosk, PIN-gated). The two differ only in the
-// bound server actions passed in (onScan/onResolve) and a couple of cosmetic
+// bound server actions passed in (onScan/onSearch) and a couple of cosmetic
 // flags — all behaviour lives here so desktop, mobile and kiosk stay identical.
 //
 // Fast path: a single always-focused field captures the USB scan gun (it types
@@ -39,7 +40,8 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
-import { Badge } from '@beaconhs/ui'
+import { Badge, Button, Drawer, Select } from '@beaconhs/ui'
+import { PendingEquipment, type PendingMovement } from './_pending-equipment'
 import { RemoteSearchSelect, type RemoteSearchLoader } from '@/components/remote-search-select'
 import type { PickerOption } from '@/lib/picker-options'
 import type {
@@ -94,7 +96,7 @@ type StationClientProps = {
   availableCount: number
   initialActivePerson?: Person | null
   initialScanCode?: string | null
-  onSearch: (query: string) => Promise<StationSearchResults>
+  onSearch: (query: string, match?: 'search' | 'code') => Promise<StationSearchResults>
   onScan: (input: StationScanInput) => Promise<StationScanResult>
   /** PIN-gated kiosk loaders. The authenticated app uses purpose-specific API lookups. */
   holderOptionsLoader?: RemoteSearchLoader
@@ -182,27 +184,44 @@ export function StationClient(props: StationClientProps) {
   const [results, setResults] = useState<StationSearchResults | null>(null)
   const [overlay, setOverlay] = useState(false)
   const [camOpen, setCamOpen] = useState(false)
+  const [reviewMode, setReviewMode] = useState(!kiosk)
+  const [movements, setMovements] = useState<PendingMovement[]>([])
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [condition, setCondition] = useState<NonNullable<StationScanInput['condition']> | ''>('')
+  const [returnedNotes, setReturnedNotes] = useState('')
+  const busyRef = useRef(false)
 
   const rootRef = useRef<HTMLDivElement>(null)
   const scanRef = useRef<HTMLInputElement>(null)
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const beep = useBeeper(soundOn)
 
+  useEffect(() => {
+    if (movements.length === 0) return
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [movements.length])
+
   const hasCamera = useSyncExternalStore(subscribeStaticStore, getCameraAvailability, () => false)
   const isDesktop = useSyncExternalStore(subscribeDesktopViewport, getDesktopViewport, () => true)
 
   const focusScan = useCallback(() => {
     // Don't steal focus from the camera overlay or a dropdown search box.
-    if (camOpen) return
+    if (camOpen || reviewOpen) return
     const el = scanRef.current
+    if (document.activeElement?.closest('[role="dialog"]')) return
     const tag = document.activeElement?.tagName
     if (el && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'BUTTON' && tag !== 'SELECT') {
       el.focus()
     }
-  }, [camOpen])
+  }, [camOpen, reviewOpen])
 
   useEffect(() => {
     scanRef.current?.focus()
+    return () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current)
+    }
   }, [])
 
   const showFlash = useCallback((f: NonNullable<Flash>) => {
@@ -211,119 +230,62 @@ export function StationClient(props: StationClientProps) {
     flashTimer.current = setTimeout(() => setFlash(null), 2600)
   }, [])
 
-  const handleCode = useCallback(
-    async (raw: string, opts?: { directionOverride?: 'in' | 'out' }) => {
-      const code = raw.trim()
-      if (!code || pending) return
-      setPending(true)
-      setScanValue('')
-      try {
-        const dir =
-          opts?.directionOverride ??
-          (scanMode === 'explicit' && direction !== 'toggle'
-            ? (direction as 'in' | 'out')
-            : undefined)
-        const result = await onScan({
-          code,
-          activePersonId: activePerson?.id ?? null,
-          destinationOrgUnitId: destination?.value ?? null,
-          direction: dir,
-        })
-        if (!result.ok) {
-          if (/pin/i.test(result.error) && onAuthError) onAuthError()
-          beep('error')
-          showFlash({ tone: 'error', title: 'Not recognised', sub: result.error })
-          setLog((l) =>
-            [
-              {
-                key: `${Date.now()}-e`,
-                action: 'error' as const,
-                title: result.error,
-                sub: null,
-                assetTag: null,
-              },
-              ...l,
-            ].slice(0, 60),
-          )
-          return
-        }
-        if (result.action === 'active_person') {
-          const person = {
-            id: result.personId,
-            name: result.personName,
-            employeeNo: null,
-            jobTitle: result.jobTitle,
-          }
-          setActivePerson(person)
-          beep('person')
-          showFlash({ tone: 'person', title: result.personName, sub: 'Active holder set' })
-          return
-        }
-        // A real check in/out happened — update the live availability count + log.
-        const checkedOut = result.action === 'checked_out'
-        beep(checkedOut ? 'out' : 'in')
-        showFlash({
-          tone: checkedOut ? 'out' : 'in',
-          title: checkedOut ? 'Checked out' : 'Checked in',
-          sub: `${result.assetTag} · ${result.itemName}`,
-        })
-        setLog((l) =>
-          [
-            {
-              key: `${Date.now()}-${result.itemId}`,
-              action: result.action,
-              title: `${result.assetTag} · ${result.itemName}`,
-              sub: checkedOut
-                ? `to ${result.holderName ?? 'no holder'}${result.locationName ? ` @ ${result.locationName}` : ''}`
-                : `returned${result.locationName ? ` to ${result.locationName}` : ''}`,
-              assetTag: result.assetTag,
-            },
-            ...l,
-          ].slice(0, 60),
-        )
-        setAvailCount((n) => (checkedOut ? Math.max(0, n - 1) : n + 1))
-      } finally {
-        setPending(false)
-        setTimeout(focusScan, 0)
-      }
-    },
-    [
-      pending,
-      scanMode,
-      direction,
-      activePerson,
-      destination,
-      onScan,
-      onAuthError,
-      beep,
-      showFlash,
-      focusScan,
-    ],
-  )
-
-  // Deep-link: /equipment/scan/<token> lands here with the code prefilled.
-  const didInitial = useRef(false)
-  useEffect(() => {
-    if (didInitial.current || !initialScanCode) return
-    didInitial.current = true
-    void handleCode(initialScanCode)
-  }, [initialScanCode, handleCode])
-
-  // Typeahead: surface matching assets + people as the operator types. A scan
-  // gun fires Enter before this matters; this is for finger-typing a name/tag.
-  useEffect(() => {
-    const q = scanValue.trim()
-    if (q.length < 1) return
-    let alive = true
-    const t = setTimeout(async () => {
-      const r = await onSearch(q)
-      if (alive) setResults(r)
-    }, 180)
-    return () => {
-      alive = false
-      clearTimeout(t)
+  function receiveResult(result: StationScanResult): boolean {
+    if (!result.ok) {
+      if (/pin/i.test(result.error) && onAuthError) onAuthError()
+      beep('error')
+      showFlash({ tone: 'error', title: 'Not recognised', sub: result.error })
+      setLog((l) =>
+        [
+          {
+            key: `${Date.now()}-e`,
+            action: 'error' as const,
+            title: result.error,
+            sub: null,
+            assetTag: null,
+          },
+          ...l,
+        ].slice(0, 60),
+      )
+      return false
     }
-  }, [scanValue, onSearch])
+    if (result.action === 'active_person') {
+      const person = {
+        id: result.personId,
+        name: result.personName,
+        employeeNo: null,
+        jobTitle: result.jobTitle,
+      }
+      setActivePerson(person)
+      beep('person')
+      showFlash({ tone: 'person', title: result.personName, sub: 'Active holder set' })
+      return true
+    }
+    // A real check in/out happened — update the live availability count + log.
+    const checkedOut = result.action === 'checked_out'
+    beep(checkedOut ? 'out' : 'in')
+    showFlash({
+      tone: checkedOut ? 'out' : 'in',
+      title: checkedOut ? 'Checked out' : 'Checked in',
+      sub: `${result.assetTag} · ${result.itemName}`,
+    })
+    setLog((l) =>
+      [
+        {
+          key: `${Date.now()}-${result.itemId}`,
+          action: result.action,
+          title: `${result.assetTag} · ${result.itemName}`,
+          sub: checkedOut
+            ? `to ${result.holderName ?? 'no holder'}${result.locationName ? ` @ ${result.locationName}` : ''}`
+            : `returned${result.locationName ? ` to ${result.locationName}` : ''}`,
+          assetTag: result.assetTag,
+        },
+        ...l,
+      ].slice(0, 60),
+    )
+    setAvailCount((n) => (checkedOut ? Math.max(0, n - 1) : n + 1))
+    return true
+  }
 
   function pickPerson(p: StationSearchResults['people'][number]) {
     setActivePerson({
@@ -339,12 +301,255 @@ export function StationClient(props: StationClientProps) {
     setTimeout(focusScan, 0)
   }
 
-  function undo(entry: LogEntry) {
-    if (entry.undone || !entry.assetTag) return
-    setLog((l) => l.map((e) => (e.key === entry.key ? { ...e, undone: true } : e)))
-    void handleCode(entry.assetTag, {
-      directionOverride: entry.action === 'checked_out' ? 'in' : 'out',
+  function addEquipment(item: StationSearchResults['equipment'][number]) {
+    setMovements((current) => {
+      if (current.some((entry) => entry.id === item.id)) return current
+      return [
+        ...current,
+        { ...item, direction: direction === 'toggle' ? (item.isOut ? 'in' : 'out') : direction },
+      ]
     })
+    setScanValue('')
+    setResults(null)
+    setTimeout(focusScan, 0)
+  }
+
+  async function pickEquipment(item: StationSearchResults['equipment'][number]) {
+    if (busyRef.current || reviewOpen) return
+    if (
+      reviewMode ||
+      (props.requireConditionOnCheckin &&
+        (direction === 'in' || (direction === 'toggle' && item.isOut)))
+    ) {
+      addEquipment(item)
+      if (!reviewMode) {
+        setCamOpen(false)
+        setReviewOpen(true)
+      }
+    } else {
+      await handleCode(item.assetTag)
+    }
+  }
+
+  async function submitCode(raw: string) {
+    const code = raw.trim()
+    if (!code || busyRef.current || reviewOpen) return
+    if (!reviewMode && !props.requireConditionOnCheckin) {
+      await handleCode(code)
+      return
+    }
+    busyRef.current = true
+    setPending(true)
+    try {
+      const found = await onSearch(code, 'code')
+      // Equipment takes precedence over a badge, matching the mutation core.
+      if (found.equipment[0]) {
+        const item = found.equipment[0]
+        if (
+          reviewMode ||
+          (props.requireConditionOnCheckin &&
+            (direction === 'in' || (direction === 'toggle' && item.isOut)))
+        ) {
+          addEquipment(item)
+          if (!reviewMode) {
+            setCamOpen(false)
+            setReviewOpen(true)
+          }
+          return
+        }
+      } else if (found.people[0]) {
+        pickPerson(found.people[0])
+        return
+      } else {
+        showFlash({
+          tone: 'error',
+          title: 'No exact match',
+          sub: 'Search by name and select a result, or scan an equipment tag or badge.',
+        })
+        return
+      }
+    } catch {
+      showFlash({
+        tone: 'error',
+        title: 'Search unavailable',
+        sub: 'Try again. No equipment was changed.',
+      })
+      return
+    } finally {
+      busyRef.current = false
+      setPending(false)
+    }
+    await handleCode(code)
+  }
+
+  async function confirmMovements() {
+    if (busyRef.current) return
+    busyRef.current = true
+    setPending(true)
+    // Snapshot the reviewed context. Later state changes cannot alter this batch.
+    const batch = [...movements]
+    const context = {
+      activePersonId: activePerson?.id ?? null,
+      destinationOrgUnitId: destination?.value ?? null,
+      condition: condition || undefined,
+      returnedNotes,
+    }
+    let failed = false
+    try {
+      for (const item of batch) {
+        try {
+          const result = await onScan({
+            code: item.assetTag,
+            equipmentItemId: item.id,
+            direction: item.direction,
+            ...context,
+          })
+          receiveResult(result)
+          if (result.ok && result.action !== 'active_person') {
+            setMovements((current) => current.filter((entry) => entry.id !== item.id))
+            if (item.undoLogKey)
+              setLog((current) =>
+                current.map((entry) =>
+                  entry.key === item.undoLogKey ? { ...entry, undone: true } : entry,
+                ),
+              )
+          } else {
+            failed = true
+            setMovements((current) =>
+              current.map((entry) =>
+                entry.id === item.id
+                  ? {
+                      ...entry,
+                      error: result.ok
+                        ? 'Equipment no longer matches this tag. Remove it and search again.'
+                        : result.error,
+                    }
+                  : entry,
+              ),
+            )
+          }
+        } catch {
+          // The response may have been lost after saving. Never retry as a toggle.
+          failed = true
+          setMovements((current) =>
+            current.map((entry) =>
+              entry.id === item.id
+                ? {
+                    ...entry,
+                    error:
+                      'Could not confirm this movement. Check the equipment record before retrying.',
+                  }
+                : entry,
+            ),
+          )
+        }
+      }
+      if (!failed) {
+        setCondition('')
+        setReturnedNotes('')
+      }
+      setReviewOpen(false)
+    } finally {
+      busyRef.current = false
+      setPending(false)
+    }
+  }
+
+  async function handleCode(raw: string) {
+    const code = raw.trim()
+    if (!code || busyRef.current) return false
+    busyRef.current = true
+    setPending(true)
+    setScanValue('')
+    try {
+      const dir = direction !== 'toggle' ? direction : undefined
+      const result = await onScan({
+        code,
+        activePersonId: activePerson?.id ?? null,
+        destinationOrgUnitId: destination?.value ?? null,
+        direction: dir,
+      })
+      return receiveResult(result)
+    } catch {
+      showFlash({
+        tone: 'error',
+        title: 'Movement not confirmed',
+        sub: 'Check the equipment record before retrying.',
+      })
+      return false
+    } finally {
+      busyRef.current = false
+      setPending(false)
+      setTimeout(focusScan, 0)
+    }
+  }
+
+  // Deep-link: /equipment/scan/<token> lands here with the code prefilled.
+  const didInitial = useRef(false)
+  useEffect(() => {
+    if (didInitial.current || !initialScanCode) return
+    didInitial.current = true
+    void submitCode(initialScanCode)
+  })
+
+  // Typeahead: surface matching assets + people as the operator types. A scan
+  // gun fires Enter before this matters; this is for finger-typing a name/tag.
+  useEffect(() => {
+    const q = scanValue.trim()
+    if (q.length < 1) return
+    let alive = true
+    const t = setTimeout(async () => {
+      try {
+        const r = await onSearch(q)
+        if (alive) setResults(r)
+      } catch {
+        if (alive) {
+          setResults(null)
+          showFlash({ tone: 'error', title: 'Search unavailable', sub: 'Try again.' })
+        }
+      }
+    }, 180)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [scanValue, onSearch, showFlash])
+
+  async function undo(entry: LogEntry) {
+    if (entry.undone || !entry.assetTag || busyRef.current) return
+    busyRef.current = true
+    setPending(true)
+    try {
+      const found = await onSearch(entry.assetTag, 'code')
+      const item = found.equipment[0]
+      if (!item) {
+        showFlash({
+          tone: 'error',
+          title: 'Equipment not found',
+          sub: 'Search for the equipment again.',
+        })
+        return
+      }
+      setMovements((current) => [
+        ...current.filter((movement) => movement.id !== item.id),
+        {
+          ...item,
+          direction: entry.action === 'checked_out' ? 'in' : 'out',
+          undoLogKey: entry.key,
+        },
+      ])
+      setCamOpen(false)
+      setReviewOpen(true)
+    } catch {
+      showFlash({
+        tone: 'error',
+        title: 'Search unavailable',
+        sub: 'Try again. No equipment was changed.',
+      })
+    } finally {
+      busyRef.current = false
+      setPending(false)
+    }
   }
 
   // The in-app station lives under PageContainer's transformed FadeInBody, which
@@ -374,7 +579,7 @@ export function StationClient(props: StationClientProps) {
   // a bigger view of the page, so it follows the user's theme like everything
   // else — forcing slate-950 there flipped a light-mode session to dark.
   const dark = kiosk
-  const visibleResults = scanValue.trim().length > 0 ? results : null
+  const visibleResults = scanValue.trim().length > 0 && !pending && !reviewOpen ? results : null
   // Both kiosk and full-screen scale up so the station reads across a room.
   const big = kiosk || overlay
   const shell = overlay
@@ -507,8 +712,45 @@ export function StationClient(props: StationClientProps) {
           </div>
         </div>
 
+        <div className="space-y-2">
+          <div
+            className="flex flex-wrap gap-2"
+            role="group"
+            aria-label={tGeneratedValue('Saving mode')}
+          >
+            {(
+              [
+                { value: true, label: 'Review before saving' },
+                { value: false, label: 'Instant scanning' },
+              ] as const
+            ).map((mode) => (
+              <Button
+                key={mode.label}
+                variant={reviewMode === mode.value ? 'default' : 'outline'}
+                aria-pressed={reviewMode === mode.value}
+                disabled={pending || movements.length > 0 || reviewOpen}
+                onClick={() => setReviewMode(mode.value)}
+              >
+                <GeneratedValue value={mode.label} />
+              </Button>
+            ))}
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            <GeneratedValue
+              value={
+                reviewMode
+                  ? 'Search or scan equipment to add it to Pending equipment. Nothing is saved until you review and confirm.'
+                  : 'Each equipment scan or selection saves immediately. Choose the holder and destination first.'
+              }
+            />
+          </p>
+        </div>
+
         {/* ---- context bar: active person + destination + mode ------------- */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <fieldset
+          disabled={pending || reviewOpen}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        >
           <div className="space-y-1">
             <Label dark={dark}>
               <GeneratedText id="m_1b1add08b2dc94" />
@@ -616,7 +858,7 @@ export function StationClient(props: StationClientProps) {
               />
             </div>
           </div>
-        </div>
+        </fieldset>
 
         {/* ---- the scan field + typeahead --------------------------------- */}
         <div className="relative">
@@ -628,12 +870,16 @@ export function StationClient(props: StationClientProps) {
           />
           <input
             ref={scanRef}
+            aria-label={tGeneratedValue('Scan or search equipment and people')}
             value={scanValue}
-            onChange={(e) => setScanValue(e.target.value)}
+            onChange={(e) => {
+              setResults(null)
+              setScanValue(e.target.value)
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()
-                void handleCode(scanValue)
+                void submitCode(scanValue)
               } else if (e.key === 'Escape') {
                 setResults(null)
               }
@@ -719,8 +965,10 @@ export function StationClient(props: StationClientProps) {
                       visibleResults.equipment.length > 0 ? (
                         <div className="p-1">
                           <DropHeader dark={dark}>
-                            <GeneratedText id="m_112883b51653ef" />{' '}
-                            <GeneratedValue value={scanActionWord(direction)} />
+                            <GeneratedValue value="Equipment" /> ·{' '}
+                            <GeneratedValue
+                              value={reviewMode ? 'Add to pending' : scanActionWord(direction)}
+                            />
                           </DropHeader>
                           <GeneratedValue
                             value={visibleResults.equipment.map((it) => (
@@ -728,7 +976,7 @@ export function StationClient(props: StationClientProps) {
                                 key={it.id}
                                 type="button"
                                 onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => void handleCode(it.assetTag)}
+                                onClick={() => void pickEquipment(it)}
                                 className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left ${
                                   dark
                                     ? 'hover:bg-slate-800'
@@ -800,19 +1048,70 @@ export function StationClient(props: StationClientProps) {
                   query={scanValue}
                   results={visibleResults}
                   direction={direction}
+                  reviewMode={reviewMode}
                   onQueryChange={setScanValue}
-                  onSubmitQuery={() => void handleCode(scanValue)}
+                  onSubmitQuery={() => void submitCode(scanValue)}
                   onClose={() => {
                     setScanValue('')
                     setResults(null)
                   }}
                   onPickPerson={pickPerson}
-                  onPickEquipment={(assetTag) => void handleCode(assetTag)}
+                  onPickEquipment={(item) => void pickEquipment(item)}
                 />
               ) : null
             }
           />
         </div>
+
+        {movements.length > 0 && (
+          <section
+            className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700"
+            aria-label={tGeneratedValue('Pending equipment')}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">
+                <GeneratedValue value="Pending equipment" /> ({movements.length})
+              </h2>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => {
+                    setMovements([])
+                    setCondition('')
+                    setReturnedNotes('')
+                  }}
+                >
+                  <GeneratedValue value="Clear pending" />
+                </Button>
+                <Button
+                  disabled={pending}
+                  onClick={() => {
+                    setCamOpen(false)
+                    setReviewOpen(true)
+                  }}
+                >
+                  <GeneratedValue value="Review movements" />
+                </Button>
+              </div>
+            </div>
+            <p className="text-sm text-slate-500">
+              <GeneratedValue value="The action is set when each item is added. Change it below if needed. Pending items have not been saved and are cleared when you leave this page." />
+            </p>
+            <PendingEquipment
+              items={movements}
+              disabled={pending}
+              onRemove={(id) => setMovements((current) => current.filter((item) => item.id !== id))}
+              onDirectionChange={(id, value) =>
+                setMovements((current) =>
+                  current.map((item) =>
+                    item.id === id ? { ...item, direction: value, error: undefined } : item,
+                  ),
+                )
+              }
+            />
+          </section>
+        )}
 
         {/* ---- feedback + session log ------------------------------------- */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -920,10 +1219,134 @@ export function StationClient(props: StationClientProps) {
       <GeneratedValue
         value={
           camOpen ? (
-            <CameraScanner onCode={(c) => handleCode(c)} onClose={() => setCamOpen(false)} />
+            <CameraScanner onCode={(c) => void submitCode(c)} onClose={() => setCamOpen(false)} />
           ) : null
         }
       />
+      <Drawer
+        open={reviewOpen}
+        onClose={() => {
+          if (!pending) setReviewOpen(false)
+        }}
+        title={tGeneratedValue('Confirm equipment movements')}
+        description={tGeneratedValue(
+          'Review all pending equipment and where it is going before saving.',
+        )}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={pending} onClick={() => setReviewOpen(false)}>
+              <GeneratedValue value="Back" />
+            </Button>
+            <Button
+              disabled={
+                pending ||
+                movements.length === 0 ||
+                (movements.some((item) => item.direction === 'out') &&
+                  !activePerson &&
+                  !destination) ||
+                (movements.some((item) => item.direction === 'in') &&
+                  (!homeLocationName || (props.requireConditionOnCheckin && !condition)))
+              }
+              onClick={() => void confirmMovements()}
+            >
+              <GeneratedValue value={pending ? 'Saving…' : 'Confirm movements'} />
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {movements.some((item) => item.direction === 'out') && (
+            <div className="rounded-lg bg-amber-50 p-3 text-amber-950 dark:bg-amber-950 dark:text-amber-100">
+              <p className="font-semibold">
+                <GeneratedValue value="Check out" /> ·{' '}
+                {movements.filter((item) => item.direction === 'out').length}
+              </p>
+              <p>
+                <GeneratedValue value="Holder" />:{' '}
+                {activePerson?.name ?? tGeneratedValue('No person selected')}
+              </p>
+              <p>
+                <GeneratedValue value="Destination" />:{' '}
+                {destination?.label ??
+                  tGeneratedValue(
+                    activePerson ? 'Stays with the selected person' : 'No destination selected',
+                  )}
+              </p>
+              {!activePerson && !destination && (
+                <p role="alert">
+                  <GeneratedValue value="Go back and choose a person, a destination, or both." />
+                </p>
+              )}
+            </div>
+          )}
+          {movements.some((item) => item.direction === 'in') && (
+            <div className="space-y-3 rounded-lg bg-emerald-50 p-3 text-emerald-950 dark:bg-emerald-950 dark:text-emerald-100">
+              <p className="font-semibold">
+                <GeneratedValue value="Check in" /> ·{' '}
+                {movements.filter((item) => item.direction === 'in').length}
+              </p>
+              <p>
+                <GeneratedValue value="Return location" />:{' '}
+                {homeLocationName ?? tGeneratedValue('No default check-in location configured')}
+              </p>
+              <p>
+                <GeneratedValue value="Check-in clears the current holder. The check-out destination does not change the return location." />
+              </p>
+              <label className="block space-y-1 text-sm">
+                <span>
+                  <GeneratedValue
+                    value={
+                      props.requireConditionOnCheckin
+                        ? 'Return condition (required)'
+                        : 'Return condition'
+                    }
+                  />
+                </span>
+                <Select
+                  value={condition}
+                  onChange={(event) => setCondition(event.target.value as typeof condition)}
+                  disabled={pending}
+                  className="block w-full rounded-md border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <option value="">
+                    {tGeneratedValue(
+                      props.requireConditionOnCheckin ? 'Choose condition' : 'Good (default)',
+                    )}
+                  </option>
+                  {(
+                    [
+                      { value: 'good', label: 'Good' },
+                      { value: 'fair', label: 'Fair' },
+                      { value: 'damaged', label: 'Damaged' },
+                      { value: 'unusable', label: 'Unusable' },
+                    ] as const
+                  ).map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {tGeneratedValue(label)}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="block space-y-1 text-sm">
+                <span>
+                  <GeneratedValue value="Return notes (applies to all check-ins)" />
+                </span>
+                <textarea
+                  value={returnedNotes}
+                  onChange={(event) => setReturnedNotes(event.target.value)}
+                  maxLength={2000}
+                  disabled={pending}
+                  className="block w-full rounded-md border bg-white p-2 text-slate-900 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </label>
+            </div>
+          )}
+          <PendingEquipment items={movements} disabled={pending} />
+          <p className="text-sm text-slate-500">
+            <GeneratedValue value="Each movement saves separately. Successful items leave the pending list. Items that cannot be saved stay pending with an explanation." />
+          </p>
+        </div>
+      </Drawer>
     </div>
   )
 
@@ -1039,6 +1462,7 @@ function MobileStationResultsSheet({
   query,
   results,
   direction,
+  reviewMode,
   onQueryChange,
   onSubmitQuery,
   onClose,
@@ -1048,11 +1472,12 @@ function MobileStationResultsSheet({
   query: string
   results: StationSearchResults
   direction: 'toggle' | 'out' | 'in'
+  reviewMode: boolean
   onQueryChange: (value: string) => void
   onSubmitQuery: () => void
   onClose: () => void
   onPickPerson: (person: StationSearchResults['people'][number]) => void
-  onPickEquipment: (assetTag: string) => void
+  onPickEquipment: (item: StationSearchResults['equipment'][number]) => void
 }) {
   const tGenerated = useGeneratedTranslations()
   if (typeof document === 'undefined') return null
@@ -1170,8 +1595,10 @@ function MobileStationResultsSheet({
                 results.equipment.length > 0 ? (
                   <div>
                     <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-                      <GeneratedText id="m_02bdb6f5c529fe" />{' '}
-                      <GeneratedValue value={scanActionWord(direction)} />
+                      <GeneratedValue value="Equipment" /> ·{' '}
+                      <GeneratedValue
+                        value={reviewMode ? 'Add to pending' : scanActionWord(direction)}
+                      />
                     </div>
                     <ul role="listbox" className="py-1">
                       <GeneratedValue
@@ -1181,7 +1608,7 @@ function MobileStationResultsSheet({
                               type="button"
                               role="option"
                               aria-selected={false}
-                              onClick={() => onPickEquipment(item.assetTag)}
+                              onClick={() => onPickEquipment(item)}
                               className="flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] text-slate-700 transition-colors active:bg-slate-100 dark:text-slate-200 dark:active:bg-slate-700"
                             >
                               <PackageCheck
@@ -1255,6 +1682,10 @@ function CameraScanner({
 }) {
   const tGenerated = useGeneratedTranslations()
   const videoRef = useRef<HTMLVideoElement>(null)
+  const onCodeRef = useRef(onCode)
+  useEffect(() => {
+    onCodeRef.current = onCode
+  }, [onCode])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1262,7 +1693,6 @@ function CameraScanner({
     let raf = 0
     let stopped = false
     let lastCode = ''
-    let lastAt = 0
 
     async function start() {
       try {
@@ -1278,7 +1708,10 @@ function CameraScanner({
         })
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
         const video = videoRef.current
-        if (!video) return
+        if (!video || stopped) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
         video.srcObject = stream
         await video.play()
         const tick = async () => {
@@ -1286,11 +1719,10 @@ function CameraScanner({
           try {
             const codes = await detector.detect(videoRef.current)
             const hit = codes[0]?.rawValue
-            const now = Date.now()
-            if (hit && (hit !== lastCode || now - lastAt > 2500)) {
+            if (stopped) return
+            if (hit && hit !== lastCode) {
               lastCode = hit
-              lastAt = now
-              onCode(hit)
+              onCodeRef.current(hit)
             }
           } catch {
             // transient detect errors are fine between frames
@@ -1308,7 +1740,7 @@ function CameraScanner({
       cancelAnimationFrame(raf)
       stream?.getTracks().forEach((t) => t.stop())
     }
-  }, [onCode, tGenerated])
+  }, [tGenerated])
 
   if (typeof document === 'undefined') return null
   return createPortal(

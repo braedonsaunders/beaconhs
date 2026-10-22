@@ -421,7 +421,7 @@ export default async function WorkOrdersPage({
             />
           ) : (
             <>
-              <Table>
+              <Table className="min-w-[1180px] [&_tbody_td]:h-11 [&_tbody_td]:py-2 [&_tbody_td]:whitespace-nowrap">
                 <TableHeader>
                   <TableRow>
                     <SortableTh
@@ -506,19 +506,20 @@ export default async function WorkOrdersPage({
                               <GeneratedValue value={wo.reference} />
                             </Link>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="w-[28%] max-w-80">
                             <Link
                               href={
                                 mergeHref('/equipment/work-orders', sp, {
                                   workOrderId: wo.id,
                                 }) as any
                               }
-                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                              title={htmlToSnippet(wo.summary)}
+                              className="block truncate font-medium text-slate-900 hover:underline dark:text-slate-100"
                             >
                               <GeneratedValue value={htmlToSnippet(wo.summary)} />
                             </Link>
                           </TableCell>
-                          <TableCell className="text-slate-600 dark:text-slate-300">
+                          <TableCell className="max-w-56 truncate text-slate-600 dark:text-slate-300">
                             <GeneratedValue
                               value={
                                 item ? (

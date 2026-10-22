@@ -224,7 +224,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     label: 'Equipment',
     category: 'equipment',
     description: 'Equipment items in the fleet.',
-    table: 'equipment_items',
+    table: 'report_equipment_items',
     softDelete: true,
     columns: [
       { key: 'asset_tag', label: 'Asset tag', kind: 'text' },

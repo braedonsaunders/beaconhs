@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { setEquipmentWorkOrderDeleted } from '../../_lifecycle-actions'
 import { ConfirmButton } from '@/components/confirm-button'
@@ -151,6 +152,7 @@ async function updateOverview(formData: FormData) {
   revalidatePath(`/equipment/${itemId}`)
   revalidatePath(`/equipment/work-orders/${id}`)
   revalidatePath('/equipment/work-orders')
+  revalidatePath('/equipment/maintenance')
 }
 
 async function updateActionTaken(formData: FormData) {
@@ -244,6 +246,7 @@ async function updateStatus(formData: FormData) {
   if (result.itemId) revalidatePath(`/equipment/${result.itemId}`)
   revalidatePath(`/equipment/work-orders/${id}`)
   revalidatePath('/equipment/work-orders')
+  revalidatePath('/equipment/maintenance')
 }
 
 async function markComplete(formData: FormData) {
@@ -371,25 +374,28 @@ export async function WorkOrderDrawer({
               </div>
             }
             actions={
-              <>
-                {canManageModule(ctx, 'equipment') ? (
-                  <form action={setEquipmentWorkOrderDeleted}>
-                    <input type="hidden" name="id" value={id} />
-                    <input type="hidden" name="restore" value={wo.deletedAt ? '1' : '0'} />
-                    <ConfirmButton
-                      variant={wo.deletedAt ? 'outline' : 'destructive'}
-                      message={
-                        wo.deletedAt
-                          ? tGenerated('m_1935d4fffdb479')
-                          : tGenerated('m_071e2354970ba5')
-                      }
-                    >
-                      {wo.deletedAt
-                        ? tGenerated('m_19500e41842c99')
-                        : tGenerated('m_11773f3c3f7558')}
-                    </ConfirmButton>
-                  </form>
-                ) : null}
+              <RecordActionMenu
+                destructive={
+                  canManageModule(ctx, 'equipment') ? (
+                    <form action={setEquipmentWorkOrderDeleted}>
+                      <input type="hidden" name="id" value={id} />
+                      <input type="hidden" name="restore" value={wo.deletedAt ? '1' : '0'} />
+                      <ConfirmButton
+                        variant={wo.deletedAt ? 'outline' : 'destructive'}
+                        message={
+                          wo.deletedAt
+                            ? tGenerated('m_1935d4fffdb479')
+                            : tGenerated('m_071e2354970ba5')
+                        }
+                      >
+                        {wo.deletedAt
+                          ? tGenerated('m_19500e41842c99')
+                          : tGenerated('m_11773f3c3f7558')}
+                      </ConfirmButton>
+                    </form>
+                  ) : null
+                }
+              >
                 {canClose && closed ? (
                   <form action={updateStatus}>
                     <input type="hidden" name="id" value={id} />
@@ -400,9 +406,7 @@ export async function WorkOrderDrawer({
                   </form>
                 ) : null}
                 <DownloadLink href={`/equipment/work-orders/${id}/pdf` as any} target="_blank">
-                  <Button variant="outline">
-                    <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
-                  </Button>
+                  <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
                 </DownloadLink>
                 <GeneratedValue
                   value={
@@ -413,9 +417,7 @@ export async function WorkOrderDrawer({
                         }
                         scroll={false}
                       >
-                        <Button variant="outline">
-                          <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
-                        </Button>
+                        <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
                       </Link>
                     ) : null
                   }
@@ -432,7 +434,7 @@ export async function WorkOrderDrawer({
                     ) : null
                   }
                 />
-              </>
+              </RecordActionMenu>
             }
           />
         }

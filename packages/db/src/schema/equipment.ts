@@ -105,8 +105,8 @@ export const equipmentItems = pgTable(
     notes: text('notes'),
     qrToken: text('qr_token').notNull(), // unique scannable token
     status: equipmentStatus('status').default('in_service').notNull(),
-    // Draft-first (badged): instant-created items show in the register with a
-    // "Draft" badge until completed — never hidden. Existing rows default false.
+    // Imported or integration-created incomplete records can retain their draft flag.
+    // Guided creation saves a complete record only after explicit confirmation.
     isDraft: boolean('is_draft').default(false).notNull(),
     // ----- Manufacture (field group: manufacture) -----
     manufacturer: text('manufacturer'),
@@ -168,11 +168,6 @@ export const equipmentItems = pgTable(
     missingLastSeenLocation: text('missing_last_seen_location'),
     missingNotes: text('missing_notes'),
     missingFoundAt: timestamp('missing_found_at', { withTimezone: true }),
-    // ----- Oil-change schedule (drives upcoming-oil-change report) -----
-    requiresOilChange: boolean('requires_oil_change').default(false).notNull(),
-    oilChangeIntervalMonths: integer('oil_change_interval_months'),
-    lastOilChangeOn: date('last_oil_change_on'),
-    nextOilChangeDue: date('next_oil_change_due'),
     // ----- Bulk-QR support -----
     // Token stamped on bulk-QR sheets so the same printed page can be
     // re-issued without regenerating each label. Distinct from `qrToken`

@@ -1,19 +1,20 @@
 'use client'
 
-import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+import { GeneratedText, useGeneratedTranslations } from '@/i18n/generated'
 
 // Detail-header actions for a corrective action, responsive. The status
 // workflow lives HERE in the header (not a stray "Status" tab): a select that
 // auto-saves non-terminal transitions on change. Closing is a distinct action
-// (cost-impact prompt + lock) and reopening replaces it once locked. Desktop
-// shows the full row; phones get status + the primary action + a More sheet.
+// (cost-impact prompt + lock) and reopening replaces it once locked. The
+// record commands share one Actions menu on every screen size.
 
 import Link from 'next/link'
-import { useState, useTransition } from 'react'
+import { useTransition } from 'react'
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { DownloadLink } from '@/components/download-link'
-import { Button, Select, cn } from '@beaconhs/ui'
+import { Button, Select } from '@beaconhs/ui'
 import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
-import { CheckCircle2, FileText, Lock, Mail, MoreHorizontal, Unlock } from 'lucide-react'
+import { CheckCircle2, FileText, Mail, Unlock } from 'lucide-react'
 
 export function CaHeaderActions({
   id,
@@ -39,7 +40,6 @@ export function CaHeaderActions({
   reopenAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const [open, setOpen] = useState(false)
   const [pending, start] = useTransition()
   const runOnline = useOnlineAction()
 
@@ -105,82 +105,14 @@ export function CaHeaderActions({
     </Button>
   )
 
-  const menuItem =
-    'flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'
-
   return (
-    <>
-      {/* Desktop: the full row */}
-      <div className="hidden items-center gap-2 sm:flex">
-        <GeneratedValue value={statusSelect} />
-        <GeneratedValue value={pdfLink} />
-        <GeneratedValue value={emailLink} />
-        <GeneratedValue value={primary} />
-      </div>
-
-      {/* Phone: Status + primary + a More sheet */}
-      <div className="flex items-center gap-2 sm:hidden">
-        <GeneratedValue
-          value={
-            statusSelect ? (
-              <div className={cn(pending && 'opacity-60')}>
-                <GeneratedValue value={statusSelect} />
-              </div>
-            ) : null
-          }
-        />
-        <GeneratedValue value={primary} />
-        <Button
-          variant="outline"
-          type="button"
-          aria-label={tGenerated('m_08ea20074b7d47')}
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-        >
-          <MoreHorizontal size={16} />
-        </Button>
-        <GeneratedValue
-          value={
-            open ? (
-              <>
-                <button
-                  type="button"
-                  aria-label={tGenerated('m_091cc178866e80')}
-                  className="fixed inset-0 z-40 bg-slate-900/30"
-                  onClick={() => setOpen(false)}
-                />
-                <div className="fixed inset-x-3 bottom-3 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <DownloadLink
-                    href={pdfHref as any}
-                    target="_blank"
-                    className={menuItem}
-                    onClick={() => setOpen(false)}
-                  >
-                    <FileText size={15} /> <GeneratedText id="m_1a2b2ed6729166" />
-                  </DownloadLink>
-                  <Link
-                    href={emailHref as any}
-                    scroll={false}
-                    className={menuItem}
-                    onClick={() => setOpen(false)}
-                  >
-                    <Mail size={15} /> <GeneratedText id="m_09dfca28fc95ba" />
-                  </Link>
-                  <GeneratedValue
-                    value={
-                      locked ? (
-                        <div className="flex items-center gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800">
-                          <Lock size={13} /> <GeneratedText id="m_14597c6d86b045" />
-                        </div>
-                      ) : null
-                    }
-                  />
-                </div>
-              </>
-            ) : null
-          }
-        />
-      </div>
-    </>
+    <div className="flex flex-wrap items-center gap-2">
+      {statusSelect}
+      <RecordActionMenu>
+        {pdfLink}
+        {emailLink}
+        {primary}
+      </RecordActionMenu>
+    </div>
   )
 }

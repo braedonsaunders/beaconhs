@@ -4,7 +4,7 @@ import { transferLocation } from './_custody-actions'
 import { EquipmentTelemetryPanel } from '@/components/equipment-telemetry-panel'
 import { activePeopleWhere } from '@beaconhs/db'
 import { CompleteSchedule } from '../_complete-schedule'
-import { OilChangeCard } from './_oil-change'
+import { ServicePanel } from './_service-panel'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -113,6 +113,7 @@ import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { DownloadLink } from '@/components/download-link'
 import { RemoteSelectField } from '@/components/remote-search-select'
 import { SearchFilter } from '@/components/search-filter'
@@ -169,11 +170,11 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]
 
-// Sub-tabs inside the Equipment Checks tab. Pre-use leads because it is the check a
+// Sub-tabs inside the Inspections tab. Pre-use leads because it is the check a
 // crew runs every shift; the rest were three tables stacked on one screen.
 // Pre-use is not a tab: it is a schedule like any other, so it lives as the
 // first row of the schedules table rather than a parallel place to look.
-const INSPECTION_TABS = ['schedules', 'oil', 'reminders', 'history'] as const
+const INSPECTION_TABS = ['schedules', 'maintenance', 'reminders', 'history'] as const
 type InspectionTab = (typeof INSPECTION_TABS)[number]
 
 const LOCATION_VIEWS = ['map', 'gps_history', 'tracker', 'custody', 'custody_history'] as const
@@ -1247,33 +1248,34 @@ export default async function EquipmentDetailPage({
               </div>
             }
             actions={
-              <>
-                {canAdminEquipment ? (
-                  <form action={setEquipmentDeleted}>
-                    <input type="hidden" name="id" value={id} />
-                    <input type="hidden" name="restore" value={item.deletedAt ? '1' : '0'} />
-                    <ConfirmButton
-                      variant={item.deletedAt ? 'outline' : 'destructive'}
-                      message={
-                        item.deletedAt
-                          ? tGenerated('m_0b4b2da7d40e48')
-                          : tGenerated('m_057301e9d56688')
-                      }
-                    >
-                      {item.deletedAt
-                        ? tGenerated('m_19500e41842c99')
-                        : tGenerated('m_11773f3c3f7558')}
-                    </ConfirmButton>
-                  </form>
-                ) : null}
+              <RecordActionMenu
+                destructive={
+                  canAdminEquipment ? (
+                    <form action={setEquipmentDeleted}>
+                      <input type="hidden" name="id" value={id} />
+                      <input type="hidden" name="restore" value={item.deletedAt ? '1' : '0'} />
+                      <ConfirmButton
+                        variant={item.deletedAt ? 'outline' : 'destructive'}
+                        message={
+                          item.deletedAt
+                            ? tGenerated('m_0b4b2da7d40e48')
+                            : tGenerated('m_057301e9d56688')
+                        }
+                      >
+                        {item.deletedAt
+                          ? tGenerated('m_19500e41842c99')
+                          : tGenerated('m_11773f3c3f7558')}
+                      </ConfirmButton>
+                    </form>
+                  ) : null
+                }
+              >
                 <GeneratedValue
                   value={
                     canCreateWorkOrder ? (
                       <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}>
-                        <Button variant="outline">
-                          <Wrench size={14} />
-                          <GeneratedText id="m_028792f1fdc70a" />
-                        </Button>
+                        <Wrench size={14} />
+                        <GeneratedText id="m_028792f1fdc70a" />
                       </Link>
                     ) : null
                   }
@@ -1282,46 +1284,36 @@ export default async function EquipmentDetailPage({
                   value={
                     canManageEquipment ? (
                       <Link href={`${basePath}?tab=log&drawer=new-truck-log-entry` as Route}>
-                        <Button variant="outline">
-                          <Truck size={14} />
-                          <GeneratedText id="m_1004059f966a2a" />
-                        </Button>
+                        <Truck size={14} />
+                        <GeneratedText id="m_1004059f966a2a" />
                       </Link>
                     ) : null
                   }
                 />
                 <DownloadLink href={`/equipment/${id}/pdf`}>
-                  <Button variant="outline">
-                    <FileText size={14} />
-                    <GeneratedText id="m_016088be0b1e51" />
-                  </Button>
+                  <FileText size={14} />
+                  <GeneratedText id="m_016088be0b1e51" />
                 </DownloadLink>
                 <Link href={`/equipment/${id}/qr`}>
-                  <Button variant="outline">
-                    <QrCode size={14} />
-                    <GeneratedText id="m_183a008d67c7c1" />
-                  </Button>
+                  <QrCode size={14} />
+                  <GeneratedText id="m_183a008d67c7c1" />
                 </Link>
                 <GeneratedValue
                   value={
                     item.isMissing ? (
                       <Link href={`${basePath}?drawer=report-found` as Route}>
-                        <Button variant="outline">
-                          <Search size={14} />
-                          <GeneratedText id="m_1b925bd65abff0" />
-                        </Button>
+                        <Search size={14} />
+                        <GeneratedText id="m_1b925bd65abff0" />
                       </Link>
                     ) : (
                       <Link href={`${basePath}?drawer=report-missing` as Route}>
-                        <Button variant="outline">
-                          <Search size={14} />
-                          <GeneratedText id="m_08cbe6945650bd" />
-                        </Button>
+                        <Search size={14} />
+                        <GeneratedText id="m_08cbe6945650bd" />
                       </Link>
                     )
                   }
                 />
-              </>
+              </RecordActionMenu>
             }
           />
 
@@ -1484,7 +1476,7 @@ export default async function EquipmentDetailPage({
                   { key: 'location', label: 'Location & custody', count: historyTotal },
                   {
                     key: 'inspections',
-                    label: 'Equipment Checks',
+                    label: 'Inspections',
                     count: scheduleStats.active + openReminderCount,
                   },
                   { key: 'work_orders', label: 'Work orders', count: openWoCount },
@@ -2342,25 +2334,17 @@ export default async function EquipmentDetailPage({
                               label: 'Schedules',
                               count: scheduleStats.active + (item.preUseInspectionTypeId ? 1 : 0),
                             },
-                            { key: 'oil', label: 'Oil changes' },
+                            { key: 'maintenance', label: 'Periodic maintenance' },
                             { key: 'reminders', label: 'Reminders', count: openReminderCount },
                             { key: 'history', label: 'History', count: inspectionsTotal },
                           ]}
                         />
-                        {itab === 'oil' ? (
-                          <OilChangeCard
-                            key={`${item.updatedAt}`}
-                            itemId={id}
-                            enabled={item.requiresOilChange}
-                            interval={item.oilChangeIntervalMonths}
-                            last={item.lastOilChangeOn}
-                            next={item.nextOilChangeDue}
-                            hours={
-                              typeof item.metadata.lastOilHours === 'number'
-                                ? item.metadata.lastOilHours
-                                : null
-                            }
-                            canEdit={canManageEquipment}
+                        {itab === 'maintenance' ? (
+                          <ServicePanel
+                            item={item}
+                            sp={sp}
+                            today={todayIso}
+                            canEdit={!locked && canManageEquipment}
                           />
                         ) : null}
                         {/*

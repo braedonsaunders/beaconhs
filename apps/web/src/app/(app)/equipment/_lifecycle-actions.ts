@@ -54,6 +54,7 @@ export async function setEquipmentDeleted(formData: FormData) {
     })
   })
   revalidatePath('/equipment')
+  revalidatePath('/equipment/maintenance')
   revalidatePath(`/equipment/${id}`)
   if (!restore) redirect('/equipment')
 }
@@ -98,6 +99,7 @@ export async function setEquipmentInspectionDeleted(formData: FormData) {
     return record.equipmentItemId
   })
   revalidatePath('/equipment/inspections')
+  revalidatePath('/equipment/maintenance')
   revalidatePath(`/equipment/inspections/${id}`)
   if (itemId) revalidatePath(`/equipment/${itemId}`)
   if (!restore) redirect('/equipment/inspections')
@@ -130,6 +132,7 @@ export async function setEquipmentWorkOrderDeleted(formData: FormData) {
     return record.itemId
   })
   revalidatePath('/equipment/work-orders')
+  revalidatePath('/equipment/maintenance')
   revalidatePath(`/equipment/work-orders/${id}`)
   revalidatePath(`/equipment/${itemId}`)
   if (!restore) redirect('/equipment/work-orders')

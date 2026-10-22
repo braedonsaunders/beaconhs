@@ -40,6 +40,59 @@ export type Walkthrough = {
 
 export const WALKTHROUGHS: Walkthrough[] = [
   {
+    id: 'equipment-setup',
+    title: 'Add equipment with guided setup',
+    description: 'Create an identifiable asset with its inspections and recurring maintenance.',
+    startPath: '/equipment?drawer=new',
+    defaultEnabled: true,
+    defaultAutoStart: false,
+    steps: [
+      {
+        path: '/equipment?drawer=new',
+        target: '[data-walkthrough="equipment-setup"]',
+        title: 'Choose a category',
+        body: 'If Add equipment is available to your role, choose a category card. Category settings decide which details you will enter. Nothing is created while you work through the drawer.',
+      },
+      {
+        title: 'Complete a little at a time',
+        body: 'Choose a type, name and asset tag. Complete each short detail screen, or explain why information is unavailable. Back lets you correct an earlier answer.',
+      },
+      {
+        title: 'Plan inspections and maintenance',
+        body: 'Answer both inspection questions and choose the required checklists and due dates. Add maintenance by time, hours, distance or a custom counter. Explain when these are not required.',
+      },
+      {
+        title: 'Review and create',
+        body: 'Check your choices and select Create equipment. The record and its schedules save together. Closing the drawer keeps unfinished answers on this device without creating an equipment record.',
+      },
+    ],
+  },
+  {
+    id: 'equipment-maintenance',
+    title: 'Plan equipment maintenance',
+    description: 'Find due inspections, service jobs, reminders, and repairs.',
+    startPath: '/equipment/maintenance',
+    defaultEnabled: true,
+    defaultAutoStart: false,
+    steps: [
+      {
+        path: '/equipment/maintenance',
+        target: '[data-walkthrough="maintenance-priorities"]',
+        title: 'Choose the next job',
+        body: 'Select Overdue or Ready to do for work that needs attention. Outstanding repairs shows work orders. Pre-use checks stay with the operator.',
+      },
+      {
+        target: '[data-walkthrough="maintenance-work-list"]',
+        title: 'Get the work done',
+        body: 'Search and filter the work list. Start an inspection, record completed maintenance, finish a reminder, or open a work order. Select an equipment name for its full service record.',
+      },
+      {
+        title: 'Plan ahead',
+        body: 'Use the calendar month arrows and select a day’s count to see its jobs. On a phone, choose Calendar above the work list. Undated repairs remain in the work list.',
+      },
+    ],
+  },
+  {
     id: 'equipment-map',
     title: 'Find tracked equipment',
     description: 'Find tracker positions and check how current they are.',
@@ -170,7 +223,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Submit it',
-        body: 'When everything is filled in and the crew has signed, tap Submit & lock (Submit on a phone) and confirm. Use Unlock if the job changes after submitting. Earlier signatures stay in Activity, and the changed job needs fresh signatures.',
+        body: 'When everything is filled in and the crew has signed, open Actions, choose Submit & lock (Submit on a phone), and confirm. Use Unlock if the job changes after submitting. Earlier signatures stay in Activity, and the changed job needs fresh signatures.',
       },
     ],
   },
@@ -199,7 +252,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Draft or submit',
-        body: 'You can save a draft and finish later. Tap Submit & lock when every item is complete and confirm; that runs submit flows and makes the record read-only. Unlock it before a correction, then tap Resubmit & lock to run the flows for the revised record.',
+        body: 'You can save a draft and finish later. Open Actions and choose Submit & lock when every item is complete, then confirm; that runs submit flows and makes the record read-only. Unlock it before a correction, then tap Resubmit & lock to run the flows for the revised record.',
       },
     ],
   },

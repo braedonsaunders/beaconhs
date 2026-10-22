@@ -655,7 +655,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
   'equipment-inspections': {
     subjectType: 'module',
     subjectKey: 'equipment-inspections',
-    label: 'Equipment Checks',
+    label: 'Equipment inspections',
     triggers: ['on_submit', 'manual'],
     actions: ['send_email', 'notify_role', 'create_capa', 'webhook', 'export_pdf'],
     fields: [

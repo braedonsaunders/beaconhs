@@ -28,15 +28,28 @@ function PendingCount({ count }: { count: number }) {
 export function DraftSyncIndicator({
   state,
   onRetry,
+  localOnly = false,
 }: {
   state: DraftSyncState | null
   onRetry: () => void
+  localOnly?: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
   if (!state) return null
   const onDevice = state.storage === 'device'
 
+  if (localOnly && !state.blocked)
+    return state.pending > 0 ? (
+      <span
+        aria-live="polite"
+        title={tGeneratedValue('These answers stay on this device until you save the form.')}
+        className={`${PILL} bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200`}
+      >
+        <HardDrive size={11} />
+        <GeneratedValue value={onDevice ? 'Saved on device' : 'Kept in this tab'} />
+      </span>
+    ) : null
   let content: React.ReactNode = null
   if (state.blocked === 'rejected') {
     content = (
@@ -135,6 +148,7 @@ export function DraftSyncIndicator({
 export function DraftRecoveryBanner({
   restored,
   conflict,
+  localOnly = false,
   stranded = false,
   onDismiss,
   onDiscard,
@@ -143,6 +157,7 @@ export function DraftRecoveryBanner({
   onDiscardStranded,
 }: {
   restored: { origin: 'new' | 'resume' } | null
+  localOnly?: boolean
   conflict: boolean
   /** Device edits for a record that can no longer be edited here. */
   stranded?: boolean
@@ -214,7 +229,11 @@ export function DraftRecoveryBanner({
               <GeneratedText id="m_04452848df1ed9" />
             </AlertTitle>
             <AlertDescription>
-              <GeneratedText id="m_1c71b13b8c067e" />
+              {localOnly ? (
+                <GeneratedValue value="Your answers are back in the form. Review them and save when ready; nothing is submitted automatically." />
+              ) : (
+                <GeneratedText id="m_1c71b13b8c067e" />
+              )}
             </AlertDescription>
           </div>
           <div className="flex flex-wrap gap-2">

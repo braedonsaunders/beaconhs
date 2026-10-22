@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { FilePreview } from '@/components/file-preview'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -299,30 +300,35 @@ export default async function TrainingRecordPage({
             }
             actions={
               canRecord ? (
-                <div className="flex items-center gap-2">
+                <RecordActionMenu
+                  destructive={
+                    <>
+                      <GeneratedValue
+                        value={
+                          !isRevoked ? (
+                            <form action={revokeTrainingRecord}>
+                              <input type="hidden" name="id" value={id} />
+                              <ConfirmButton
+                                size="sm"
+                                message={tGenerated('m_1612be0ce800f1')}
+                                className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                              >
+                                <ShieldOff size={14} /> <GeneratedText id="m_18718dd379a57d" />
+                              </ConfirmButton>
+                            </form>
+                          ) : null
+                        }
+                      />
+                    </>
+                  }
+                >
                   <form action={renewTrainingRecord}>
                     <input type="hidden" name="id" value={id} />
                     <Button type="submit" variant="outline" size="sm">
                       <RotateCcw size={14} /> <GeneratedText id="m_1f6557a4319c50" />
                     </Button>
                   </form>
-                  <GeneratedValue
-                    value={
-                      !isRevoked ? (
-                        <form action={revokeTrainingRecord}>
-                          <input type="hidden" name="id" value={id} />
-                          <ConfirmButton
-                            size="sm"
-                            message={tGenerated('m_1612be0ce800f1')}
-                            className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
-                          >
-                            <ShieldOff size={14} /> <GeneratedText id="m_18718dd379a57d" />
-                          </ConfirmButton>
-                        </form>
-                      ) : null
-                    }
-                  />
-                </div>
+                </RecordActionMenu>
               ) : undefined
             }
           />

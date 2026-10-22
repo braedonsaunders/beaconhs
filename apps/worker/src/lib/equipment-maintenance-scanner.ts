@@ -8,8 +8,9 @@
 
 import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
 import { and, asc, eq, inArray, isNull, lte, notInArray, sql } from 'drizzle-orm'
-import { db, withSuperAdmin, withTenant, type Database } from '@beaconhs/db'
+import { db, withSuperAdmin, withTenant, type Database, equipmentServiceDueSql } from '@beaconhs/db'
 import {
+  equipmentServicePlans,
   equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
@@ -114,10 +115,45 @@ export async function scanTenantEquipmentMaintenance(tenantId: string): Promise<
       .orderBy(asc(equipmentReminders.id))
       .limit(EQUIPMENT_MAINTENANCE_SOURCE_LIMIT)
 
+    const dueServices = await tx
+      .select({
+        id: equipmentServicePlans.id,
+        cycleId: equipmentServicePlans.cycleId,
+        name: equipmentServicePlans.name,
+        rules: equipmentServicePlans.rules,
+        equipmentItemId: equipmentItems.id,
+        itemName: equipmentItems.name,
+        assetTag: equipmentItems.assetTag,
+      })
+      .from(equipmentServicePlans)
+      .innerJoin(equipmentItems, eq(equipmentItems.id, equipmentServicePlans.equipmentItemId))
+      .where(
+        and(
+          equipmentServiceDueSql(today),
+          sql`${equipmentServicePlans.notifiedCycleId} IS DISTINCT FROM ${equipmentServicePlans.cycleId}`,
+          ...itemFilters,
+        ),
+      )
+      .orderBy(asc(equipmentServicePlans.id))
+      .limit(EQUIPMENT_MAINTENANCE_SOURCE_LIMIT)
+
     const candidates: Array<{
       entry: EquipmentMaintenanceDueEntry
       cycle: EquipmentMaintenanceCycleIdentity
     }> = [
+      ...dueServices.map((plan) => ({
+        entry: {
+          kind: 'maintenance' as const,
+          servicePlanId: plan.id,
+          equipmentItemId: plan.equipmentItemId,
+          itemName: plan.itemName,
+          assetTag: plan.assetTag,
+          title: plan.name,
+          dueOn: plan.rules.find((r) => r.kind === 'calendar')?.dueOn ?? null,
+          dueDescription: 'Maintenance conditions reached',
+        },
+        cycle: { kind: 'maintenance' as const, id: plan.id, dueOn: plan.cycleId },
+      })),
       ...dueSchedules
         .filter(
           (schedule): schedule is typeof schedule & { dueOn: string } => schedule.dueOn !== null,
@@ -165,6 +201,9 @@ export async function scanTenantEquipmentMaintenance(tenantId: string): Promise<
       scheduleCycles: batch
         .filter(({ cycle }) => cycle.kind === 'inspection')
         .map(({ cycle }) => ({ id: cycle.id, dueOn: cycle.dueOn })),
+      serviceCycles: batch
+        .filter(({ cycle }) => cycle.kind === 'maintenance')
+        .map(({ cycle }) => ({ id: cycle.id, cycleId: cycle.dueOn })),
       reminderCycles: batch
         .filter(({ cycle }) => cycle.kind === 'reminder')
         .map(({ cycle }) => ({ id: cycle.id, dueOn: cycle.dueOn })),
@@ -309,7 +348,40 @@ export async function publishQueuedEquipmentMaintenance(): Promise<{
       continue
     }
     try {
-      await emitEquipmentMaintenanceDue(dispatch.tenantId, dispatch.entries, dispatch.deliveryKey)
+      const liveServices = dispatch.serviceCycles.length
+        ? await withTenant(db, dispatch.tenantId, async (tx) => {
+            const today = complianceDate(await resolveComplianceClock(tx, dispatch.tenantId))
+            return tx
+              .select({ id: equipmentServicePlans.id, cycleId: equipmentServicePlans.cycleId })
+              .from(equipmentServicePlans)
+              .innerJoin(
+                equipmentItems,
+                eq(equipmentItems.id, equipmentServicePlans.equipmentItemId),
+              )
+              .where(
+                and(
+                  inArray(
+                    equipmentServicePlans.id,
+                    dispatch.serviceCycles.map((c) => c.id),
+                  ),
+                  equipmentServiceDueSql(today),
+                  isNull(equipmentItems.deletedAt),
+                  notInArray(equipmentItems.status, ['lost', 'retired']),
+                ),
+              )
+          })
+        : []
+      const validIds = new Set(
+        liveServices
+          .filter((p) =>
+            dispatch.serviceCycles.some((c) => c.id === p.id && c.cycleId === p.cycleId),
+          )
+          .map((p) => p.id),
+      )
+      const deliverable = dispatch.entries.filter(
+        (e) => e.kind !== 'maintenance' || (!!e.servicePlanId && validIds.has(e.servicePlanId)),
+      )
+      await emitEquipmentMaintenanceDue(dispatch.tenantId, deliverable, dispatch.deliveryKey)
       const finalized = await withTenant(db, dispatch.tenantId, async (tx) => {
         // Lock and re-check the exact lease before stamping source cycles. A
         // very slow delivery may outlive its lease and be reclaimed; the old
@@ -336,6 +408,31 @@ export async function publishQueuedEquipmentMaintenance(): Promise<{
               and(
                 eq(equipmentInspectionSchedules.id, cycle.id),
                 eq(equipmentInspectionSchedules.nextDueOn, cycle.dueOn),
+              ),
+            )
+        }
+        for (const cycle of dispatch.serviceCycles) {
+          if (!validIds.has(cycle.id)) {
+            // A canceled snapshot must not consume the future delivery identity.
+            // Only rotate the unchanged cycle: edits/completions already made a new one.
+            await tx
+              .update(equipmentServicePlans)
+              .set({ cycleId: sql`gen_random_uuid()` })
+              .where(
+                and(
+                  eq(equipmentServicePlans.id, cycle.id),
+                  eq(equipmentServicePlans.cycleId, cycle.cycleId),
+                ),
+              )
+            continue
+          }
+          await tx
+            .update(equipmentServicePlans)
+            .set({ notifiedCycleId: cycle.cycleId })
+            .where(
+              and(
+                eq(equipmentServicePlans.id, cycle.id),
+                eq(equipmentServicePlans.cycleId, cycle.cycleId),
               ),
             )
         }

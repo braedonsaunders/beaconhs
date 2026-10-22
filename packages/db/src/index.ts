@@ -15,3 +15,5 @@ export * from './document-book-publication'
 export * from './document-book-print-settings'
 export * from './document-control-header'
 export * from './form-response-parent-lock'
+
+export * from './equipment-service-query'

@@ -13,6 +13,7 @@ import {
   complianceStatus,
   equipmentItems,
   equipmentInspectionSchedules,
+  equipmentServicePlans,
   tenantNotificationPolicy,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -132,8 +133,22 @@ beforeAll(async () => {
         status: kind === 'retired' ? 'retired' : 'in_service',
         deletedAt: kind === 'deleted' ? new Date() : null,
         currentHolderPersonId: kind === 'current' ? employee : null,
-        requiresOilChange: kind === 'current',
-        nextOilChangeDue: '2020-01-01',
+      })
+    for (const kind of ['current', 'overdue', 'unknown', 'draft', 'retired', 'deleted'] as const)
+      await tx.insert(equipmentServicePlans).values({
+        tenantId,
+        equipmentItemId: assets[kind],
+        name: 'Engine oil change',
+        category: 'oil_change',
+        isActive: kind !== 'overdue',
+        rules: [
+          {
+            kind: 'calendar',
+            every: kind === 'unknown' ? null : 3,
+            unit: 'month',
+            dueOn: kind === 'unknown' ? null : '2020-01-01',
+          },
+        ],
       })
     await tx.insert(equipmentInspectionSchedules).values([
       {
@@ -241,11 +256,15 @@ it('distinguishes current, overdue and unconfigured equipment and honors visibil
     (await listEquipmentInspectionStatus(own, { page: 1, perPage: 25 })).rows.map((row) => row.id),
   ).toEqual([assets.current])
 })
-it('only lists oil changes for units with oil tracking enabled', async () => {
-  const data = await listDueSignals(ctx, { module: 'equipment', family: 'Oil change', perPage: 25 })
+it('only lists due active configured service plans on available records', async () => {
+  const data = await listDueSignals(ctx, {
+    module: 'equipment',
+    family: 'Periodic maintenance',
+    perPage: 25,
+  })
   expect(data.total).toBe(1)
   expect(data.rows[0]?.subject).toContain('current')
-  expect(data.rows[0]?.href).toContain('?tab=inspections&itab=oil')
+  expect(data.rows[0]?.href).toContain('?tab=inspections&itab=maintenance')
 })
 it('saves equipment reminder controls without changing compliance delivery', async () => {
   expect(await saveEquipmentReminderSettings({ enabled: true, cron: '0 10 * * *' })).toEqual({

@@ -42,7 +42,7 @@ const MODULE_PDF_TARGETS: { moduleKey: string; label: string }[] = [
   { moduleKey: 'corrective-actions', label: 'Corrective actions' },
   { moduleKey: 'equipment', label: 'Equipment work orders' },
   { moduleKey: 'equipment-assets', label: 'Equipment asset records' },
-  { moduleKey: 'equipment-inspections', label: 'Equipment checks' },
+  { moduleKey: 'equipment-inspections', label: 'Equipment inspections' },
   { moduleKey: 'ppe', label: 'PPE inspections' },
   { moduleKey: 'ppe-issues', label: 'PPE issue reports' },
   { moduleKey: 'journals', label: 'Journals' },

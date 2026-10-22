@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -906,69 +907,79 @@ export default async function PpeDetailPage({
               </div>
             }
             actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <GeneratedValue
-                  value={
-                    canIssue && canBeIssued ? (
-                      <Link
-                        href={`${basePath}?tab=${active}&drawer=issue-to-person` as any}
-                        scroll={false}
-                      >
-                        <Button>
-                          <UserPlus size={14} /> <GeneratedText id="m_10b50a35e0953a" />
-                        </Button>
-                      </Link>
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    canRecordInspection &&
-                    isOutOfService &&
-                    canReturnToService &&
-                    returnToServiceKind &&
-                    (returnToServiceKind !== 'annual' || canManage) ? (
-                      <Link
-                        href={
-                          `${basePath}?tab=inspections&drawer=record-inspection&kind=${returnToServiceKind}` as any
+              (canIssue && canBeIssued) ||
+              canChangeStatus ||
+              canDelete ||
+              (canRecordInspection &&
+                isOutOfService &&
+                canReturnToService &&
+                returnToServiceKind &&
+                (returnToServiceKind !== 'annual' || canManage)) ? (
+                <RecordActionMenu
+                  destructive={
+                    <>
+                      <GeneratedValue
+                        value={
+                          canDelete ? (
+                            <DeletePpeButton
+                              itemId={id}
+                              label={tGeneratedValue(
+                                item.serialNumber
+                                  ? `${type.name} · ${item.serialNumber}`
+                                  : type.name,
+                              )}
+                              deleteAction={deletePpeItem}
+                            />
+                          ) : null
                         }
-                        scroll={false}
-                      >
-                        <Button>
-                          <ShieldCheck size={14} /> <GeneratedText id="m_1a930e4669e75e" />
-                        </Button>
-                      </Link>
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    canChangeStatus ? (
-                      <Link
-                        href={`${basePath}?tab=${active}&drawer=change-status` as any}
-                        scroll={false}
-                      >
-                        <Button variant="outline">
-                          <RefreshCw size={14} /> <GeneratedText id="m_118818fef81797" />
-                        </Button>
-                      </Link>
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    canDelete ? (
-                      <DeletePpeButton
-                        itemId={id}
-                        label={tGeneratedValue(
-                          item.serialNumber ? `${type.name} · ${item.serialNumber}` : type.name,
-                        )}
-                        deleteAction={deletePpeItem}
                       />
-                    ) : null
+                    </>
                   }
-                />
-              </div>
+                >
+                  <GeneratedValue
+                    value={
+                      canIssue && canBeIssued ? (
+                        <Link
+                          href={`${basePath}?tab=${active}&drawer=issue-to-person` as any}
+                          scroll={false}
+                        >
+                          <UserPlus size={14} /> <GeneratedText id="m_10b50a35e0953a" />
+                        </Link>
+                      ) : null
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      canRecordInspection &&
+                      isOutOfService &&
+                      canReturnToService &&
+                      returnToServiceKind &&
+                      (returnToServiceKind !== 'annual' || canManage) ? (
+                        <Link
+                          href={
+                            `${basePath}?tab=inspections&drawer=record-inspection&kind=${returnToServiceKind}` as any
+                          }
+                          scroll={false}
+                        >
+                          <ShieldCheck size={14} /> <GeneratedText id="m_1a930e4669e75e" />
+                        </Link>
+                      ) : null
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      canChangeStatus ? (
+                        <Link
+                          href={`${basePath}?tab=${active}&drawer=change-status` as any}
+                          scroll={false}
+                        >
+                          <RefreshCw size={14} /> <GeneratedText id="m_118818fef81797" />
+                        </Link>
+                      ) : null
+                    }
+                  />
+                </RecordActionMenu>
+              ) : undefined
             }
           />
         }

@@ -10,7 +10,8 @@ type MaintenanceRollupEntry = {
   itemName: string
   assetTag: string
   title: string
-  dueOn: string
+  dueOn: string | null
+  dueDescription?: string
 }
 
 /** Build the compliance digest from escaped data values and trusted markup only. */
@@ -43,7 +44,7 @@ export function maintenanceRollupEmailHtml(input: {
       (entry) =>
         `<li>${escapeHtml(entry.itemName)} (${escapeHtml(entry.assetTag)}) — ${escapeHtml(
           entry.title,
-        )}, due ${escapeHtml(entry.dueOn)}</li>`,
+        )}, due ${escapeHtml(entry.dueDescription ?? entry.dueOn ?? 'usage threshold reached')}</li>`,
     )
     .join('')
   const more = input.entries.length > 25 ? `<p>…and ${input.entries.length - 25} more.</p>` : ''

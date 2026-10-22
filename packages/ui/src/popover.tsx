@@ -23,6 +23,8 @@ export function Popover({
   side = 'bottom',
   className,
   children,
+  keepMounted = false,
+  ariaLabel,
 }: {
   trigger: React.ReactElement
   open: boolean
@@ -32,6 +34,9 @@ export function Popover({
   side?: 'top' | 'bottom'
   className?: string
   children: React.ReactNode
+  /** Keep action forms connected while an external confirmation dialog has focus. */
+  keepMounted?: boolean
+  ariaLabel?: string
 }) {
   const triggerRef = React.useRef<HTMLDivElement>(null)
   const panelRef = React.useRef<HTMLDivElement>(null)
@@ -96,7 +101,7 @@ export function Popover({
       {mounted && rect && typeof document !== 'undefined'
         ? createPortal(
             <AnimatePresence>
-              {open ? (
+              {open || keepMounted ? (
                 <motion.div
                   ref={panelRef}
                   initial={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
@@ -108,6 +113,7 @@ export function Popover({
                     className,
                   )}
                   style={{
+                    display: open ? undefined : 'none',
                     width: matchTriggerWidth ? rect.width : undefined,
                     ...(() => {
                       const screen = viewport ?? {
@@ -141,6 +147,7 @@ export function Popover({
                     })(),
                   }}
                   role="dialog"
+                  aria-label={ariaLabel}
                 >
                   {children}
                 </motion.div>

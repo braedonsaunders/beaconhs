@@ -172,18 +172,24 @@ export const equipmentMaintenanceDispatches = pgTable(
     entries: jsonb('entries')
       .$type<
         Array<{
-          kind: 'inspection' | 'reminder'
+          kind: 'inspection' | 'reminder' | 'maintenance'
           equipmentItemId: string
           itemName: string
           assetTag: string
           title: string
-          dueOn: string
+          dueOn: string | null
+          servicePlanId?: string
+          dueDescription?: string
           assigneePersonId?: string | null
         }>
       >()
       .notNull(),
     scheduleCycles: jsonb('schedule_cycles')
       .$type<Array<{ id: string; dueOn: string }>>()
+      .default([])
+      .notNull(),
+    serviceCycles: jsonb('service_cycles')
+      .$type<Array<{ id: string; cycleId: string }>>()
       .default([])
       .notNull(),
     reminderCycles: jsonb('reminder_cycles')

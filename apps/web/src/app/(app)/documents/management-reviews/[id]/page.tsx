@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -171,19 +172,22 @@ export default async function ManagementReviewDetailPage({
             </div>
           }
           actions={
-            <div className="flex items-center gap-2">
+            <RecordActionMenu
+              destructive={
+                <>
+                  <form action={deleteManagementReviewAndRedirect} className="inline">
+                    <input type="hidden" name="id" value={id} />
+                    <Button type="submit" variant="outline">
+                      <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
+                    </Button>
+                  </form>
+                </>
+              }
+            >
               <DownloadLink href={`/documents/management-reviews/${id}/pdf`}>
-                <Button variant="outline">
-                  <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
-                </Button>
+                <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
               </DownloadLink>
-              <form action={deleteManagementReviewAndRedirect} className="inline">
-                <input type="hidden" name="id" value={id} />
-                <Button type="submit" variant="outline">
-                  <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
-                </Button>
-              </form>
-            </div>
+            </RecordActionMenu>
           }
         />
       }

@@ -1,7 +1,9 @@
 // Native equipment maintenance and skill-ticket dates for operational dashboard widgets.
+import { equipmentServiceDueSql } from '@beaconhs/db'
 import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
 import { sql, type SQL } from 'drizzle-orm'
 import {
+  equipmentServicePlans,
   equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentReminders,
@@ -156,17 +158,17 @@ export async function listDueSignals(
           and (${equipmentScope}) and ${equipmentReminders.dueOn} <= ${horizonIso}::date
 
         union all
-        select 'equipment', 'Oil change', ${equipmentItems.name} || ' (' || ${equipmentItems.assetTag} || ')',
+        select 'equipment', 'Periodic maintenance', ${equipmentItems.assetTag} || ' — ' || ${equipmentServicePlans.name},
           nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), ''),
-          ${equipmentItems.currentHolderPersonId}::text, ${equipmentItems.nextOilChangeDue}::date,
-          case when ${equipmentItems.nextOilChangeDue} < ${today}::date then 'overdue' else 'due_soon' end,
-          '/equipment/' || ${equipmentItems.id}::text || '?tab=inspections&itab=oil', ${equipmentItems.id}::text || ':oil'
-        from ${equipmentItems}
-        left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
-        where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
-          and ${equipmentItems.requiresOilChange} = true
-          and ${equipmentItems.nextOilChangeDue} is not null and ${equipmentItems.nextOilChangeDue} <= ${horizonIso}::date
+          ${equipmentItems.currentHolderPersonId}::text,
+          (select min((r.value->>'dueOn')::date) from jsonb_array_elements(${equipmentServicePlans.rules}) r(value) where r.value->>'kind'='calendar'),
+          case when ${equipmentServiceDueSql(today, true)} then 'overdue' else 'due_soon' end,
+          '/equipment/' || ${equipmentItems.id}::text || '?tab=inspections&itab=maintenance', ${equipmentServicePlans.id}::text || ':service'
+        from ${equipmentServicePlans}
+        join ${equipmentItems} on ${equipmentItems.id}=${equipmentServicePlans.equipmentItemId} and ${equipmentItems.tenantId}=${equipmentServicePlans.tenantId}
+        left join ${people} on ${people.id}=${equipmentItems.currentHolderPersonId}
+        where ${equipmentServicePlans.tenantId}=${tid} and ${equipmentItems.deletedAt} is null and ${equipmentItems.isDraft}=false
+          and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope}) and ${equipmentServiceDueSql(horizonIso)}
 
         union all
         select 'equipment', 'Warranty', ${equipmentItems.name} || ' (' || ${equipmentItems.assetTag} || ')',

@@ -43,7 +43,7 @@ import { SortableTh } from '@/components/sortable-th'
 export const dynamic = 'force-dynamic'
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
-  return { title: tGenerated('m_039d6635ac0051') }
+  return { title: tGenerated('m_189bb91aaf5565') }
 }
 
 const BASE = '/equipment/inspections'
@@ -244,7 +244,7 @@ export default async function EquipmentInspectionsPage({
       header={
         <>
           <PageHeader
-            title={tGenerated('m_039d6635ac0051')}
+            title={tGenerated('m_189bb91aaf5565')}
             description={tGenerated('m_18faf7c048e1b2', {
               value0: total.toLocaleString(),
               value1: total === 1 ? '' : 's',

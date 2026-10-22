@@ -550,13 +550,15 @@ export async function emitComplianceTransitions(
 // --- Equipment maintenance -------------------------------------------------
 
 export type EquipmentMaintenanceDueEntry = {
-  kind: 'inspection' | 'reminder'
+  kind: 'inspection' | 'reminder' | 'maintenance'
   equipmentItemId: string
   itemName: string
   assetTag: string
   /** Schedule name (inspection type / label) or the reminder title. */
   title: string
-  dueOn: string
+  dueOn: string | null
+  servicePlanId?: string
+  dueDescription?: string
   /** Reminder assignee — self-targeted like compliance per-person alerts. */
   assigneePersonId?: string | null
 }
@@ -620,9 +622,11 @@ export async function emitEquipmentMaintenanceDue(
   const audience = await resolveAudience(ctx, tenantId, 'equipment', [])
   if (audience.length > 0) {
     const inspections = entries.filter((e) => e.kind === 'inspection').length
+    const maintenance = entries.filter((e) => e.kind === 'maintenance').length
     const reminders = entries.filter((e) => e.kind === 'reminder').length
     const parts: string[] = []
     if (inspections) parts.push(`${inspections} inspection${inspections === 1 ? '' : 's'}`)
+    if (maintenance) parts.push(`${maintenance} service task${maintenance === 1 ? '' : 's'}`)
     if (reminders) parts.push(`${reminders} reminder${reminders === 1 ? '' : 's'}`)
     const title = `Equipment maintenance due: ${parts.join(' · ')}`
     const linkPath = '/equipment/maintenance'
@@ -636,7 +640,7 @@ export async function emitEquipmentMaintenanceDue(
         title,
         body: 'Open the maintenance cockpit for the full work list.',
         linkPath,
-        data: { inspections, reminders },
+        data: { inspections, maintenance, reminders },
       },
       { jobId: stableJobId('equipment-rollup', deliveryKey) },
     )

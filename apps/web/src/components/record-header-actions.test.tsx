@@ -29,6 +29,13 @@ afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
 })
+async function openActions() {
+  await act(async () => {
+    ;[...container.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('Actions'))!
+      .click()
+  })
+}
 async function render(lockAction: () => Promise<void | { error: string; details?: string[] }>) {
   await act(async () =>
     root.render(
@@ -47,6 +54,7 @@ async function render(lockAction: () => Promise<void | { error: string; details?
       />,
     ),
   )
+  await openActions()
 }
 describe('inspection submit feedback', () => {
   it('keeps the record open with the exact missing item and allows a successful retry', async () => {
@@ -58,7 +66,7 @@ describe('inspection submit feedback', () => {
       })
       .mockResolvedValueOnce(undefined)
     await render(lock)
-    const form = container.querySelector('form')!
+    const form = document.body.querySelector('form')!
     await act(async () => {
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
@@ -73,7 +81,7 @@ describe('inspection submit feedback', () => {
   it('keeps unexpected submission failures on the record without claiming completion', async () => {
     await render(vi.fn().mockRejectedValue(new Error('Internal database failure')))
     await act(async () => {
-      container
+      document.body
         .querySelector('form')!
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
@@ -104,6 +112,7 @@ describe('copy save barrier', () => {
         />,
       ),
     )
+    await openActions()
   }
   it('waits for all pending edits before asking the server to copy', async () => {
     let finish!: () => void
@@ -115,7 +124,7 @@ describe('copy save barrier', () => {
     )
     const copy = vi.fn(async () => {})
     await renderCopy(copy)
-    const button = [...container.querySelectorAll('button')].find((b) =>
+    const button = [...document.body.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('Copy assessment'),
     )!
     await act(async () => button.click())
@@ -129,7 +138,7 @@ describe('copy save barrier', () => {
     const copy = vi.fn(async () => {})
     await renderCopy(copy, true)
     await act(async () =>
-      [...container.querySelectorAll('button')]
+      [...document.body.querySelectorAll('button')]
         .find((b) => b.textContent?.includes('Copy assessment'))!
         .click(),
     )

@@ -14,7 +14,8 @@
     "./seed/lift-plan-template": "./src/seed/lift-plan-template.ts",
     "./seed/pdf-templates": "./src/seed/pdf-templates.ts",
     "./seed/report-definitions": "./src/seed/report-definitions.ts",
-    "./seed/training-class-email": "./src/seed/training-class-email.ts"
+    "./seed/training-class-email": "./src/seed/training-class-email.ts",
+    "./equipment-service": "./src/equipment-service.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

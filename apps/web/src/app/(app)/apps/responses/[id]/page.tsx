@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -786,18 +787,14 @@ export default async function FormResponsePage({
             </div>
           }
           actions={
-            <>
+            <RecordActionMenu>
               <GeneratedValue
                 value={
                   canCreateCorrectiveAction ? (
                     <Link
                       href={`${basePath}?drawer=spawn-ca${active === 'response' ? '' : `&tab=${active}`}`}
                     >
-                      <Button
-                        variant={complianceStatus === 'non_compliant' ? 'default' : 'outline'}
-                      >
-                        <Plus size={14} /> <GeneratedText id="m_07b71156553d0b" />
-                      </Button>
+                      <Plus size={14} /> <GeneratedText id="m_07b71156553d0b" />
                     </Link>
                   ) : null
                 }
@@ -808,9 +805,7 @@ export default async function FormResponsePage({
                     <Link
                       href={`${basePath}?drawer=spawn-incident${active === 'response' ? '' : `&tab=${active}`}`}
                     >
-                      <Button variant="outline">
-                        <ShieldAlert size={14} /> <GeneratedText id="m_0b7f374a64e552" />
-                      </Button>
+                      <ShieldAlert size={14} /> <GeneratedText id="m_0b7f374a64e552" />
                     </Link>
                   ) : null
                 }
@@ -877,11 +872,9 @@ export default async function FormResponsePage({
                 }
               />
               <DownloadLink href={`/apps/responses/${id}/pdf`}>
-                <Button variant="outline">
-                  <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
-                </Button>
+                <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
               </DownloadLink>
-            </>
+            </RecordActionMenu>
           }
         />
       }

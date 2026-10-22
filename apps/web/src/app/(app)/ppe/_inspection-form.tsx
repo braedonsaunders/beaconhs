@@ -187,7 +187,7 @@ export function PpeInspectionForm({
               missingEvidence={missingEvidence}
               uploadingCount={uploadingCount}
             />
-            <DraftSyncIndicator state={device.state} onRetry={() => undefined} />
+            <DraftSyncIndicator localOnly state={device.state} onRetry={() => undefined} />
           </div>
           <Button type="submit" form="ppe-inspection-form" disabled={!allAnswered || pending}>
             <GeneratedValue
@@ -246,6 +246,7 @@ export function PpeInspectionForm({
 
         <div className="space-y-4">
           <DraftRecoveryBanner
+            localOnly
             restored={device.restored}
             conflict={false}
             onDismiss={device.dismissRestored}

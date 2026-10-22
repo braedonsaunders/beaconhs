@@ -575,6 +575,13 @@
       "when": 1792595827623,
       "tag": "0082_domain_event_cancellation",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1792627200000,
+      "tag": "0083_equipment_service_plans",
+      "breakpoints": true
     }
   ]
 }

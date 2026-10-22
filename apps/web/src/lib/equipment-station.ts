@@ -1,5 +1,5 @@
 import { activePeopleWhere } from '@beaconhs/db'
-import { recordSearchWhere, recordSearchTerm } from './record-search'
+import { recordSearchWhere } from './record-search'
 // Equipment Station — shared, context-free core for scan-driven check in/out.
 //
 // Both surfaces call into here so the rules live in exactly one place:
@@ -9,7 +9,7 @@ import { recordSearchWhere, recordSearchTerm } from './record-search'
 // Every function takes a `Database` handle (a tenant-scoped transaction) so the
 // caller owns RLS scoping + auditing. Nothing here touches RequestContext.
 
-import { and, eq, ilike, isNull, or } from 'drizzle-orm'
+import { and, eq, isNull, or } from 'drizzle-orm'
 import { primaryPersonTitleName, type Database } from '@beaconhs/db'
 import {
   equipmentCheckouts,
@@ -65,9 +65,11 @@ export type StationScanResult =
 
 export type StationScanInput = {
   code: string
+  /** Bind a reviewed selection to its equipment record, even if its tag changes. */
+  equipmentItemId?: string
   /** Person taking the asset on check-out. */
   activePersonId?: string | null
-  /** Destination on check-out. Required before an asset can leave the station. */
+  /** Optional fixed destination; check-out needs a person, a destination, or both. */
   destinationOrgUnitId?: string | null
   expectedReturnOn?: string | null
   /** undefined ⇒ toggle current state; 'out'/'in' ⇒ force that direction. */
@@ -88,6 +90,11 @@ export function parseStationScanInput(value: unknown): StationScanInput | null {
     if (candidate === null || candidate === '') return null
     return typeof candidate === 'string' && isUuid(candidate) ? candidate : undefined
   }
+  if (
+    input.equipmentItemId !== undefined &&
+    (typeof input.equipmentItemId !== 'string' || !isUuid(input.equipmentItemId))
+  )
+    return null
   const activePersonId = optionalUuid(input.activePersonId)
   const destinationOrgUnitId = optionalUuid(input.destinationOrgUnitId)
   if (input.activePersonId !== undefined && activePersonId === undefined) return null
@@ -129,6 +136,9 @@ export function parseStationScanInput(value: unknown): StationScanInput | null {
 
   return {
     code,
+    ...(input.equipmentItemId === undefined
+      ? {}
+      : { equipmentItemId: input.equipmentItemId as string }),
     activePersonId,
     destinationOrgUnitId,
     expectedReturnOn,
@@ -139,7 +149,19 @@ export function parseStationScanInput(value: unknown): StationScanInput | null {
 }
 
 function cleanCode(raw: string): string {
-  return raw.trim()
+  const code = raw.trim()
+  // Printed labels encode the scan link. A camera or scan gun can send that
+  // whole URL instead of opening it; resolve only the known equipment path.
+  try {
+    const url = new URL(code, 'https://station.invalid')
+    const match = /^\/equipment\/scan\/([^/]+)\/?$/.exec(url.pathname)
+    if (match && (code.startsWith('/') || /^https?:\/\//i.test(code))) {
+      return decodeURIComponent(match[1]!)
+    }
+  } catch {
+    // A plain asset tag or badge does not need URL parsing.
+  }
+  return code
 }
 
 /**
@@ -152,10 +174,10 @@ export async function searchStationCore(
   tx: Database,
   rawQuery: string,
   limit = 24,
+  match: 'search' | 'code' = 'search',
 ): Promise<StationSearchResults> {
   const q = cleanCode(rawQuery)
   if (q.length < 1) return { equipment: [], people: [] }
-  const like = recordSearchTerm(q)
 
   const equipmentRows = await tx
     .select({
@@ -170,7 +192,14 @@ export async function searchStationCore(
     .from(equipmentItems)
     .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
     .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-    .where(and(isNull(equipmentItems.deletedAt), recordSearchWhere('equipment', q)))
+    .where(
+      and(
+        isNull(equipmentItems.deletedAt),
+        match === 'code'
+          ? or(eq(equipmentItems.assetTag, q), eq(equipmentItems.qrToken, q))
+          : recordSearchWhere('equipment', q),
+      ),
+    )
     .orderBy(equipmentItems.assetTag)
     .limit(limit)
 
@@ -186,11 +215,7 @@ export async function searchStationCore(
     .where(
       and(
         activePeopleWhere(),
-        or(
-          ilike(people.firstName, like),
-          ilike(people.lastName, like),
-          ilike(people.employeeNo, like),
-        ),
+        match === 'code' ? eq(people.employeeNo, q) : recordSearchWhere('people', q),
       ),
     )
     .orderBy(people.lastName, people.firstName)
@@ -259,6 +284,7 @@ export async function stationScanCore(
     tenantId: string
     actorTenantUserId: string | null
     requireHolderOnCheckout: boolean
+    requireConditionOnCheckin?: boolean
   },
 ): Promise<StationScanResult> {
   const code = cleanCode(args.code)
@@ -282,6 +308,9 @@ export async function stationScanCore(
     )
     .limit(1)
     .for('update')
+  if (args.equipmentItemId && item?.id !== args.equipmentItemId) {
+    return { ok: false, error: 'Equipment no longer matches this tag. Remove it and search again.' }
+  }
   if (!item) {
     // Not equipment — a person badge (employee number) sets the active holder.
     const [p] = await tx
@@ -395,6 +424,9 @@ export async function stationScanCore(
   // ---- check in: snap to home, clear holder, mark available -----------------
   if (!isOut) {
     return { ok: false, error: `${item.assetTag} is already checked in` }
+  }
+  if (args.requireConditionOnCheckin && !args.condition) {
+    return { ok: false, error: 'Choose a return condition before checking in' }
   }
   let result
   try {

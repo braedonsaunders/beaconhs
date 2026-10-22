@@ -175,6 +175,10 @@ If **Manage** is available to your role:
 2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
 3. Choose **Back to Hazard Assessments** to return to everyday work.
 
+## Record actions
+
+Open **Actions** in the header for **Safety review**, **Print / PDF**, **Send email**, **Copy assessment**, and **Submit & lock** or **Unlock**, when your role allows them. On a phone, the submit item reads **Submit**. **Delete** is the last menu item and still asks for confirmation.
+
 ## What this is for
 
 Walking through the hazards as a crew catches problems while they are still cheap to fix. The signed record shows everyone understood the risks that day.
@@ -183,7 +187,7 @@ Walking through the hazards as a crew catches problems while they are still chea
 
 Open **Hazard Assessments** in the left menu, or go to [Hazard assessments](/hazard-assessments).
 
-On a phone, the assessment number, **In progress** or **Locked** status, action buttons, and section tabs stay at the top. Tap a section tab to jump to that part of the assessment. The assessment title, dates, and safety review status scroll with the page; scroll to the top of the content to see them. **Submit** opens the **Submit & lock** confirmation. **Unlock** and **More actions** remain at the top of a locked assessment.
+On a phone, the assessment number, **In progress** or **Locked** status, action buttons, and section tabs stay at the top. Tap a section tab to jump to that part of the assessment. The assessment title, dates, and safety review status scroll with the page; scroll to the top of the content to see them. Open **Actions**, then choose **Submit** for the **Submit & lock** confirmation. **Unlock** is also inside **Actions** when the assessment is locked.
 
 Use **All locations** to search the complete set of locations used by assessments you are allowed to open. On **My hazard assessments**, it searches only locations used by assessments you started. If the picker says more results exist, add more of the location name or code.
 
@@ -257,7 +261,7 @@ People with permission to review hazard assessments can record an advisory decis
 
 ## Finishing up
 
-1. When everything is rated and signed, tap **Submit & lock**, then tap **Submit & lock** again in the confirmation. This locks the job content and runs its submit flows. You can still add crew and collect signatures. **Unlock** reopens the job content without clearing signatures. Changing the content after unlocking prepares fresh signature spaces; earlier signatures stay in **Activity**.
+1. When everything is rated and signed, open **Actions**, choose **Submit & lock**, then tap **Submit & lock** again in the confirmation. This locks the job content and runs its submit flows. You can still add crew and collect signatures. **Unlock** reopens the job content without clearing signatures. Changing the content after unlocking prepares fresh signature spaces; earlier signatures stay in **Activity**.
    - **Submit & lock** stays greyed out until every person on the current crew has signed. Remove unsigned people who are no longer joining the job before submitting.
 2. Use **Print / PDF** for a paper copy, or **Send email** to share it.
 
@@ -279,11 +283,11 @@ You need signal to add, edit, move, or delete tasks, hazards, PPE, and questions
 - Conditions change. If the job changes, update the assessment (use **Unlock** first if submitted), or start a new one.
 - **Completed by** on the record and on the assessment list is the person who filled the assessment in. BeaconHS records it when the assessment is started — there is nothing to type, and it cannot be edited. It is the **Completed by** line on the printed PDF too.
 - **Print blank** on the assessment list prints a paper copy to fill in by hand — for a job where a phone is not practical. Pick the assessment type first: the sheet carries that type's real hazards, PPE and questions, with the **Specific controls**, **Applies**, and answer columns left empty and a ruled sign-on block at the end. Key it into BeaconHS afterwards so the record is the system of record.
-- **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work. On a phone it lives under **More actions**. The button reads **Copying…** while the new assessment is built, then opens it — tap it once and wait.
+- **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work. On a phone it lives under **Actions**. The button reads **Copying…** while the new assessment is built, then opens it — tap it once and wait.
 
 ## Copying an assessment
 
-1. Choose **Copy assessment**. On a phone, open **More actions** first.
+1. Choose **Copy assessment**. On a phone, open **Actions** first.
 2. Leave **Include existing photos** unchecked for a fresh set of site photos. Check it only when you want the original photos carried forward.
 3. Tap **Create copy**. BeaconHS saves pending edits first, then opens the new draft.
 4. Review the new date, job details, PPE answers, question answers, controls, attached plans and crew names. These carry forward so you do not have to retype the job. Open each copied plan and submit it again after reviewing it.
@@ -323,6 +327,10 @@ If **Manage** is available to your role:
 2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
 3. Choose **Back to Site Inspections** to return to everyday work.
 
+## Record actions
+
+Open **Actions** in the record header for **Print / PDF**, **Send email**, **Copy inspection**, and submit or unlock. **Delete** is last and only appears when you can remove the record. The same menu works on a phone or desktop.
+
 ## What this is for
 
 Regular inspections catch unsafe conditions before they hurt someone. The record proves the check happened and tracks anything found.
@@ -333,7 +341,7 @@ Open **Site Inspections** in the left menu. Records live at [Inspection records]
 
 On **Inspection records**, use **All inspection types**, **All locations**, and **All inspectors** to search across the records you are allowed to open. The **Location** column shows the selected company location. If a picker says more results exist, add more of the type, location, inspector name, or email to the search. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list. The total in parentheses beside **Pass / Fail / N-A** is the number of checks on that inspection.
 
-Inspecting a unit or tool instead of a site? Those live separately — see [Equipment checks](/help/equipment-inspections).
+Inspecting a unit or tool instead of a site? Those live separately — see [Inspections](/help/equipment-inspections).
 
 ## Starting an inspection
 
@@ -364,9 +372,9 @@ Managers build inspection types under **Site Inspections** → **Manage** → **
 
 ## Submitting and corrections
 
-Tap **Submit & lock** when all required answers and evidence are complete. Submission waits for pending saves. When the inspection type enables corrective actions, failed findings marked **Follow-up required** create an action after successful submission, at any severity. **Resolved on site** findings do not create new open actions. Draft edits do not send corrective-action emails.
+Open **Actions** and choose **Submit & lock** when all required answers and evidence are complete. Submission waits for pending saves. When the inspection type enables corrective actions, failed findings marked **Follow-up required** create an action after successful submission, at any severity. **Resolved on site** findings do not create new open actions. Draft edits do not send corrective-action emails.
 
-If something is missing, the page stays open and lists the item and missing field below **Submit & lock**. Complete those fields and try again. Your inspection stays editable until submission succeeds.
+If something is missing, the page stays open and lists the item and missing field below **Actions**. Complete those fields and try again. Your inspection stays editable until submission succeeds.
 
 Tap **Unlock** to correct a submitted inspection, then **Resubmit & lock**. Existing corrective actions remain linked so resubmission does not create duplicates. Updated finding details synchronize to active linked actions even when you lower severity. A finding marked **Resolved on site** closes its active linked action on submission if you have permission to update that action. If verification is required, the action moves to **Pending verification** instead. Closed and cancelled actions keep their history; open the linked action to reopen it when more work is needed. Changing an answer to **Pass** or **N/A** alone does not close an action. The action link shows its current status.
 
@@ -374,7 +382,7 @@ Tap **Unlock** to correct a submitted inspection, then **Resubmit & lock**. Exis
 
 **Activity** includes all saved events. Search or filter it and use the page controls for older changes. **Show changes** compares old and new values.
 
-Use the buttons in the header to **Print / PDF**, **Send email**, **Copy inspection**, lock, unlock, or delete an inspection. On a phone, keep the lock button visible and tap **More actions** for the rest.
+Open **Actions** in the header to **Print / PDF**, **Send email**, **Copy inspection**, lock, unlock, or delete an inspection. These commands use the same menu on phones and desktops.
 
 - **Copy inspection** starts a new draft with the same setup and checklist. Answers, photos, signatures, approvals, and corrective-action history are not copied. The button reads **Copying…** while the new draft is built, then opens it — tap it once and wait.
 - **Send email** sends the inspection summary and saved checklist only to the addresses you enter.
@@ -423,6 +431,10 @@ If **Manage** is available to your role:
 1. Select **Manage** to open the first setting you can use.
 2. Choose a page from the grouped list on the left. The page opens beside the list. On a phone, use **Management page** above the content.
 3. Choose **Back to Incidents** to return to everyday work.
+
+## Record actions
+
+Use the status selector in the header to change the investigation stage. Open **Actions** for **Print / PDF**, **Send email**, **Copy**, and **Lock** or **Unlock**. Managers find **Delete** at the bottom.
 
 ## What this is for
 
@@ -535,6 +547,10 @@ If **Manage** is available to your role:
 
 Under **Automations**, choose **Corrective actions** to edit what happens when an action is created or changes status.
 
+## Record actions
+
+The status selector stays in the header. Open **Actions** for the PDF, email, **Close + lock**, or **Reopen**, as your permissions and the verification state allow.
+
 ## What this is for
 
 Finding a problem only matters if someone fixes it. Corrective actions track each fix from "assigned" to "done and checked" so nothing falls through the cracks.
@@ -555,7 +571,7 @@ Open **Corrective Actions** in the left menu, or go to [Corrective actions](/cor
 ## Verification and closing
 
 - Some actions need a second person to verify the fix before they can close. The **Verification** section shows this — the verifier taps **Verify** and signs.
-- To close, tap **Close + lock** at the top. You can add a cost figure and a close note. Closing locks the record so it becomes read-only.
+- To close, open **Actions** and choose **Close + lock**. You can add a cost figure and a close note. Closing locks the record so it becomes read-only.
 - Made a mistake? Someone with access can tap **Reopen**.
 
 ## Due dates
@@ -695,6 +711,10 @@ Open **Settings** from the vehicle log to choose which entry modes the company u
       'saved on device',
     ],
     body: `Your company builds its own digital forms in BeaconHS — toolbox talks, lift plans, permits, checklists, and more. You fill them in the app instead of on paper.
+
+## Record actions
+
+On a saved form record, open **Actions** in the header for its PDF, configured company actions, and available finalize, lock, unlock, or reopen commands. Links to start a related incident or corrective action are in the same menu when your role allows them.
 
 ## What this is for
 
@@ -943,6 +963,10 @@ Your company can build its own tools and publish them here. Those appear as extr
     requiredPermission: 'tools.safe-distance.use',
     body: `**Safe Distance** works out the stand-off distance for a pneumatic pressure test — how far people must stay from piping under test. It uses NASA-Glenn, ASME PCC-2, and Lloyd's Register calculations and keeps the assessment as a safety record.
 
+## Record actions
+
+Open **Actions** for **Print / PDF**, **Lock**, or **Unlock**. **Delete** is last and is only available before the record is locked.
+
 ## Start an assessment
 
 1. Open [Tools](/tools) and tap **Safe Distance**.
@@ -965,7 +989,7 @@ If somebody changes or locks the assessment while you have it open, refresh the 
 
 ## Print or save a PDF
 
-Open the assessment and tap **Print / PDF**. Use your browser's print window to print it or save it as a PDF. Past assessments remain in the Safe Distance list.
+Open the assessment, then choose **Actions → Print / PDF**. Use your browser's print window to print it or save it as a PDF. Past assessments remain in the Safe Distance list.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 

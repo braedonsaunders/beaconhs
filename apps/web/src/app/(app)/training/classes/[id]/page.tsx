@@ -1,3 +1,4 @@
+import { RecordActionMenu } from '@/components/record-action-menu'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -361,12 +362,20 @@ export default async function TrainingClassPage({
             }
             actions={
               !canManageClasses ? null : (
-                <div className="flex flex-wrap items-center gap-2">
+                <RecordActionMenu
+                  destructive={
+                    <>
+                      {!isCompleted ? (
+                        <form action={deleteAction}>
+                          <DeleteClassButton />
+                        </form>
+                      ) : null}
+                    </>
+                  }
+                >
                   {!isCancelled && !isCompleted ? <EmailClassButton id={id} /> : null}
                   <DownloadLink href={`/training/classes/${cls.id}/pdf`}>
-                    <Button variant="outline" size="sm">
-                      <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
-                    </Button>
+                    <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
                   </DownloadLink>
                   <GeneratedValue
                     value={
@@ -374,9 +383,7 @@ export default async function TrainingClassPage({
                         <Link
                           href={`/training/courses/${cls.courseId}/present?from=${encodeURIComponent(basePath)}`}
                         >
-                          <Button size="sm">
-                            <Presentation size={14} /> <GeneratedText id="m_04b4cec328eb40" />
-                          </Button>
+                          <Presentation size={14} /> <GeneratedText id="m_04b4cec328eb40" />
                         </Link>
                       ) : null
                     }
@@ -402,14 +409,11 @@ export default async function TrainingClassPage({
                               )
                             }
                           />
-                          <form action={deleteAction}>
-                            <DeleteClassButton />
-                          </form>
                         </>
                       )
                     }
                   />
-                </div>
+                </RecordActionMenu>
               )
             }
           />

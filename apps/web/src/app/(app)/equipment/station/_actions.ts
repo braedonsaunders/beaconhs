@@ -19,10 +19,20 @@ import {
   type StationSearchResults,
 } from '@/lib/equipment-station'
 
-export async function searchStation(query: string): Promise<StationSearchResults> {
+export async function searchStation(
+  query: string,
+  match: 'search' | 'code' = 'search',
+): Promise<StationSearchResults> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  return ctx.db((tx) => searchStationCore(tx, typeof query === 'string' ? query.slice(0, 200) : ''))
+  return ctx.db((tx) =>
+    searchStationCore(
+      tx,
+      typeof query === 'string' ? query.slice(0, 200) : '',
+      24,
+      match === 'code' ? 'code' : 'search',
+    ),
+  )
 }
 
 export async function performStationScan(input: StationScanInput): Promise<StationScanResult> {
@@ -35,6 +45,7 @@ export async function performStationScan(input: StationScanInput): Promise<Stati
     const [settings] = await tx
       .select({
         requireHolder: equipmentStationSettings.requireHolderOnCheckout,
+        requireCondition: equipmentStationSettings.requireConditionOnCheckin,
       })
       .from(equipmentStationSettings)
       .where(eq(equipmentStationSettings.tenantId, ctx.tenantId))
@@ -44,6 +55,7 @@ export async function performStationScan(input: StationScanInput): Promise<Stati
       tenantId: ctx.tenantId,
       actorTenantUserId: ctx.membership?.id ?? null,
       requireHolderOnCheckout: settings?.requireHolder ?? false,
+      requireConditionOnCheckin: settings?.requireCondition ?? false,
     })
     if (scan.ok && (scan.action === 'checked_out' || scan.action === 'checked_in')) {
       await recordAuditInTransaction(tx, ctx, {

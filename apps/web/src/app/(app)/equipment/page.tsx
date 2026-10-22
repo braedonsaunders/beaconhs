@@ -1,3 +1,5 @@
+import { EquipmentSetupLoader } from './_setup-loader'
+import { EQUIPMENT_STATUS_OPTIONS } from '@/lib/equipment-status'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { PeopleStatusFilter } from '@/components/people-status-filter'
@@ -20,7 +22,7 @@ import { can } from '@beaconhs/tenant'
 import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
-import { buildExportHref } from '@/lib/list-params'
+import { buildExportHref, mergeHref, pickString } from '@/lib/list-params'
 import { equipmentIsCheckedOutSql } from '@/lib/equipment-custody'
 import { equipmentRegisterQuery } from '@/lib/equipment/register-query'
 import { SearchInput } from '@/components/search-input'
@@ -37,14 +39,6 @@ export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
   return { title: tGenerated('m_17f17df74f7e69') }
 }
-
-const STATUS_OPTIONS = [
-  { value: 'in_service', label: 'In service' },
-  { value: 'out_of_service', label: 'Out of service' },
-  { value: 'in_repair', label: 'In repair' },
-  { value: 'lost', label: 'Lost' },
-  { value: 'retired', label: 'Retired' },
-]
 
 const AVAILABILITY_OPTIONS = [
   { value: 'available', label: 'Available for check-out' },
@@ -205,7 +199,10 @@ export default async function EquipmentPage({
                 <GeneratedValue
                   value={
                     canManageEquipment ? (
-                      <Link href="/equipment/new">
+                      <Link
+                        href={mergeHref('/equipment', sp, { drawer: 'new' }) as never}
+                        data-walkthrough="equipment-add"
+                      >
                         <Button>
                           <GeneratedText id="m_105ebaff0d3ac5" />
                         </Button>
@@ -226,7 +223,10 @@ export default async function EquipmentPage({
               label={tGenerated('m_0b9da892d6faf0')}
               allLabel="All statuses"
               defaultValue="in_service"
-              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+              options={EQUIPMENT_STATUS_OPTIONS.map((o) => ({
+                ...o,
+                count: statusCounts[o.value],
+              }))}
             />
             <FilterChips
               basePath="/equipment"
@@ -285,7 +285,10 @@ export default async function EquipmentPage({
               description={tGenerated('m_191ab10c462021')}
               action={
                 canManageEquipment ? (
-                  <Link href="/equipment/new">
+                  <Link
+                    href={mergeHref('/equipment', sp, { drawer: 'new' }) as never}
+                    data-walkthrough="equipment-add"
+                  >
                     <Button>
                       <GeneratedText id="m_105ebaff0d3ac5" />
                     </Button>
@@ -316,6 +319,9 @@ export default async function EquipmentPage({
           )
         }
       />
+      {canManageEquipment && pickString(sp.drawer) === 'new' ? (
+        <EquipmentSetupLoader closeHref={mergeHref('/equipment', sp, { drawer: undefined })} />
+      ) : null}
     </ListPageLayout>
   )
 }
