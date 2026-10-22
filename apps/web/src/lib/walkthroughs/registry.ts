@@ -68,31 +68,6 @@ export const WALKTHROUGHS: Walkthrough[] = [
     ],
   },
   {
-    id: 'equipment-maintenance',
-    title: 'Plan equipment maintenance',
-    description: 'Find due inspections, service jobs, reminders, and repairs.',
-    startPath: '/equipment/maintenance',
-    defaultEnabled: true,
-    defaultAutoStart: false,
-    steps: [
-      {
-        path: '/equipment/maintenance',
-        target: '[data-walkthrough="maintenance-priorities"]',
-        title: 'Choose the next job',
-        body: 'Select Overdue or Ready to do for work that needs attention. Outstanding repairs shows work orders. Pre-use checks stay with the operator.',
-      },
-      {
-        target: '[data-walkthrough="maintenance-work-list"]',
-        title: 'Get the work done',
-        body: 'Search and filter the work list. Start an inspection, record completed maintenance, finish a reminder, or open a work order. Select an equipment name for its full service record.',
-      },
-      {
-        title: 'Plan ahead',
-        body: 'Use the calendar month arrows and select a day’s count to see its jobs. On a phone, choose Calendar above the work list. Undated repairs remain in the work list.',
-      },
-    ],
-  },
-  {
     id: 'equipment-map',
     title: 'Find tracked equipment',
     description: 'Find tracker positions and check how current they are.',

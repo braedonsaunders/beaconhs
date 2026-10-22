@@ -737,15 +737,13 @@ Equipment owns asset inspection schedules, servicing, oil changes, warranties, w
 
 ## Plan the shop work
 
-1. Open **Equipment → Maintenance**. The **Work list** combines scheduled inspections, periodic maintenance, open reminders, upcoming warranty dates, and outstanding work orders. Pre-use checks stay with the operator on each unit.
-2. Select **Overdue**, **Ready to do**, **Next 7 days**, or **Outstanding repairs** to focus the list. **Ready to do** includes dated work due today or earlier and maintenance that has reached its usage conditions. Search by equipment, task, work-order reference, or mechanic. Use **Task** and **Category** to narrow the results.
-3. Use **Due** for a date range or **Needs setup** for missing inspection dates or maintenance settings. Choose **Show all dates** to return to the complete queue, including future reminders. Use **Prev** and **Next** below the list.
-4. Select **Start** to fill a scheduled checklist. For an outside inspection, select **Record completion**, enter the date and certificate reference or notes, and save. Managers can select **Record completed** for periodic maintenance or **Set up maintenance** when its conditions need attention.
-5. Select **Done** after completing a reminder, or **Edit reminder** to change it. Managers can use **New reminder** for one-off or repeating equipment jobs. **Reminder settings** controls reminder delivery.
-6. Select **Open work order** to review a repair, its assignee, work notes, and status. **Outstanding repairs** on another task opens the same unit's repair records. **New work order** on a task starts a repair for that equipment. Work orders do not have scheduled due dates; their opened date does not make them overdue.
-7. Use the month arrows on the calendar to plan ahead. Select a day’s count to open that day’s paginated work list. The calendar follows search, **Task**, and **Category**. The **Due** filter applies to the work list. On a phone, switch between **Work list** and **Calendar**.
+1. Open **Equipment → Maintenance**. Search by unit name, asset tag, or task. Use **Kind** and **Category** to narrow the list.
+2. The summary shows **Overdue**, **Due today**, **Next 7 days**, and **Next 30 days**. The work list is on the left. Scroll inside it and use **Prev** and **Next** below the list.
+3. On a computer, the month calendar sits beside the list. Use the month arrows to plan ahead. Select a task to open the unit’s maintenance summary. A busy day shows one count; select it for that day’s paginated list. On a phone, use the work list.
+4. Select a unit name to open its maintenance summary without leaving the page. Choose **Start** for an inspection or **Record completed** for periodic maintenance. Maintenance that needs missing settings has **Set up maintenance**.
+5. Use **New reminder** for a one-off or repeating job. Choose **Reminders** to change delivery settings. Open **Work orders** separately to review repairs.
 
-Maintenance conditions can use dates, engine hours, distance, or company counters. **Ready to do** and **Overdue** respect whether any condition or all conditions must be met. Upcoming warranty dates are planning notices; inspect the equipment record for warranty details.
+The calendar shows scheduled inspections, reminders, and dated maintenance. Usage-only maintenance stays in the work list. Maintenance due status respects whether any condition or all conditions must be met.
 
 ## Review fleet inspection status
 
@@ -756,7 +754,7 @@ Maintenance conditions can use dates, engine hours, distance, or company counter
 
 ## Control equipment reminders
 
-1. Open **Equipment → Maintenance**, then choose **Reminder settings**.
+1. Open **Equipment → Maintenance**, then choose **Reminders**.
 2. Choose whether to **Send equipment maintenance reminders**, select the **Reminder schedule**, then choose **Save**.
 3. Recipients and delivery channels use the **Equipment** category under **Admin → Notifications**. The schedule uses the displayed timezone.
 
@@ -842,7 +840,7 @@ To update several visible units, select their checkboxes and choose **Transfer t
 3. The **Inspections** tab shows the inspection history and anything marked **overdue** or **due soon**.
 4. Use the search boxes above **Inspection schedules** and **Reminders** to narrow long lists. Use **Prev** and **Next** to move through every match.
 
-Select an equipment name in the **Maintenance** work list to open its full record. Use **Inspections** for schedules, periodic maintenance, and reminders, or **Work orders** for its repairs. Each list has search and page controls.
+Select an equipment name in the **Maintenance** work list to open its maintenance summary. Use its record link to open the full unit. Use **Inspections** for schedules, periodic maintenance, and reminders, or **Work orders** for its repairs. Each list has search and page controls.
 
 Managers can change **Type**, **Category**, and **Department** on **Overview** by searching the complete tenant catalogue. On **Inspections**, the **Pre-use checklist** (tap **Edit** on the pre-use schedule row) and **Inspection type** also search the full set that applies to that unit's type. A saved inactive choice remains visible on an older unit or schedule. If the picker says more results exist, add more of the name or description.
 
