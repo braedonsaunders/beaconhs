@@ -139,7 +139,7 @@ export async function listDueSignals(
         left join ${equipmentInspectionTypes} on ${equipmentInspectionTypes.id} = ${equipmentInspectionSchedules.inspectionTypeId}
         left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
         where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
+          and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost','out_of_service') and (${equipmentScope})
           and ${equipmentInspectionSchedules.nextDueOn} <= ${horizonIso}::date
 
         union all
@@ -154,7 +154,7 @@ export async function listDueSignals(
           and ${equipmentItems.tenantId} = ${equipmentReminders.tenantId}
         left join ${people} on ${people.id} = ${equipmentReminders.assignedToPersonId}
         where ${equipmentReminders.tenantId} = ${tid} and ${equipmentReminders.completedAt} is null
-          and ${equipmentItems.deletedAt} is null and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost')
+          and ${equipmentItems.deletedAt} is null and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost','out_of_service')
           and (${equipmentScope}) and ${equipmentReminders.dueOn} <= ${horizonIso}::date
 
         union all
@@ -168,7 +168,7 @@ export async function listDueSignals(
         join ${equipmentItems} on ${equipmentItems.id}=${equipmentServicePlans.equipmentItemId} and ${equipmentItems.tenantId}=${equipmentServicePlans.tenantId}
         left join ${people} on ${people.id}=${equipmentItems.currentHolderPersonId}
         where ${equipmentServicePlans.tenantId}=${tid} and ${equipmentItems.deletedAt} is null and ${equipmentItems.isDraft}=false
-          and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope}) and ${equipmentServiceDueSql(horizonIso)}
+          and ${equipmentItems.status} not in ('retired','lost','out_of_service') and (${equipmentScope}) and ${equipmentServiceDueSql(horizonIso)}
 
         union all
         select 'equipment', 'Warranty', ${equipmentItems.name} || ' (' || ${equipmentItems.assetTag} || ')',
@@ -179,7 +179,7 @@ export async function listDueSignals(
         from ${equipmentItems}
         left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
         where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
+          and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost','out_of_service') and (${equipmentScope})
           and ${equipmentItems.warrantyExpiresOn} is not null and ${equipmentItems.warrantyExpiresOn} <= ${horizonIso}::date
 
 
@@ -191,8 +191,10 @@ export async function listDueSignals(
           ${equipmentWorkOrders.id}::text
         from ${equipmentWorkOrders}
         left join ${equipmentItems} on ${equipmentItems.id} = ${equipmentWorkOrders.itemId}
+          and ${equipmentItems.tenantId} = ${equipmentWorkOrders.tenantId}
         where ${equipmentWorkOrders.tenantId} = ${tid} and (${equipmentScope})
           and ${equipmentWorkOrders.deletedAt} is null and ${equipmentItems.deletedAt} is null
+          and (${equipmentWorkOrders.itemId} is null or (${equipmentItems.id} is not null and ${equipmentItems.isDraft} = false and ${equipmentItems.status} not in ('retired','lost','out_of_service')))
           and ${equipmentWorkOrders.status} in ('open','assigned','in_progress','awaiting_parts')
 
         union all

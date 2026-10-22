@@ -1,4 +1,5 @@
 'use client'
+import { isDailyOrPreUseInspection } from '@/lib/equipment/intervals'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -596,13 +597,11 @@ function EquipmentSetupForm({
                   onChange={(e) => change({ ...value, preUseTypeId: e.target.value })}
                 >
                   <option value="">{t('Choose a checklist')}</option>
-                  {availableChecklists
-                    .filter((c) => c.isPreUse)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                  {availableChecklists.filter(isDailyOrPreUseInspection).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null}

@@ -87,7 +87,10 @@ describe('equipment inspection atomicity contract', () => {
     expect(create).toContain(
       "failsSpawnWorkOrders: targetMode === 'registered' && type.failsSpawnWorkOrders",
     )
-    expect(create).toContain('isPreUse: type.isPreUse')
+    expect(create).toContain('const isPreUse =')
+    expect(create).toContain('item?.preUseInspectionTypeId === type.id')
+    expect(create).toContain("item?.ownership === 'rented'")
+    expect(create).toContain('isPreUse,')
     expect(create).toContain('intervalValue: type.intervalValue')
     expect(create).toContain('intervalUnit: type.intervalUnit')
     expect(create).toContain('materialiseEquipmentCriteriaInTx(')
@@ -251,10 +254,10 @@ describe('equipment inspection atomicity contract', () => {
     expect(newDrawer).toContain('lookup={lookup}')
     expect(newDrawer).toContain('contextId={contextId || undefined}')
     expect(newDrawer).not.toContain('choices.filter(')
-    expect(actions).toContain("targetMode === 'rental' && !type.isPreUse")
+    expect(actions).toContain("targetMode === 'rental' && !isDailyOrPreUseInspection(type)")
     expect(actions).toContain("targetMode === 'rental'")
     // Server-side the same two rules are enforced, not just hinted at in the UI.
-    expect(actions).toContain("item.ownership === 'rented' && !type.isPreUse")
+    expect(actions).toContain("item.ownership === 'rented' && !isDailyOrPreUseInspection(type)")
     expect(actions).toContain('That inspection is not set up on this equipment item')
     expect(library).toContain('record.isRental && fails.length > 0')
     expect(library).toContain("sourceEntityType: 'equipment_inspection_record'")

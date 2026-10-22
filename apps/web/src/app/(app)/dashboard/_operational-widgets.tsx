@@ -210,7 +210,7 @@ export async function OperationalWidget({
     )
   } else {
     const equipment = id === 'equipment-maintenance-agenda'
-    const families = ['Inspection', 'Reminder', 'Oil change', 'Warranty', 'Work order']
+    const families = ['Inspection', 'Reminder', 'Periodic maintenance', 'Warranty', 'Work order']
     const validStatus = ['overdue', 'expired', 'due_soon', 'open'].includes(status ?? '')
       ? (status as SignalStatus)
       : undefined

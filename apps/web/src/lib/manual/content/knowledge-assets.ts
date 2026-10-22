@@ -922,7 +922,11 @@ On a unit's page, every field — including company-specific fields — saves to
 - A red **missing** badge means someone reported the unit missing. If you find it, tell your supervisor.
 - Each unit names the **Pre-use inspection** form its crew gets. If that form belongs to a different equipment type, the unit shows a warning — a boom lift handed the scissor-lift checklist is the classic case. Managers set which equipment type a form belongs to under **Manage** → **Inspection types**; a form left unassigned can be used on anything.
 - **Print / PDF** on a unit gives you its asset record sheet. **Actions → QR** prints the tag that goes on the unit — they are two different documents.
-- Need to inspect a unit before use? See [Inspections](/help/equipment-inspections).`,
+- Need to inspect a unit before use? See [Inspections](/help/equipment-inspections).
+
+When you choose **Record completed maintenance**, you can record **Engine hours** and **Odometer** even for calendar-based maintenance. Leave unused readings blank. Readings required by a usage condition must be filled in. Saved readings appear in the equipment log and update the current meter without changing the maintenance schedule. In the new-equipment wizard, **Pre-use checklist** includes both pre-use and daily checklists that apply to the selected equipment type. The same daily checklist can still be used in a scheduled inspection.
+
+Open a work order from the list to use its drawer. **Overview**, **Action taken**, **Status**, and **Activity** stay inside that drawer. Closing the drawer returns to the same search, filters, and page.`,
   },
   {
     slug: 'equipment-station',
@@ -1121,7 +1125,9 @@ You need signal to submit the inspection, use **Pass all**, reopen, delete, or a
 - The inspection picker lists the check you do most often first: pre-use at the top, then daily, weekly, monthly and annual. The annual check is never the first thing you land on.
 - Choose **Actions → Print / PDF** in the equipment inspection panel for a paper copy with every criterion listed line by line.
 - Never pencil-whip it. A failed item with a photo gets fixed a lot faster than a fake pass.
-- Inspecting your harness or hard hat instead? That lives in [PPE](/help/ppe).`,
+- Inspecting your harness or hard hat instead? That lives in [PPE](/help/ppe).
+
+Select an inspection reference in the list to open its drawer directly. Your search, filters, and page stay in place when you close it.`,
   },
   {
     slug: 'ppe',

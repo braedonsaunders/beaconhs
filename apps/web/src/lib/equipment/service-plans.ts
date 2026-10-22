@@ -237,54 +237,53 @@ export async function completeServicePlan(
     engine_hours: item.currentHours === null ? null : Number(item.currentHours),
     odometer: item.currentOdometer,
   }
-  for (const rule of rules)
-    if (rule.kind === 'meter') {
-      const reading = validReading(input.readings[rule.meter])
-      if (rule.meter === 'engine_hours' || rule.meter === 'odometer') {
-        meterSnapshots[rule.meter] = {
-          name: rule.meter === 'engine_hours' ? 'Engine hours' : 'Odometer',
-          unit: rule.meter === 'engine_hours' ? 'hours' : 'km',
-          value: reading,
-        }
-        const previous = current[rule.meter]
-        if (plan.lastReadings[rule.meter] !== undefined && reading < plan.lastReadings[rule.meter]!)
-          throw new Error('Completion readings cannot be below the previous completion reading.')
-        if (rule.meter === 'odometer' && (!Number.isInteger(reading) || reading > 2147483647))
-          throw new Error('Enter a valid whole-number odometer reading.')
-        if (
-          rule.meter === 'engine_hours' &&
-          (Math.round(reading * 10) !== reading * 10 || reading > 999999999.9)
-        )
-          throw new Error('Enter valid engine hours with at most one decimal place.')
-        if (previous === null || reading > previous)
-          await tx
-            .update(equipmentItems)
-            .set(
-              rule.meter === 'engine_hours'
-                ? { currentHours: String(reading), metersUpdatedAt: new Date() }
-                : { currentOdometer: reading, metersUpdatedAt: new Date() },
-            )
-            .where(eq(equipmentItems.id, item.id))
-      } else {
-        const [meter] = await tx
-          .select()
-          .from(equipmentMeters)
-          .where(
-            and(eq(equipmentMeters.id, rule.meter), eq(equipmentMeters.equipmentItemId, item.id)),
-          )
-          .limit(1)
-          .for('update')
-        if (!meter) throw new Error('Usage counter was not found.')
-        meterSnapshots[rule.meter] = { name: meter.name, unit: meter.unit, value: reading }
-        if (plan.lastReadings[rule.meter] !== undefined && reading < plan.lastReadings[rule.meter]!)
-          throw new Error('Completion readings cannot be below the previous completion reading.')
-        if (meter.currentValue === null || reading > Number(meter.currentValue))
-          await tx
-            .update(equipmentMeters)
-            .set({ currentValue: String(reading), readOn: completedOn, updatedAt: new Date() })
-            .where(eq(equipmentMeters.id, meter.id))
+  for (const [meterId, rawReading] of Object.entries(input.readings)) {
+    const reading = validReading(rawReading)
+    completionReadings[meterId] = reading
+    if (meterId === 'engine_hours' || meterId === 'odometer') {
+      meterSnapshots[meterId] = {
+        name: meterId === 'engine_hours' ? 'Engine hours' : 'Odometer',
+        unit: meterId === 'engine_hours' ? 'hours' : 'km',
+        value: reading,
       }
+      const previous = current[meterId]
+      if (plan.lastReadings[meterId] !== undefined && reading < plan.lastReadings[meterId]!)
+        throw new Error('Completion readings cannot be below the previous completion reading.')
+      if (meterId === 'odometer' && (!Number.isInteger(reading) || reading > 2147483647))
+        throw new Error('Enter a valid whole-number odometer reading.')
+      if (
+        meterId === 'engine_hours' &&
+        (Math.round(reading * 10) !== reading * 10 || reading > 999999999.9)
+      )
+        throw new Error('Enter valid engine hours with at most one decimal place.')
+      if (previous === null || reading > previous)
+        await tx
+          .update(equipmentItems)
+          .set(
+            meterId === 'engine_hours'
+              ? { currentHours: String(reading), metersUpdatedAt: new Date() }
+              : { currentOdometer: reading, metersUpdatedAt: new Date() },
+          )
+          .where(eq(equipmentItems.id, item.id))
+    } else {
+      requireUuidInput(meterId, 'Counter')
+      const [meter] = await tx
+        .select()
+        .from(equipmentMeters)
+        .where(and(eq(equipmentMeters.id, meterId), eq(equipmentMeters.equipmentItemId, item.id)))
+        .limit(1)
+        .for('update')
+      if (!meter) throw new Error('Usage counter was not found.')
+      meterSnapshots[meterId] = { name: meter.name, unit: meter.unit, value: reading }
+      if (plan.lastReadings[meterId] !== undefined && reading < plan.lastReadings[meterId]!)
+        throw new Error('Completion readings cannot be below the previous completion reading.')
+      if (meter.currentValue === null || reading > Number(meter.currentValue))
+        await tx
+          .update(equipmentMeters)
+          .set({ currentValue: String(reading), readOn: completedOn, updatedAt: new Date() })
+          .where(eq(equipmentMeters.id, meter.id))
     }
+  }
   let amount: string | null = null
   if (input.amount?.trim()) {
     if (!/^-?\d{1,16}(\.\d{1,2})?$/.test(input.amount.trim()))

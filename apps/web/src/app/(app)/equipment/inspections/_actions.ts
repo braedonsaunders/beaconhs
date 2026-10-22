@@ -23,7 +23,7 @@ import { assertCan, type RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
-import { formatInterval } from '@/lib/equipment/intervals'
+import { isDailyOrPreUseInspection, formatInterval } from '@/lib/equipment/intervals'
 import { isUuid } from '@/lib/list-params'
 import { sanitizeFrom } from '@/lib/back-nav'
 import { parsePhotoEdits } from '@/lib/photo-edits'
@@ -127,7 +127,7 @@ export async function startEquipmentInspection(formData: FormData) {
       .limit(1)
       .for('share')
     if (!type) throw new Error('Active inspection type not found')
-    if (targetMode === 'rental' && !type.isPreUse) {
+    if (targetMode === 'rental' && !isDailyOrPreUseInspection(type)) {
       throw new Error('Rented equipment can only have pre-use inspections')
     }
 
@@ -161,7 +161,7 @@ export async function startEquipmentInspection(formData: FormData) {
       }
       // Rented gear is only ever checked before use — we do not own its
       // periodic certification programme, the rental company does.
-      if (item.ownership === 'rented' && !type.isPreUse) {
+      if (item.ownership === 'rented' && !isDailyOrPreUseInspection(type)) {
         throw new Error('Rented equipment can only have pre-use inspections')
       }
       // A registered unit inherits its inspection from what is set up ON the
@@ -202,6 +202,11 @@ export async function startEquipmentInspection(formData: FormData) {
       if (!site) throw new Error('Location was not found')
     }
 
+    const isPreUse =
+      type.isPreUse ||
+      targetMode === 'rental' ||
+      item?.ownership === 'rented' ||
+      item?.preUseInspectionTypeId === type.id
     const reference = await nextEquipmentInspectionReferenceInTx(tx, ctx.tenantId, occurredAt)
     const [created] = await tx
       .insert(equipmentInspectionRecords)
@@ -216,11 +221,11 @@ export async function startEquipmentInspection(formData: FormData) {
         status: 'draft',
         occurredAt,
         intervalLabel: formatInterval(type.intervalValue, type.intervalUnit, {
-          preUse: type.isPreUse,
+          preUse: isPreUse,
         }),
         intervalValue: type.intervalValue,
         intervalUnit: type.intervalUnit,
-        isPreUse: type.isPreUse,
+        isPreUse,
         allowPassAll: type.allowPassAll,
         failsSpawnWorkOrders: targetMode === 'registered' && type.failsSpawnWorkOrders,
         siteOrgUnitId: siteOrgUnitIdRaw || item?.currentSiteOrgUnitId || null,

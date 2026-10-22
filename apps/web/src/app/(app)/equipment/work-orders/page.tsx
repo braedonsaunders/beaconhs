@@ -116,7 +116,11 @@ export default async function WorkOrdersPage({
   const ctx = await requireRequestContext()
   const includeDeleted = canManageModule(ctx, 'equipment') && pickString(sp.deleted) === '1'
   const workOrderId = pickString(sp.workOrderId)
-  const closeHref = mergeHref('/equipment/work-orders', sp, { workOrderId: undefined })
+  const closeHref = mergeHref('/equipment/work-orders', sp, {
+    workOrderId: undefined,
+    woTab: undefined,
+    send: undefined,
+  })
 
   const { rows, total, statusCounts, priorityCounts } = await ctx.db(async (tx) => {
     // Read-tier scope: all → every WO; site → WOs on assets at the caller's
@@ -501,6 +505,7 @@ export default async function WorkOrdersPage({
                                   workOrderId: wo.id,
                                 }) as any
                               }
+                              scroll={false}
                               className="hover:underline"
                             >
                               <GeneratedValue value={wo.reference} />
@@ -523,7 +528,11 @@ export default async function WorkOrdersPage({
                             <GeneratedValue
                               value={
                                 item ? (
-                                  <Link href={`/equipment/${item.id}`} className="hover:underline">
+                                  <Link
+                                    href={`/equipment/${item.id}`}
+                                    scroll={false}
+                                    className="hover:underline"
+                                  >
                                     <span className="font-mono text-xs">
                                       <GeneratedValue value={item.assetTag} />
                                     </span>
@@ -611,7 +620,8 @@ export default async function WorkOrdersPage({
       {workOrderId && isUuid(workOrderId) ? (
         <WorkOrderDrawer
           params={Promise.resolve({ id: workOrderId })}
-          searchParams={Promise.resolve({})}
+          searchParams={Promise.resolve(sp)}
+          listContext
           closeHref={closeHref}
         />
       ) : null}

@@ -342,7 +342,8 @@ export default async function EquipmentInspectionsPage({
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">
                           <Link
-                            href={`/equipment/inspections/${r.id}`}
+                            href={mergeHref(BASE, sp, { drawer: 'inspection', inspectionId: r.id })}
+                            scroll={false}
                             className="text-teal-700 hover:underline dark:text-teal-400"
                           >
                             <GeneratedValue value={r.reference} />
@@ -431,7 +432,11 @@ export default async function EquipmentInspectionsPage({
           the draft. */}
       <EquipmentInspectionDrawer
         open={pickString(sp.drawer) === 'inspection'}
-        closeHref={BASE}
+        closeHref={mergeHref(BASE, sp, {
+          drawer: undefined,
+          inspectionId: undefined,
+          issue: undefined,
+        })}
         inspectionId={pickString(sp.inspectionId) ?? null}
         sp={sp}
         returnTo={BASE}

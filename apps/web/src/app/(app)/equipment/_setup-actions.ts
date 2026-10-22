@@ -1,4 +1,5 @@
 'use server'
+import { isDailyOrPreUseInspection } from '@/lib/equipment/intervals'
 import { randomBytes } from 'node:crypto'
 import { and, eq, isNull, or, sql } from 'drizzle-orm'
 import { pgError } from '@beaconhs/db'
@@ -163,7 +164,7 @@ export async function createEquipmentFromSetup(
             and(
               eq(equipmentInspectionTypes.id, type),
               eq(equipmentInspectionTypes.isActive, true),
-              eq(equipmentInspectionTypes.isPreUse, preUse),
+              preUse ? undefined : eq(equipmentInspectionTypes.isPreUse, false),
               or(
                 isNull(equipmentInspectionTypes.appliesToTypeId),
                 eq(equipmentInspectionTypes.appliesToTypeId, typeId!),
@@ -171,7 +172,7 @@ export async function createEquipmentFromSetup(
             ),
           )
           .limit(1)
-        if (!row)
+        if (!row || (preUse && !isDailyOrPreUseInspection(row)))
           throw new Error(
             'Choose an active inspection checklist that applies to this equipment type.',
           )

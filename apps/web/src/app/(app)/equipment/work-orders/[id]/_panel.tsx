@@ -34,7 +34,7 @@ import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recentActivityForEntity, recordAudit, recordAuditInTransaction } from '@/lib/audit'
-import { isUuid, pickString } from '@/lib/list-params'
+import { isUuid, pickString, mergeHref } from '@/lib/list-params'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -290,8 +290,10 @@ export async function WorkOrderDrawer({
   params,
   searchParams,
   closeHref = '/equipment/work-orders',
+  listContext = false,
 }: {
   closeHref?: string
+  listContext?: boolean
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
@@ -300,13 +302,18 @@ export async function WorkOrderDrawer({
   const { id } = await params
   if (!isUuid(id)) notFound()
   const sp = await searchParams
-  const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const tabKey = listContext ? 'woTab' : 'tab'
+  const active: Tab = pickActiveTab(sp, TABS, 'overview', tabKey)
 
   const ctx = await requireRequestContext()
   let canClose = can(ctx, 'equipment.workorder.close')
   const canSend = can(ctx, 'equipment.read.all')
   if (!canClose && (active === 'action_taken' || active === 'status')) {
-    redirect(`/equipment/work-orders/${id}`)
+    redirect(
+      mergeHref(listContext ? '/equipment/work-orders' : `/equipment/work-orders/${id}`, sp, {
+        [tabKey]: undefined,
+      }),
+    )
   }
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -346,7 +353,7 @@ export async function WorkOrderDrawer({
   }
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'equipment_work_order', id, 50) : []
-  const basePath = `/equipment/work-orders/${id}`
+  const basePath = listContext ? '/equipment/work-orders' : `/equipment/work-orders/${id}`
   const closed = wo.status === 'closed' || wo.status === 'cancelled'
 
   return (
@@ -411,12 +418,7 @@ export async function WorkOrderDrawer({
                 <GeneratedValue
                   value={
                     canSend ? (
-                      <Link
-                        href={
-                          `/equipment/work-orders/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
-                        }
-                        scroll={false}
-                      >
+                      <Link href={mergeHref(basePath, sp, { send: '1' }) as any} scroll={false}>
                         <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
                       </Link>
                     ) : null
@@ -443,6 +445,7 @@ export async function WorkOrderDrawer({
             basePath={basePath}
             currentParams={sp}
             active={active}
+            paramKey={tabKey}
             tabs={[
               { key: 'overview', label: 'Overview' },
               ...(canClose

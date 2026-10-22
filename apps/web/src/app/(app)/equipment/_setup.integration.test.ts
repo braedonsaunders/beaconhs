@@ -12,6 +12,8 @@ import {
   equipmentMeters,
   equipmentServicePlans,
   equipmentInspectionTypes,
+  equipmentInspectionRecords,
+  equipmentInspectionCriteria,
   equipmentInspectionSchedules,
   equipmentLogEntries,
   auditLog,
@@ -22,6 +24,7 @@ import { evaluateServicePlan, type ServiceRule } from '@beaconhs/db/equipment-se
 import type { RequestContext } from '@beaconhs/tenant'
 import { emptyEquipmentSetup, type EquipmentSetupInput } from '@/lib/equipment/setup'
 import { createEquipmentFromSetup } from './_setup-actions'
+import { startEquipmentInspection } from './inspections/_actions'
 import { recordServiceCompletion, saveServicePlan, saveEquipmentMeter } from './_service-actions'
 const url = process.env.DATABASE_URL,
   adminUrl = process.env.SUPERADMIN_DATABASE_URL
@@ -282,6 +285,155 @@ describe('atomic guided equipment setup and servicing', () => {
     )
     expect(Number(meter?.currentValue)).toBe(25)
   })
+  it('records engine hours for calendar-only maintenance without adding a usage condition', async () => {
+    const input = setup()
+    input.maintenance[0]!.rules = [
+      { kind: 'calendar', every: 3, unit: 'month', dueOn: '2026-01-01' },
+    ]
+    await createEquipmentFromSetup(input)
+    const plan = (await rowsFor(input.requestId)).plans[0]!
+    const completion = {
+      itemId: input.requestId,
+      planId: plan.id,
+      cycleId: plan.cycleId,
+      completedOn: '2026-01-31',
+      notes: 'Changed oil',
+      readings: { engine_hours: 150.5 },
+    }
+    expect(await recordServiceCompletion(completion)).toMatchObject({ ok: true })
+    const rows = await rowsFor(input.requestId)
+    expect(rows.plans[0]!.rules).toEqual([
+      { kind: 'calendar', every: 3, unit: 'month', dueOn: '2026-04-30' },
+    ])
+    expect(Number(rows.items[0]!.currentHours)).toBe(150.5)
+    expect(rows.logs[0]!.metadata).toMatchObject({
+      readings: { engine_hours: 150.5 },
+      meterSnapshots: { engine_hours: { name: 'Engine hours', unit: 'hours', value: 150.5 } },
+    })
+    const next = rows.plans[0]!
+    expect(
+      await recordServiceCompletion({
+        ...completion,
+        cycleId: next.cycleId,
+        readings: { [otherMeter]: 30 },
+      }),
+    ).toMatchObject({ ok: false })
+    expect((await rowsFor(input.requestId)).logs).toHaveLength(1)
+    expect(
+      await recordServiceCompletion({
+        ...completion,
+        cycleId: next.cycleId,
+        readings: { engine_hours: -1 },
+      }),
+    ).toMatchObject({ ok: false })
+  })
+
+  it('accepts an applicable daily checklist as the unit pre-use inspection', async () => {
+    const dailyId = randomUUID()
+    await ctx.db((tx) =>
+      tx.insert(equipmentInspectionTypes).values({
+        id: dailyId,
+        tenantId,
+        name: 'Daily welder check',
+        appliesToTypeId: typeId,
+        intervalValue: 1,
+        intervalUnit: 'day',
+        isPreUse: false,
+      }),
+    )
+    const input = { ...setup(), preUseTypeId: dailyId }
+    expect(await createEquipmentFromSetup(input)).toMatchObject({ ok: true })
+    expect((await rowsFor(input.requestId)).items[0]!.preUseInspectionTypeId).toBe(dailyId)
+    expect(await createEquipmentFromSetup({ ...setup(), preUseTypeId: checkId })).toMatchObject({
+      ok: false,
+    })
+  })
+
+  it('records daily inspections according to their actual pre-use or scheduled purpose', async () => {
+    const dailyId = randomUUID()
+    await ctx.db(async (tx) => {
+      await tx.insert(equipmentInspectionTypes).values({
+        id: dailyId,
+        tenantId,
+        name: 'Daily engine check',
+        appliesToTypeId: typeId,
+        intervalValue: 1,
+        intervalUnit: 'day',
+        isPreUse: false,
+      })
+      await tx.insert(equipmentInspectionCriteria).values({
+        tenantId,
+        inspectionTypeId: dailyId,
+        sequence: 0,
+        question: 'Engine safe to use?',
+      })
+    })
+    const input = { ...setup(), preUseTypeId: dailyId }
+    expect(await createEquipmentFromSetup(input)).toMatchObject({ ok: true })
+    const start = async (rental = false) => {
+      const form = new FormData()
+      form.set('typeId', dailyId)
+      form.set('targetMode', rental ? 'rental' : 'registered')
+      form.set('equipmentItemId', input.requestId)
+      form.set('rentalName', 'Unregistered rental QA')
+      await expect(startEquipmentInspection(form)).rejects.toThrow('NEXT_REDIRECT')
+    }
+    await start()
+    let records = await ctx.db((tx) =>
+      tx
+        .select()
+        .from(equipmentInspectionRecords)
+        .where(eq(equipmentInspectionRecords.equipmentItemId, input.requestId)),
+    )
+    expect(records.map((r) => r.isPreUse)).toEqual([true])
+    await ctx.db(async (tx) => {
+      await tx
+        .update(equipmentItems)
+        .set({ preUseInspectionTypeId: null, requiresPreUseInspection: false })
+        .where(eq(equipmentItems.id, input.requestId))
+      await tx.insert(equipmentInspectionSchedules).values({
+        tenantId,
+        equipmentItemId: input.requestId,
+        inspectionTypeId: dailyId,
+        label: 'Daily scheduled check',
+        intervalValue: 1,
+        intervalUnit: 'day',
+        nextDueOn: '2026-10-22',
+      })
+    })
+    await start()
+    records = await ctx.db((tx) =>
+      tx
+        .select()
+        .from(equipmentInspectionRecords)
+        .where(eq(equipmentInspectionRecords.equipmentItemId, input.requestId)),
+    )
+    expect(records.filter((r) => r.isPreUse)).toHaveLength(1)
+    expect(records.filter((r) => !r.isPreUse)).toHaveLength(1)
+    await ctx.db((tx) =>
+      tx
+        .update(equipmentItems)
+        .set({ ownership: 'rented' })
+        .where(eq(equipmentItems.id, input.requestId)),
+    )
+    await start()
+    records = await ctx.db((tx) =>
+      tx
+        .select()
+        .from(equipmentInspectionRecords)
+        .where(eq(equipmentInspectionRecords.equipmentItemId, input.requestId)),
+    )
+    expect(records.filter((r) => r.isPreUse)).toHaveLength(2)
+    await start(true)
+    const rental = await ctx.db((tx) =>
+      tx
+        .select()
+        .from(equipmentInspectionRecords)
+        .where(eq(equipmentInspectionRecords.equipmentNameSnapshot, 'Unregistered rental QA')),
+    )
+    expect(rental[0]).toMatchObject({ isPreUse: true, isRental: true, equipmentItemId: null })
+  })
+
   it('advances from actual completion evidence once, clamps calendar months, and preserves later meter readings', async () => {
     const input = setup()
     await createEquipmentFromSetup(input)

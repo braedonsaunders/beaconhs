@@ -73,6 +73,7 @@ export function TabNav({
                 <Link
                   key={t.key}
                   href={href as any}
+                  scroll={false}
                   role="tab"
                   aria-selected={isActive}
                   title={tGeneratedValue(iconOnly && t.icon ? t.label : undefined)}
@@ -132,6 +133,7 @@ export function TabNav({
               <Link
                 key={t.key}
                 href={href as any}
+                scroll={false}
                 role="tab"
                 aria-selected={isActive}
                 title={tGeneratedValue(iconOnly && t.icon ? t.label : undefined)}

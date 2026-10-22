@@ -112,8 +112,7 @@ function ServiceEditor({
                 setError(result.error)
                 return
               }
-              router.push(closeHref as never)
-              router.refresh()
+              router.push(closeHref as never, { scroll: false })
             } catch (error) {
               setError(error instanceof Error ? error.message : 'Could not save maintenance.')
             }
@@ -189,8 +188,7 @@ function ServiceCompletion({
                 setError(result.error)
                 return
               }
-              router.push(closeHref as never)
-              router.refresh()
+              router.push(closeHref as never, { scroll: false })
             } catch (error) {
               setError(error instanceof Error ? error.message : 'Could not record maintenance.')
             }
@@ -217,28 +215,33 @@ function ServiceCompletion({
           disabled={pending}
         />
       </div>
-      {plan.rules
-        .filter((r) => r.kind === 'meter')
-        .map((rule) => {
-          const meter = [...STANDARD_SERVICE_METERS, ...meters].find((m) => m.id === rule.meter)
-          return (
-            <div key={rule.meter}>
-              <Label htmlFor={`completion-${rule.meter}`}>
-                {t(meter?.name ?? rule.meter)} ({t(meter?.unit ?? '')})
-              </Label>
-              <Input
-                id={`completion-${rule.meter}`}
-                type="number"
-                min={0}
-                step={rule.meter === 'odometer' ? 1 : rule.meter === 'engine_hours' ? 0.1 : 0.001}
-                required
-                value={values[rule.meter] ?? ''}
-                onChange={(e) => setValues({ ...values, [rule.meter]: Number(e.target.value) })}
-                disabled={pending}
-              />
-            </div>
-          )
-        })}
+      {[...STANDARD_SERVICE_METERS, ...meters].map((meter) => {
+        const required = plan.rules.some((rule) => rule.kind === 'meter' && rule.meter === meter.id)
+        return (
+          <div key={meter.id}>
+            <Label htmlFor={`completion-${meter.id}`}>
+              {t(meter.name)} ({t(meter.unit)}){required ? ' *' : ''}
+            </Label>
+            <Input
+              id={`completion-${meter.id}`}
+              type="number"
+              min={0}
+              step={meter.id === 'odometer' ? 1 : meter.id === 'engine_hours' ? 0.1 : 0.001}
+              required={required}
+              value={values[meter.id] ?? ''}
+              onChange={(e) =>
+                setValues((previous) => {
+                  const next = { ...previous }
+                  if (e.target.value === '') delete next[meter.id]
+                  else next[meter.id] = Number(e.target.value)
+                  return next
+                })
+              }
+              disabled={pending}
+            />
+          </div>
+        )
+      })}
       <div>
         <Label htmlFor="service-notes">
           <GeneratedValue value="Work performed / reference" />

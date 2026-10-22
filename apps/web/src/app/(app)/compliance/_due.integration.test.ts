@@ -14,6 +14,8 @@ import {
   equipmentItems,
   equipmentInspectionSchedules,
   equipmentServicePlans,
+  equipmentWorkOrders,
+  equipmentReminders,
   tenantNotificationPolicy,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -283,4 +285,59 @@ it('saves equipment reminder controls without changing compliance delivery', asy
     reminderCron: '0 8 * * *',
   })
   expect((await saveEquipmentReminderSettings({ enabled: true, cron: 'invalid' })).ok).toBe(false)
+})
+
+it('equipment agenda excludes unavailable assets across every signal family including work orders', async () => {
+  const marker = 'Agenda-' + randomUUID()
+  await ctx.db(async (tx) => {
+    for (const status of [
+      'in_service',
+      'in_repair',
+      'out_of_service',
+      'retired',
+      'lost',
+    ] as const) {
+      const id = randomUUID()
+      await tx.insert(equipmentItems).values({
+        id,
+        tenantId,
+        name: marker + status,
+        assetTag: marker + status,
+        qrToken: randomUUID(),
+        status,
+        warrantyExpiresOn: '2000-01-01',
+      })
+      await tx.insert(equipmentInspectionSchedules).values({
+        tenantId,
+        equipmentItemId: id,
+        label: 'Annual',
+        nextDueOn: '2000-01-01',
+        intervalValue: 1,
+        intervalUnit: 'year',
+      })
+      await tx.insert(equipmentServicePlans).values({
+        tenantId,
+        equipmentItemId: id,
+        name: 'Oil',
+        rules: [{ kind: 'calendar', every: 3, unit: 'month', dueOn: '2000-01-01' }],
+        match: 'any',
+      })
+      await tx
+        .insert(equipmentReminders)
+        .values({ tenantId, equipmentItemId: id, title: 'Check', dueOn: '2000-01-01' })
+      await tx.insert(equipmentWorkOrders).values({
+        tenantId,
+        itemId: id,
+        reference: marker + status,
+        summary: 'Repair',
+        status: 'open',
+      })
+    }
+  })
+  const result = await listDueSignals(ctx, { module: 'equipment', q: marker, perPage: 100 })
+  expect(result.total).toBe(10)
+  for (const row of result.rows) expect(row.subject).not.toMatch(/out_of_service|retired|lost/)
+  expect(new Set(result.rows.map((row) => row.family))).toEqual(
+    new Set(['Inspection', 'Periodic maintenance', 'Reminder', 'Warranty', 'Work order']),
+  )
 })

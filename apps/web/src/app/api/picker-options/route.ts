@@ -2217,7 +2217,15 @@ async function loadOptions(
       const eligible = and(
         eq(equipmentInspectionTypes.tenantId, ctx.tenantId),
         eq(equipmentInspectionTypes.isActive, true),
-        preUseOnly ? eq(equipmentInspectionTypes.isPreUse, true) : undefined,
+        preUseOnly
+          ? or(
+              eq(equipmentInspectionTypes.isPreUse, true),
+              and(
+                eq(equipmentInspectionTypes.intervalValue, 1),
+                eq(equipmentInspectionTypes.intervalUnit, 'day'),
+              ),
+            )
+          : undefined,
         applicable,
       )
       const available = or(

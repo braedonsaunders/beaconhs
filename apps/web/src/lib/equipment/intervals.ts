@@ -75,3 +75,12 @@ export function addIntervalToDate(
 ): string {
   return addInterval(new Date(`${fromIso}T00:00:00Z`), value, unit)
 }
+
+/** Daily checklists can be used as the unit's before-use check without changing their cadence. */
+export function isDailyOrPreUseInspection(type: {
+  isPreUse: boolean
+  intervalValue: number | null
+  intervalUnit: EquipmentIntervalUnit | null
+}): boolean {
+  return type.isPreUse || (type.intervalValue === 1 && type.intervalUnit === 'day')
+}

@@ -48,7 +48,17 @@ export function EquipmentTelemetryMap({
   function fit() {
     if (bounds.length) mapRef.current?.fitBounds(bounds, { padding: [48, 48], maxZoom: 15 })
   }
+  // Server navigations can send an equivalent array with a new identity.
+  // Rebuild Leaflet only when its actual point or translated popup data changes.
+  const mapData = JSON.stringify({
+    points: points.map((point) => ({ ...point, healthLabel: t(point.health) })),
+    observedLabel: t('GPS observed'),
+  })
   useEffect(() => {
+    const { points, observedLabel } = JSON.parse(mapData) as {
+      points: Array<EquipmentMapPoint & { healthLabel: string }>
+      observedLabel: string
+    }
     let disposed = false
     let remove: (() => void) | undefined
     async function initialize() {
@@ -125,10 +135,10 @@ export function EquipmentTelemetryMap({
             link.textContent = entry.label
             link.style.cssText = 'font-weight:700;color:#0f766e'
             const status = document.createElement('div')
-            status.textContent = t(entry.health)
+            status.textContent = entry.healthLabel
             status.style.cssText = 'margin:5px 0;color:#475569'
             const time = document.createElement('div')
-            time.textContent = `${t('GPS observed')}: ${entry.observedLabel}`
+            time.textContent = `${observedLabel}: ${entry.observedLabel}`
             const address = document.createElement('div')
             address.textContent =
               entry.address || `${entry.latitude.toFixed(5)}, ${entry.longitude.toFixed(5)}`
@@ -197,7 +207,7 @@ export function EquipmentTelemetryMap({
       disposed = true
       remove?.()
     }
-  }, [points, t])
+  }, [mapData])
   return (
     <div
       className={`${embedded ? 'flex h-full min-h-0 flex-col' : ''} overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900`}

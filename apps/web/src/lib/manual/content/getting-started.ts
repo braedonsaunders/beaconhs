@@ -110,7 +110,7 @@ Your dashboard is made of tiles (widgets), and you choose which ones you see and
 
 Use **Hide widgets** to put a tile away without losing your arrangement, and **Reset to default** to go back to the standard layout for your role.
 
-Tool crib managers can add **Equipment maintenance agenda** and **Equipment GPS map**. The agenda includes inspections, reminders, oil changes, warranties and open work orders. Choose **Type → Inspection** to focus on inspections. It shows the next 30 days and outstanding work, with search, status filters and pages. Open an item to review or complete it.
+Tool crib managers can add **Equipment maintenance agenda** and **Equipment GPS map**. The agenda includes inspections, reminders, periodic maintenance, warranties and open work orders. It excludes equipment marked **Out of service**, **Retired**, or **Lost**. Equipment being repaired remains visible. Choose **Type → Inspection** to focus on inspections, or **Type → Periodic maintenance** for recurring servicing. It shows the next 30 days and outstanding work, with search, status filters and pages. Open an item to review or complete it. Changing the agenda page keeps the GPS map in place.
 
 Welding supervisors can add **Expiring skill tickets** and **Skill requirements**. Tickets include current assignments expiring within 30 days and already expired tickets. Replaced tickets stay out of this list. Requirements show active skill obligations and their completed, overdue and expiring counts. Choose **View → Needs attention** to focus on overdue or expiring requirements. Search by skill or obligation title. Your training and compliance permissions control which widgets you can add.
 
