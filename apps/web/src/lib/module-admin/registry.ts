@@ -335,13 +335,6 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         permission: 'equipment.manage',
       },
       {
-        key: 'bulk-qr',
-        label: 'Bulk QR labels',
-        href: '/equipment/qr/bulk',
-        iconKey: 'qr-code',
-        desc: 'Pick equipment and print a batch of QR tag labels as one PDF.',
-      },
-      {
         key: 'asset-flows',
         label: 'Asset automations',
         href: '/equipment/assets/flows',

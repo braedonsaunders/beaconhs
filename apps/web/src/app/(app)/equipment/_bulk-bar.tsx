@@ -10,7 +10,7 @@ import {
 import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { Download, MapPin, ToggleRight, UserCog, X } from 'lucide-react'
+import { Download, MapPin, QrCode, ToggleRight, UserCog, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
 import {
@@ -20,6 +20,7 @@ import {
   bulkTransferEquipmentToSite,
   type EquipmentStatus,
 } from './_actions'
+import { generateBulkQrSheet } from './_qr-actions'
 import { useHydrated } from '@/lib/use-hydrated'
 
 const STATUS_LABELS: Record<EquipmentStatus, string> = {
@@ -35,18 +36,20 @@ export function BulkEquipmentBar({
   onClear,
   canManage,
   canExport,
+  canCreateQr,
 }: {
   selectedIds: string[]
   onClear: () => void
   canManage: boolean
   canExport: boolean
+  canCreateQr: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [action, setAction] = useState<'site' | 'holder' | 'status' | 'export'>(() =>
-    canManage ? 'site' : 'export',
+  const [action, setAction] = useState<'site' | 'holder' | 'status' | 'export' | 'qr'>(() =>
+    canManage ? 'site' : canCreateQr ? 'qr' : 'export',
   )
   const [siteId, setSiteId] = useState('')
   const [personId, setPersonId] = useState('')
@@ -61,11 +64,45 @@ export function BulkEquipmentBar({
     [selectedIds.length],
   )
 
-  if (selectedIds.length === 0 || !mounted) return null
+  if (selectedIds.length === 0 || !mounted || (!canManage && !canExport && !canCreateQr))
+    return null
 
   function go() {
     setError(tGeneratedValue(null))
     setInfo(null)
+    if (action === 'qr') {
+      if (!canCreateQr) return
+      start(async () => {
+        try {
+          const result = await generateBulkQrSheet({ equipmentIds: selectedIds })
+          if (!result.ok) {
+            setError(tGeneratedValue(result.error))
+            return
+          }
+          const response = await fetch(result.href)
+          if (!response.ok) {
+            const body = (await response.json().catch(() => null)) as { error?: string } | null
+            setError(body?.error ?? tGeneratedValue('Could not create QR codes. Try again.'))
+            return
+          }
+          if (!response.headers.get('content-type')?.includes('application/pdf')) {
+            setError(tGeneratedValue('Could not create QR codes. Try again.'))
+            return
+          }
+          const url = URL.createObjectURL(await response.blob())
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `equipment-labels-${result.count}.pdf`
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          URL.revokeObjectURL(url)
+        } catch {
+          setError(tGeneratedValue('Could not create QR codes. Try again.'))
+        }
+      })
+      return
+    }
     if (action !== 'export' && !canManage) {
       setError(tGenerated('m_1f2655e7ce2296'))
       return
@@ -149,12 +186,13 @@ export function BulkEquipmentBar({
   // Portaled to <body>: PageContainer's FadeInBody transform would otherwise
   // capture position:fixed and pin the bar to the container, not the viewport.
   return createPortal(
-    <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2">
+    <div className="fixed bottom-4 left-1/2 z-40 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2">
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-800 dark:bg-slate-900">
         <button
           type="button"
           onClick={onClear}
           aria-label={tGenerated('m_1013583a7c0e28')}
+          disabled={pending}
           className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
@@ -172,6 +210,7 @@ export function BulkEquipmentBar({
           {canManage ? <option value="site">{'Transfer to location'}</option> : null}
           {canManage ? <option value="holder">{'Assign to holder'}</option> : null}
           {canManage ? <option value="status">{'Set status'}</option> : null}
+          {canCreateQr ? <option value="qr">{tGeneratedValue('Create QR codes')}</option> : null}
           {canExport ? <option value="export">{'Export selected to CSV'}</option> : null}
         </Select>
 
@@ -246,6 +285,10 @@ export function BulkEquipmentBar({
             value={
               pending ? (
                 <GeneratedText id="m_09001dc89c0edf" />
+              ) : action === 'qr' ? (
+                <span className="inline-flex items-center gap-1">
+                  <QrCode size={14} /> <GeneratedValue value="Create QR codes" />
+                </span>
               ) : action === 'export' ? (
                 <span className="inline-flex items-center gap-1">
                   <Download size={14} /> <GeneratedText id="m_01edcd3d04ad91" />
@@ -259,7 +302,7 @@ export function BulkEquipmentBar({
         <GeneratedValue
           value={
             error ? (
-              <span className="text-xs text-red-600 dark:text-red-400">
+              <span role="alert" className="text-xs text-red-600 dark:text-red-400">
                 <GeneratedValue value={error} />
               </span>
             ) : null

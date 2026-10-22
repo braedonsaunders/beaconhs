@@ -32,6 +32,7 @@ export function EquipmentRecordsTable({
   dir,
   canManage,
   canExport,
+  canCreateQr,
 }: {
   rows: EquipmentTableRow[]
   basePath: string
@@ -40,9 +41,10 @@ export function EquipmentRecordsTable({
   dir: 'asc' | 'desc'
   canManage: boolean
   canExport: boolean
+  canCreateQr: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const canBulk = canManage || canExport
+  const canBulk = canManage || canExport || canCreateQr
   const { selected, selectedIds, allSelected, toggleOne, toggleAll, clear } = useRowSelection(rows)
 
   const sortProps = { basePath, currentParams, sort, dir }
@@ -239,6 +241,7 @@ export function EquipmentRecordsTable({
               onClear={clear}
               canManage={canManage}
               canExport={canExport}
+              canCreateQr={canCreateQr}
             />
           ) : null
         }

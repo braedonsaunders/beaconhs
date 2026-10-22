@@ -902,10 +902,12 @@ The **Scan does** setting controls what a scan means: **Toggle** flips each unit
 
 Each unit's QR page has a **Download label PDF** button — a print-ready tag at your company's label size, made for shipping-label printers.
 
-1. To tag many units at once, open **Equipment** → **Manage** → **Bulk QR labels**.
-2. Search by asset tag, name, licence plate, VIN, or other equipment details, or use **Type** to narrow the list.
-3. Pick equipment from the current page, then tap **Generate sheet**. Use **Next** to work through another page. One PDF opens with one tag per page.
-4. To change what the tag looks like — size, layout, fields — open **Equipment** → **Manage** → **QR label design** and edit it like a document. Tap **Save label design** when done.
+1. To tag many units at once, open [Equipment](/equipment).
+2. Search by asset tag, name, licence plate, VIN, or other equipment details. Use the list filters to narrow the results.
+3. Select equipment using the row checkboxes. In the selection bar, choose **Create QR codes**, then tap **Create QR codes**. One PDF downloads with one tag per page. The selection applies to the current page. Clear it before choosing another batch. Deleted or unavailable equipment cannot be printed.
+4. To change what the tag looks like — size, layout, fields — open **Equipment** → **Manage** → **QR label design** to open the full-height editor. Use the settings panel to change the size, insert items, and edit fields.
+5. The whole label fits the available canvas automatically. Use **Zoom in** and **Zoom out** for detail, the percentage button for **100%**, or **Fit to window** to see the whole label again. You can also pinch your trackpad or hold Ctrl/⌘ while scrolling over the canvas. When zoomed in, scroll inside the canvas to reach the edges.
+6. Use **Full screen** for more room. Press Escape to return. Tap **Save label design** when done, or use the back arrow to return to **Manage equipment**.
 
 ## Scan a QR label with your phone
 

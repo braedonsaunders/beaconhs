@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 /**
  * Bulk equipment QR labels — one PDF, one label page per item, at the
  * tenant's designed label size (thermal/shipping label printers print each
- * page as one tag). The picker's server action stamps the traceable bulk-QR
+ * page as one tag). The list's server action stamps the traceable bulk-QR
  * token + export audit before redirecting here, so this GET stays read-only.
  */
 export async function GET(req: Request) {

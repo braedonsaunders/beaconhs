@@ -55,9 +55,10 @@ import { Badge, Button, Input, Select, Textarea, cn } from '@beaconhs/ui'
 
 const PPI = 96
 
-const ZOOM_MIN = 0.1
+const ZOOM_MIN = 0.001
 const ZOOM_MAX = 4
-const clampZoom = (z: number) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z * 1000) / 1000))
+const clampZoom = (z: number) =>
+  Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z * 10000) / 10000))
 
 type ImageSource = Extract<DesignElement, { kind: 'image' }>['source']
 
@@ -110,11 +111,14 @@ const KIND_META: Record<DesignElement['kind'], { label: string; hint: string }> 
 export function useDesignZoom({
   artboard,
   reattachKey,
+  viewportPadding = 120,
 }: {
   artboard: { width: number; height: number } | null
   // Wheel listeners re-attach when this changes (the viewport node only exists
   // while a design is open, so remounts need a fresh native listener).
   reattachKey: unknown
+  /** Total horizontal/vertical padding around the artwork, in CSS pixels. */
+  viewportPadding?: number
 }) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(1)
@@ -123,16 +127,16 @@ export function useDesignZoom({
   const artboardWidth = artboard?.width
   const artboardHeight = artboard?.height
 
-  // Fit the artboard to the visible viewport (the chrome around the canvas —
-  // outer p-5 + checkered p-8 — is ~120px per axis). ResizeObserver fires once
-  // on observe, so switching artboards/fullscreen re-fits immediately.
+  // Fit both dimensions, including the canvas surround. Round down so even
+  // large custom artboards fit without a scrollbar caused by zoom rounding.
   const computeFit = useCallback(() => {
     const vp = viewportRef.current
     if (!vp || !artboardWidth || !artboardHeight) return 1
-    const availW = Math.max(vp.clientWidth - 120, 80)
-    const availH = Math.max(vp.clientHeight - 120, 80)
-    return clampZoom(Math.min(availW / (artboardWidth * PPI), availH / (artboardHeight * PPI)))
-  }, [artboardHeight, artboardWidth])
+    const availW = Math.max(vp.clientWidth - viewportPadding, 1)
+    const availH = Math.max(vp.clientHeight - viewportPadding, 1)
+    const fit = Math.min(availW / (artboardWidth * PPI), availH / (artboardHeight * PPI))
+    return clampZoom(Math.floor(fit * 10000) / 10000)
+  }, [artboardHeight, artboardWidth, viewportPadding])
 
   useEffect(() => {
     if (!fitMode) return
@@ -151,7 +155,10 @@ export function useDesignZoom({
     setFitMode(false)
     setZoom(clampZoom(value))
   }, [])
-  const fitToWindow = useCallback(() => setFitMode(true), [])
+  const fitToWindow = useCallback(() => {
+    setZoom(computeFit())
+    setFitMode(true)
+  }, [computeFit])
 
   // Ctrl/⌘ + scroll (and trackpad pinch) zooms the canvas — native listener
   // because React's synthetic wheel handlers are passive.
@@ -213,7 +220,7 @@ export function CanvasZoomControls({
         title={tGenerated('m_0f91231303cad9')}
         className="w-12 rounded px-1 py-1 text-center text-xs font-medium text-slate-600 tabular-nums hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       >
-        <GeneratedValue value={Math.round(zoom * 100)} />%
+        <GeneratedValue value={Number((zoom * 100).toFixed(zoom < 0.1 ? 1 : 0))} />%
       </button>
       <Button
         type="button"

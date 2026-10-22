@@ -1,5 +1,5 @@
 // Deep-link target for the QR labels printed at /equipment/[id]/qr and
-// /equipment/qr/bulk. Scanning a label with a phone lands here; we resolve the
+// the Equipment list selection actions. Scanning a label with a phone lands here; we resolve the
 // asset and bounce into the station with it pre-loaded so the operator can check
 // it in/out in one tap. The (app) layout already gates auth (→ /login).
 

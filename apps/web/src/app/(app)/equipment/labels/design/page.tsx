@@ -1,11 +1,9 @@
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { eq } from 'drizzle-orm'
 import { tenants } from '@beaconhs/db/schema'
-import { PageHeader } from '@beaconhs/ui'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { normalizeEquipmentLabelDesign } from '@/lib/equipment-label-design'
-import { PageContainer } from '@/components/page-layout'
 import { EquipmentLabelStudio } from './_studio'
 import { saveEquipmentLabelDesign } from './_actions'
 
@@ -16,7 +14,6 @@ export async function generateMetadata() {
 export const dynamic = 'force-dynamic'
 
 export default async function EquipmentLabelDesignPage() {
-  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
 
@@ -30,14 +27,5 @@ export default async function EquipmentLabelDesignPage() {
   })
   const document = normalizeEquipmentLabelDesign(settings)
 
-  return (
-    <PageContainer>
-      <PageHeader
-        title={tGenerated('m_0f44d475f864cd')}
-        description={tGenerated('m_1b8fb70c0a62dd')}
-        back={{ href: '/equipment/manage', label: 'Back to Manage equipment' }}
-      />
-      <EquipmentLabelStudio initialDocument={document} onSave={saveEquipmentLabelDesign} />
-    </PageContainer>
-  )
+  return <EquipmentLabelStudio initialDocument={document} onSave={saveEquipmentLabelDesign} />
 }

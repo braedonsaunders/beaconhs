@@ -303,6 +303,7 @@ export default async function EquipmentPage({
                 dir={params.dir}
                 canManage={canManageEquipment}
                 canExport={canExport}
+                canCreateQr={can(ctx, 'equipment.read.site')}
               />
               <Pagination
                 basePath="/equipment"
