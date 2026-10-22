@@ -17,7 +17,10 @@ test('redactPii strips emails, phones, ids, and a host deny list', () => {
   assert.ok(result.stripped.includes('record id'))
   assert.ok(result.stripped.includes('identifying name'))
   assert.doesNotMatch(result.text, /Jane Doe/)
-  assert.equal(result.text.includes('example.com'), false)
+  assert.equal(
+    result.text,
+    'Call [redacted] at [phone] or [email] about record [id] and ticket [id]',
+  )
 })
 
 test('sanitizePathname replaces record ids and drops query strings', () => {

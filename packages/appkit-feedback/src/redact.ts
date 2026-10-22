@@ -37,6 +37,10 @@ export function redactPii(input: string, options: FeedbackRedactOptions = {}): R
     addStripped(stripped, 'email address')
     return '[email]'
   })
+  text = text.replace(UUID, () => {
+    addStripped(stripped, 'record id')
+    return '[id]'
+  })
   text = text.replace(NATIONAL_ID, () => {
     addStripped(stripped, 'identification number')
     return '[id]'
@@ -46,10 +50,6 @@ export function redactPii(input: string, options: FeedbackRedactOptions = {}): R
     if (digits.length < 10) return match
     addStripped(stripped, 'phone number')
     return '[phone]'
-  })
-  text = text.replace(UUID, () => {
-    addStripped(stripped, 'record id')
-    return '[id]'
   })
   text = text.replace(LONG_ID, () => {
     addStripped(stripped, 'record id')

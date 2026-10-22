@@ -311,6 +311,17 @@ describe('atomic guided equipment setup and servicing', () => {
       meterSnapshots: { engine_hours: { name: 'Engine hours', unit: 'hours', value: 150.5 } },
     })
     const next = rows.plans[0]!
+    for (const key of ['__proto__', 'constructor', 'prototype']) {
+      expect(
+        await recordServiceCompletion({
+          ...completion,
+          cycleId: next.cycleId,
+          readings: Object.fromEntries([[key, 1]]),
+        }),
+      ).toMatchObject({ ok: false })
+    }
+    expect((await rowsFor(input.requestId)).plans[0]!.cycleId).toBe(next.cycleId)
+    expect((await rowsFor(input.requestId)).logs).toHaveLength(1)
     expect(
       await recordServiceCompletion({
         ...completion,

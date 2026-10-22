@@ -218,8 +218,8 @@ export async function completeServicePlan(
   if (completedOn < '1902-01-01' || (plan.lastCompletedOn && completedOn < plan.lastCompletedOn))
     throw new Error('Completion cannot precede the previous completion.')
   const notes = optionalTextInput(input.notes, 'Completion notes', 5000)
-  const completionReadings: Record<string, number> = {}
-  const meterSnapshots: Record<string, { name: string; unit: string; value: number }> = {}
+  const completionReadings = new Map<string, number>()
+  const meterSnapshots = new Map<string, { name: string; unit: string; value: number }>()
   const rules = validateServiceRules(plan.rules).map((rule) => {
     if (rule.kind === 'calendar') {
       if (rule.every === null)
@@ -229,8 +229,9 @@ export async function completeServicePlan(
     const reading = input.readings[rule.meter]
     if (reading === undefined)
       throw new Error('Enter a completion reading for every usage condition.')
-    completionReadings[rule.meter] = validReading(reading)
-    return { ...rule, dueAt: completionReadings[rule.meter]! + rule.every }
+    const completionReading = validReading(reading)
+    completionReadings.set(rule.meter, completionReading)
+    return { ...rule, dueAt: completionReading + rule.every }
   })
   validateServiceRules(rules)
   const current = {
@@ -239,13 +240,13 @@ export async function completeServicePlan(
   }
   for (const [meterId, rawReading] of Object.entries(input.readings)) {
     const reading = validReading(rawReading)
-    completionReadings[meterId] = reading
+    completionReadings.set(meterId, reading)
     if (meterId === 'engine_hours' || meterId === 'odometer') {
-      meterSnapshots[meterId] = {
+      meterSnapshots.set(meterId, {
         name: meterId === 'engine_hours' ? 'Engine hours' : 'Odometer',
         unit: meterId === 'engine_hours' ? 'hours' : 'km',
         value: reading,
-      }
+      })
       const previous = current[meterId]
       if (plan.lastReadings[meterId] !== undefined && reading < plan.lastReadings[meterId]!)
         throw new Error('Completion readings cannot be below the previous completion reading.')
@@ -274,7 +275,7 @@ export async function completeServicePlan(
         .limit(1)
         .for('update')
       if (!meter) throw new Error('Usage counter was not found.')
-      meterSnapshots[meterId] = { name: meter.name, unit: meter.unit, value: reading }
+      meterSnapshots.set(meterId, { name: meter.name, unit: meter.unit, value: reading })
       if (plan.lastReadings[meterId] !== undefined && reading < plan.lastReadings[meterId]!)
         throw new Error('Completion readings cannot be below the previous completion reading.')
       if (meter.currentValue === null || reading > Number(meter.currentValue))
@@ -294,7 +295,7 @@ export async function completeServicePlan(
     .update(equipmentServicePlans)
     .set({
       rules,
-      lastReadings: completionReadings,
+      lastReadings: Object.fromEntries(completionReadings),
       lastCompletedOn: completedOn,
       cycleId: randomUUID(),
       notifiedCycleId: null,
@@ -309,14 +310,14 @@ export async function completeServicePlan(
     title: `${plan.name} completed`,
     details: [
       notes ?? plan.name + ' completed.',
-      ...Object.values(meterSnapshots).map((m) => m.name + ': ' + m.value + ' ' + m.unit),
+      ...[...meterSnapshots.values()].map((m) => m.name + ': ' + m.value + ' ' + m.unit),
     ].join('\n'),
     amount,
     metadata: {
       servicePlanId: plan.id,
       cycleId: plan.cycleId,
-      readings: completionReadings,
-      meterSnapshots,
+      readings: Object.fromEntries(completionReadings),
+      meterSnapshots: Object.fromEntries(meterSnapshots),
       rulesBefore: plan.rules,
       rulesAfter: rules,
     },
@@ -328,7 +329,13 @@ export async function completeServicePlan(
     action: 'update',
     summary: `Completed periodic maintenance: ${plan.name}`,
     before: { servicePlanId: plan.id, rules: plan.rules, lastCompletedOn: plan.lastCompletedOn },
-    after: { completedOn, rules, readings: completionReadings, meterSnapshots, amount },
+    after: {
+      completedOn,
+      rules,
+      readings: Object.fromEntries(completionReadings),
+      meterSnapshots: Object.fromEntries(meterSnapshots),
+      amount,
+    },
   })
 }
 
