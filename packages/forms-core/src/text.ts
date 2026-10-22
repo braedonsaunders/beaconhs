@@ -67,7 +67,9 @@ export function htmlToText(html: string | null | undefined): string {
   return out
     .join('')
     .replace(/\u00a0/g, ' ')
-    .replace(/[ \t]+\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t]{2,}/g, ' ')
     .trim()

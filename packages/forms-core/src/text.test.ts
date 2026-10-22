@@ -22,3 +22,7 @@ describe('htmlToText', () => {
     expect(htmlToSnippet('<p>Alpha</p><p>Beta Gamma</p>', 12)).toBe('Alpha Beta…')
   })
 })
+
+it('normalizes a long whitespace run without suffix-regex backtracking', () => {
+  expect(htmlToText('<p>' + ' '.repeat(200_000) + 'final</p>')).toBe('final')
+})

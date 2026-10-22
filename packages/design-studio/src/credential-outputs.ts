@@ -125,7 +125,7 @@ export function slugCredentialOutputId(value: string): string {
   const slug = value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/^-|-$/g, '')
   return (slug || 'credential-output').slice(0, 64)
 }
 

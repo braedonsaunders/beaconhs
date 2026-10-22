@@ -1,3 +1,4 @@
+import { htmlToText } from '@beaconhs/forms-core'
 import { RawImage } from './raw-image'
 import { GeneratedValue } from '@/i18n/generated'
 import { Activity, Check, Pencil, Plus, Signature, Trash2 } from 'lucide-react'
@@ -209,7 +210,5 @@ function displayValue(value: unknown, timeZone: string, locale: string): string 
     !Number.isNaN(Date.parse(value))
   )
     return new Date(value).toLocaleString(locale, { timeZone })
-  return String(value)
-    .replace(/<[^>]*>/g, '')
-    .replace(/_/g, ' ')
+  return htmlToText(String(value)).replace(/_/g, ' ')
 }

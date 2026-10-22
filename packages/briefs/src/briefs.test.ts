@@ -370,3 +370,24 @@ describe('rendering', () => {
     )
   })
 })
+
+it('bounds email parsing before examining hostile domains', async () => {
+  const { normalizeEmail } = await import('./recipients')
+  expect(normalizeEmail('!@!.' + '!.'.repeat(100_000))).toBeNull()
+  expect(normalizeEmail(' Worker@Example.COM ')).toBe('worker@example.com')
+  expect(normalizeEmail('worker@invalid')).toBeNull()
+  expect(normalizeEmail('worker@@example.com')).toBeNull()
+})
+
+it('preserves uncited text and removes references across long whitespace without rescanning', () => {
+  const base = writerOutputSchema.parse({ headline: 'h', sections: [] })
+  const headline = 'Long' + ' '.repeat(200_000) + 'ending'
+  expect(groundResult({ ...base, headline }, spec, new Set()).result.headline).toBe(headline)
+  expect(
+    groundResult(
+      { ...base, headline: 'Long' + ' '.repeat(200_000) + '[J1] ending' },
+      spec,
+      new Set(['J1']),
+    ).result.headline,
+  ).toBe('Long ending')
+})

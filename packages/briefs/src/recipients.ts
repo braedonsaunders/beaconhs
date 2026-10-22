@@ -17,11 +17,14 @@ export type BriefRecipient = {
   departmentId: string | null
 }
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
 export function normalizeEmail(value: string): string | null {
   const email = value.trim().toLowerCase()
-  return EMAIL.test(email) && email.length <= 254 ? email : null
+  if (!email || email.length > 254 || /\s/.test(email)) return null
+  const at = email.indexOf('@')
+  if (at <= 0 || at !== email.lastIndexOf('@')) return null
+  const domain = email.slice(at + 1),
+    dot = domain.lastIndexOf('.')
+  return dot > 0 && dot < domain.length - 1 ? email : null
 }
 
 export async function resolveBriefRecipients(

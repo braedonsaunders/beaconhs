@@ -107,7 +107,19 @@ async function write(
   throw new BriefGenerationError(`The AI reply could not be read: ${lastError}`)
 }
 
-const REF_TEXT = /\s*\[(?:[A-Z]\d{1,4})(?:\s*,\s*[A-Z]\d{1,4})*\]/g
+const REF_TEXT = /\[(?:[A-Z]\d{1,4})(?:\s*,\s*[A-Z]\d{1,4})*\]/g
+
+/** Remove citations without rescanning a long whitespace prefix at each position. */
+function withoutReferenceText(text: string): string {
+  const parts: string[] = []
+  let offset = 0
+  for (const match of text.matchAll(REF_TEXT)) {
+    parts.push(text.slice(offset, match.index).trimEnd())
+    offset = match.index + match[0].length
+  }
+  parts.push(text.slice(offset))
+  return parts.join('').trim()
+}
 
 /**
  * Keep only citations that resolve to this run's evidence, strip refs the
@@ -136,20 +148,20 @@ export function groundResult(
     const bullets = (written?.bullets ?? []).slice(0, section.maxBullets).map((bullet) => {
       const cited = clean(bullet.citations)
       if (cited.length === 0) uncited++
-      return { text: bullet.text.replace(REF_TEXT, '').trim(), citations: cited }
+      return { text: withoutReferenceText(bullet.text), citations: cited }
     })
     return { key: section.key, title: section.title, bullets: bullets.filter((b) => b.text) }
   })
   const followUps = output.followUps.slice(0, 12).map((f) => ({
-    action: f.action.replace(REF_TEXT, '').trim(),
+    action: withoutReferenceText(f.action),
     owner: f.owner,
     priority: f.priority,
     citations: clean(f.citations),
   }))
   return {
     result: {
-      headline: output.headline.replace(REF_TEXT, '').trim(),
-      summary: output.summary.replace(REF_TEXT, '').trim(),
+      headline: withoutReferenceText(output.headline),
+      summary: withoutReferenceText(output.summary),
       sections,
       followUps,
       changes: output.changes.slice(0, 10),

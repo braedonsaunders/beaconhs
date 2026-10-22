@@ -10,6 +10,12 @@ updates:
     versioning-strategy: increase-if-necessary
     open-pull-requests-limit: 5
     groups:
+      framework:
+        patterns: [next, eslint-config-next]
+        update-types: [minor, patch]
+      test-toolchain:
+        patterns: [vite, vitest, '@vitest/*']
+        update-types: [minor, patch]
       production-minor-patch:
         dependency-type: production
         update-types: [minor, patch]
@@ -25,9 +31,19 @@ updates:
       # Keep the editor core inside @grapesjs/react 2.0.0's declared peer range.
       - dependency-name: grapesjs
         versions: ['0.23.x']
-      # Next 16.2.10 declares sharp ^0.34.5 as its supported native image stack.
-      - dependency-name: sharp
-        versions: ['0.35.x']
+      # The runtime is Node 24. Do not suggest declarations for a different runtime.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # Next's React, import and accessibility plugins still declare ESLint 9 peers.
+      - dependency-name: eslint
+        update-types: ['version-update:semver-major']
+      # PDF.js 6 raises the documented Safari floor to 18. Keep the current
+      # viewer until the supported mobile browser baseline is reviewed.
+      - dependency-name: pdfjs-dist
+        update-types: ['version-update:semver-major']
+      # SDK 7 also requires coordinated provider-protocol and usage-metering changes.
+      - dependency-name: ai
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /

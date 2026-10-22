@@ -1,5 +1,7 @@
 'use client'
 
+import { htmlToText } from '@beaconhs/forms-core'
+
 import { RichTextEditor } from '@beaconhs/ui/rich-text-editor'
 
 import {
@@ -4231,12 +4233,7 @@ function RankingInput({
 // --- Rich text (shared TipTap editor) --------------------------------------
 
 function richTextIsEmpty(html: string): boolean {
-  return (
-    html
-      .replace(/<[^>]+>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .trim().length === 0
-  )
+  return htmlToText(html).length === 0
 }
 
 function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {

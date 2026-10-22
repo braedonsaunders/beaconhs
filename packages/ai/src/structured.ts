@@ -9,8 +9,12 @@ import type { z } from 'zod'
 
 export function extractJsonObject(text: string): unknown {
   const trimmed = text.trim()
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const candidate = (fenced?.[1] ?? trimmed).trim()
+  const opening = trimmed.indexOf('```')
+  const closing = opening < 0 ? -1 : trimmed.indexOf('```', opening + 3)
+  let candidate = opening >= 0 && closing >= 0 ? trimmed.slice(opening + 3, closing) : trimmed
+  if (opening >= 0 && closing >= 0 && candidate.slice(0, 4).toLowerCase() === 'json')
+    candidate = candidate.slice(4)
+  candidate = candidate.trim()
   const start = candidate.indexOf('{')
   const end = candidate.lastIndexOf('}')
   if (start < 0 || end <= start) throw new Error('Model reply did not contain a JSON object.')

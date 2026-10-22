@@ -293,6 +293,28 @@ and every mutation is audited. If you discover a vulnerability, please report it
 privately via a [GitHub security advisory](https://github.com/braedonsaunders/beaconhs/security/advisories/new)
 rather than opening a public issue.
 
+## Dependency maintenance
+
+Keep runtime declarations on Node 24. Upgrade `next` and `eslint-config-next`
+together, and move Vite and Vitest as a compatible set. Framework updates must
+preserve the compression drain-listener repair and its regression test until the
+upstream implementation passes that test without the patch.
+
+AI SDK 7 requires migrating every provider to the matching protocol and reviewing
+usage metering and persisted messages. ESLint 10 is blocked by the declared peer
+ranges of the current React, accessibility and import plugins. PDF.js 6 raises
+its documented Safari floor to 18; retain the current reader until the mobile
+browser baseline is reviewed. Dependabot ignores these major-only proposals,
+while continuing to propose supported security, minor and patch releases.
+
+Refresh transitive resolutions before adding an advisory override. The exact
+KaTeX, selector-parser and Vue overrides in `pnpm-workspace.yaml` are required by
+pinned upstream edges; remove them when those consumers permit patched versions.
+Word XML transformations use bounded SAX parsing while retaining the original XML bytes. AI reply and citation parsing must avoid unbounded backtracking, and rich text uses the shared sanitizer. Run `pnpm audit --prod` and all six validation gates before release. The unpatched
+braces advisory is currently limited to trusted build-time globs in Next's ESLint
+plugin, with no production dependency path; do not expose arbitrary glob input
+to that toolchain.
+
 ## License
 
 BeaconHS is licensed under the

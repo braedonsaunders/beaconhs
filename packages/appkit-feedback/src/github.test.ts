@@ -57,7 +57,8 @@ test('createGithubIssuePublisher posts a sanitized issue through the host reques
   const existing = await publisher.searchOpen?.('Save fails for casey@acme.test')
   assert.equal(existing?.[0]?.id, '3')
   assert.equal(existing?.[0]?.title, 'Known save failure')
-  assert.match(calls[0]!.url, /api\.github\.com\/search\/issues/)
+  assert.equal(new URL(calls[0]!.url).origin, 'https://api.github.com')
+  assert.equal(new URL(calls[0]!.url).pathname, '/search/issues')
   assert.doesNotMatch(calls[0]!.url, /casey@acme\.test/)
 
   const created = await publisher.create({

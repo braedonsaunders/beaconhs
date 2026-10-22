@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import { xmlElements, rewriteXmlElements } from './xml-elements'
 
 // Every source document in a book should be the same paper. Imported masters
 // are whatever their author used — the legacy import brought in 382 A4
@@ -132,17 +133,14 @@ const STANDARD_HEADER_TWIPS = 720
 const STANDARD_BODY_HALF_POINTS = 22
 
 /** Run properties only. `w:sz` inside a border means eighths of a point. */
-const RUN_PROPERTIES = /<w:rPr>[\s\S]*?<\/w:rPr>/g
 const RUN_SIZE = /<w:(sz|szCs) w:val="(\d+)"\s*\/>/g
-/** A whole run, so runs that declare no size can be attributed to the default. */
-const RUN = /<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/g
 /** Word's fallback when neither the run nor the defaults say anything. */
 const WORD_DEFAULT_HALF_POINTS = 20
 
 /** The size a run inherits when it declares none, from `w:docDefaults`. */
 export function defaultRunSize(stylesXml: string | null): number {
   if (!stylesXml) return WORD_DEFAULT_HALF_POINTS
-  const defaults = /<w:docDefaults>[\s\S]*?<\/w:docDefaults>/.exec(stylesXml)?.[0]
+  const defaults = xmlElements(stylesXml, 'w:docDefaults')[0]
   const size = Number(/<w:sz w:val="(\d+)"/.exec(defaults ?? '')?.[1] ?? NaN)
   return Number.isFinite(size) && size > 0 ? size : WORD_DEFAULT_HALF_POINTS
 }
@@ -160,8 +158,9 @@ export function defaultRunSize(stylesXml: string | null): number {
  */
 export function modalRunSize(documentXml: string, defaultHalfPoints: number): number | null {
   const counts = new Map<number, number>()
-  for (const run of documentXml.match(RUN) ?? []) {
-    const properties = /<w:rPr>[\s\S]*?<\/w:rPr>/.exec(run)?.[0] ?? ''
+  for (const run of xmlElements(documentXml, 'w:r')) {
+    if (run.endsWith('/>')) continue
+    const properties = xmlElements(run, 'w:rPr')[0] ?? ''
     const declared = Number(/<w:sz w:val="(\d+)"/.exec(properties)?.[1] ?? NaN)
     const size = Number.isFinite(declared) && declared > 0 ? declared : defaultHalfPoints
     counts.set(size, (counts.get(size) ?? 0) + 1)
@@ -185,7 +184,7 @@ export function modalRunSize(documentXml: string, defaultHalfPoints: number): nu
  */
 export function scaleRunSizes(xml: string, factor: number): string {
   if (!Number.isFinite(factor) || factor <= 0 || factor === 1) return xml
-  return xml.replace(RUN_PROPERTIES, (block) =>
+  return rewriteXmlElements(xml, 'w:rPr', (block) =>
     block.replace(RUN_SIZE, (tag, name, value) => {
       const scaled = Math.max(2, Math.round(Number(value) * factor))
       return `<w:${name} w:val="${scaled}"/>`
@@ -458,13 +457,15 @@ function tableIsBare(tbl: string): boolean {
  * A one-cell table is layout, not data, and is left alone.
  */
 export function addTableBordersInDocumentXml(documentXml: string): string {
-  return documentXml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (tbl) => {
+  return rewriteXmlElements(documentXml, 'w:tbl', (tbl) => {
     if (!tableIsBare(tbl)) return tbl
     const cells = (tbl.match(/<w:tc>/g) ?? []).length
     if (cells < 2) return tbl
     const stripped = tbl.replace(/<w:tcBorders>\s*<\/w:tcBorders>/g, '')
-    const properties = /<w:tblPr>[\s\S]*?<\/w:tblPr>/.exec(stripped)?.[0]
+    const properties = xmlElements(stripped, 'w:tblPr')[0]
     if (!properties) return stripped.replace('<w:tbl>', `<w:tbl><w:tblPr>${GRID}</w:tblPr>`)
+    if (properties.endsWith('/>'))
+      return stripped.replace(properties, `${properties.slice(0, -2)}>${GRID}</w:tblPr>`)
     const anchor = AFTER_BORDERS.exec(properties)
     const next = anchor
       ? properties.replace(anchor[0], `${GRID}${anchor[0]}`)
@@ -498,7 +499,7 @@ const CELL_WIDTH = /<w:(tblW|tcW)\b[^>]*\bw:w="(\d+)"[^>]*\bw:type="dxa"[^>]*\/>
  */
 export function fitTablesToMeasure(documentXml: string, size: DocxPageSize): string {
   const measure = measureTwips(size)
-  return documentXml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (tbl) => {
+  return rewriteXmlElements(documentXml, 'w:tbl', (tbl) => {
     const indent = Number(/<w:tblInd\b[^>]*\bw:w="(\d+)"/.exec(tbl)?.[1] ?? 0)
     const available = Math.max(1, measure - (Number.isFinite(indent) ? indent : 0))
     const columns = [...tbl.matchAll(/<w:gridCol\b[^>]*\bw:w="(\d+)"/g)].map((m) => Number(m[1]))
