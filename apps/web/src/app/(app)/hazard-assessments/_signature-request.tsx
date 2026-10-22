@@ -1,4 +1,5 @@
 'use client'
+import { openCurrentSigningRequest } from './sign/[signatureId]/_actions'
 
 import Link from 'next/link'
 import { useState, useTransition, type ReactNode } from 'react'
@@ -107,6 +108,46 @@ export function SigningWorkspaceSwitch({ tenantId }: { tenantId: string }) {
         }
       >
         <GeneratedValue value={pending ? 'Switching…' : 'Open signing workspace'} />
+      </Button>
+    </div>
+  )
+}
+
+export function CurrentSigningRequest({ signatureId }: { signatureId: string }) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <div className="space-y-3">
+      <p>
+        <GeneratedValue value="This JSA changed since this request. Review the current version before signing. Earlier signatures remain in its history." />
+      </p>
+      {error ? (
+        <p role="alert">
+          <GeneratedValue value={error} />
+        </p>
+      ) : null}
+      <Button
+        className="h-11"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            try {
+              const result = unwrapSigningResult(await openCurrentSigningRequest(signatureId))
+              router.push(`/hazard-assessments/sign/${result.signatureId}`)
+              router.refresh()
+            } catch (error) {
+              unstable_rethrow(error)
+              setError(
+                error instanceof Error
+                  ? error.message
+                  : 'Could not open the current signing version.',
+              )
+            }
+          })
+        }
+      >
+        <GeneratedValue value={pending ? 'Opening…' : 'Review current JSA'} />
       </Button>
     </div>
   )

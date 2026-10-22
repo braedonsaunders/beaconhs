@@ -56,6 +56,9 @@ vi.mock('@beaconhs/ui', () => ({
   }: React.InputHTMLAttributes<HTMLInputElement> & { ref?: React.Ref<HTMLInputElement> }) => (
     <input ref={ref} {...props} />
   ),
+  Label: ({ children, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) => (
+    <label {...props}>{children}</label>
+  ),
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   Popover: ({
     trigger,
@@ -72,20 +75,23 @@ vi.mock('@beaconhs/ui', () => ({
     </>
   ),
   Drawer: ({
+    open = true,
     title,
     children,
     footer,
   }: {
+    open?: boolean
     title: ReactNode
     children: ReactNode
     footer: ReactNode
-  }) => (
-    <div role="dialog">
-      {title}
-      {children}
-      {footer}
-    </div>
-  ),
+  }) =>
+    open ? (
+      <div role="dialog">
+        {title}
+        {children}
+        {footer}
+      </div>
+    ) : null,
 }))
 import { SigningRoster } from './_signing-roster'
 import type { SigningRosterData } from '@/lib/hazid-signing-roster'

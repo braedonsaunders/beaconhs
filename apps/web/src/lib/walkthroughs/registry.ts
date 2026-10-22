@@ -194,11 +194,11 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'PPE and sign-on',
-        body: 'Select the PPE the job needs. Type in Add crew and tap a person, group or crew to add signature spaces immediately. Sign opens a signature-only drawer; Done saves and moves to the next person. Request sends personal signing requests. Crew and signing remain available after Submit & lock. Saved signatures can only be cleared or removed. When signing as yourself, your enabled Account signature can prefill the pad. Review it, then tap Done.',
+        body: 'Select the PPE the job needs. Use Add crew for employees or Add external worker for contractors and visitors. Ask each person to sign their own space. Sign opens the signature drawer; Done saves. Request emails employees a personal review link. If the JSA changes, the link offers Review current JSA. Previous signatures lets you read earlier signed versions. When signing as yourself, review any enabled saved signature before Done.',
       },
       {
         title: 'Submit it',
-        body: 'When everything is filled in and the crew has signed, open Actions, choose Submit & lock (Submit on a phone), and confirm. Use Unlock if the job changes after submitting. Earlier signatures stay in Activity, and the changed job needs fresh signatures.',
+        body: 'When everything is filled in and the crew has signed, open Actions, choose Submit & lock (Submit on a phone), and confirm. Use Unlock if the job changes after submitting. Earlier signatures stay in Previous signatures, and the changed job needs fresh signatures. Reordering rows alone keeps signatures.',
       },
     ],
   },

@@ -17,6 +17,8 @@ const TEXT_PARAM_NAMES = new Set([
   'templateKey',
   'token',
 ])
+// Signing versions are positive integer counters, not record UUIDs.
+const POSITIVE_INTEGER_PARAM_NAMES = new Set(['revision'])
 // Better Auth owns this table and deliberately uses a text primary key.
 const TEXT_ID_ROUTES = new Set(['(app)/platform/users/[id]/page.tsx'])
 const LOCAL_UUID_IMPLEMENTATION =
@@ -44,7 +46,9 @@ function dynamicParamsFor(file: string): string[] {
 
 function uuidParamsFor(file: string): string[] {
   if (TEXT_ID_ROUTES.has(relative(APP_ROOT, file))) return []
-  return dynamicParamsFor(file).filter((param) => !TEXT_PARAM_NAMES.has(param))
+  return dynamicParamsFor(file).filter(
+    (param) => !TEXT_PARAM_NAMES.has(param) && !POSITIVE_INTEGER_PARAM_NAMES.has(param),
+  )
 }
 
 function textParamsFor(file: string): string[] {
@@ -98,6 +102,33 @@ describe('dynamic UUID route guards', () => {
           if (localParam && chunk.includes(`isUuid(${localParam})`)) {
             failures.push(`${relative(APP_ROOT, file)}: ${routeParam} is text-backed`)
           }
+        }
+      }
+    }
+    expect(failures).toEqual([])
+  })
+
+  it('guards positive integer version parameters before route-level data access', () => {
+    const failures: string[] = []
+    for (const file of dynamicRouteFiles()) {
+      const numeric = dynamicParamsFor(file).filter((param) =>
+        POSITIVE_INTEGER_PARAM_NAMES.has(param),
+      )
+      for (const chunk of handlerChunks(
+        readFileSync(file, 'utf8'),
+        basename(file) === 'page.tsx',
+      )) {
+        const locals = localParamNames(chunk)
+        for (const name of numeric) {
+          const raw = locals.get(name)
+          const parsed = raw
+            ? new RegExp(`\\b([A-Za-z]+)\\s*=\\s*Number\\(${raw}\\)`).exec(chunk)?.[1]
+            : undefined
+          const integer = parsed ? chunk.indexOf(`Number.isSafeInteger(${parsed})`) : -1
+          const positive = parsed ? chunk.indexOf(`${parsed} < 1`) : -1
+          const access = firstDataAccess(chunk)
+          if (integer < 0 || positive < 0 || (access >= 0 && Math.max(integer, positive) > access))
+            failures.push(`${relative(APP_ROOT, file)}: ${name} needs a positive integer guard`)
         }
       }
     }

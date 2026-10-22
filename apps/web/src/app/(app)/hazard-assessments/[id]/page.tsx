@@ -1,3 +1,4 @@
+import { SigningHistory } from '../_signing-history'
 import { responseInitialState } from '@/app/(app)/apps/_lib/response-initial-state'
 import { activePeopleWhere } from '@beaconhs/db'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
@@ -917,6 +918,16 @@ export default async function HazidAssessmentDetailPage({
         alerts={
           <>
             <RecordSyncBanner />
+            {!a.locked && canUpdate && signedCount > 0 ? (
+              <Alert variant="warning">
+                <AlertTitle>
+                  <GeneratedValue value="Changes may require new signatures" />
+                </AlertTitle>
+                <AlertDescription>
+                  <GeneratedValue value="Changing job details, hazards, controls or attached plans starts a new signing version. Earlier signatures stay in Previous signatures. Reordering rows does not require signing again." />
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <GeneratedValue
               value={
                 a.locked ? (
@@ -1593,6 +1604,7 @@ export default async function HazidAssessmentDetailPage({
               tone="emerald"
             >
               <SigningRoster assessmentId={id} initial={signingRoster} canUpdate={canUpdate} />
+              <SigningHistory ctx={ctx} assessmentId={id} params={sp} />
             </Section>
           </section>
 

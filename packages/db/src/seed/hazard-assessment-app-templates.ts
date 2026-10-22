@@ -507,7 +507,7 @@ const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
         {
           id: 'equipment',
           type: 'multi_select',
-          label: { en: 'Fall-protection equipment' },
+          label: { en: 'Rescue equipment', fr: 'Équipement de sauvetage', es: 'Equipo de rescate' },
           required: true,
           validation: { options: optsFrom(WAH_EQUIPMENT_OPTIONS) },
         },

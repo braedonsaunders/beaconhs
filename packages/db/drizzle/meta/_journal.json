@@ -582,6 +582,13 @@
       "when": 1792627200000,
       "tag": "0083_equipment_service_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1792702800000,
+      "tag": "0084_hazard_signing_usability",
+      "breakpoints": true
     }
   ]
 }

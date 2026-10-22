@@ -547,7 +547,9 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 - If you cannot find a document, check your spelling, then try a shorter search word.
 - Need training instead of a document? See [Training & certificates](/help/training).
 
-When signing as yourself, your Account signature-reuse setting can offer **Use my saved signature** or fill your empty pad. Review it and finish the usual signing action. When collecting a signature from another person, ask that person to sign; your saved signature is not offered for their slot.`,
+When signing as yourself, your Account signature-reuse setting can offer **Use my saved signature** or fill your empty pad. Review it and finish the usual signing action. When collecting a signature from another person, ask that person to sign; your saved signature is not offered for their slot.
+
+On a phone, use **Zoom in** or pinch with two fingers to enlarge a PDF, then drag to read it. Choose **Fit width** to reset the size. Choose **Full screen** for more reading space and **Exit full screen** to return. Turning the phone resizes the reading area. You do not need to download the file to enlarge it.`,
   },
   {
     slug: 'documents-authoring',

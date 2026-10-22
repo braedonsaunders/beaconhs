@@ -228,14 +228,14 @@ Supervisors and internal signers must be active people who have not been deleted
 
 ## Crew sign-on
 
-1. In **Signatures**, type a name in **Add crew**. People appear first, followed by matching groups and crews. Tap a result to add its waiting signature box immediately. Keep typing and tapping to add the rest of the crew. For a visitor, type their name and choose **Visitor**.
+1. In **Signatures**, type a name in **Add crew**. People appear first, followed by matching groups and crews. Tap a result to add its waiting signature box immediately. For contractors and visitors, choose **Add external worker**, enter their name and optional company, then choose **Add to crew**.
 2. After reviewing the job together, tap **Sign**, or tap a person's waiting signature box. A drawer shows only their name and signature pad. Draw the signature and tap **Done**. The next person's name appears in the same drawer. **Clear** erases unsaved ink. Every completed signature saves immediately.
 3. Tap **Request** to send personal requests to unsigned active crew members with linked accounts. They open the request from their notification inbox, email, SMS, or phone notification, review the assessment, and tap **Sign**. Requests expire after seven days. Tapping **Request** again renews unsigned requests; signed people are not contacted again.
 4. The signed count and signature boxes update automatically while the page is visible. Use the page buttons for a large crew. People without linked accounts sign in the drawer. Saved signatures cannot be edited. Tap **Clear** on a signed person's box to erase their signature so they can sign again. Tap the **Remove** icon to remove a crew member and their signature. These actions keep the other crew signatures and record the change in **Activity**.
 
 Installing the PWA does not enable phone notifications by itself. On each device, open **Notifications → Preferences → Enable notifications** and allow them. The request page also offers that button. The tenant administrator chooses signing channels in **Admin → Notifications → Hazard assessment signing**; personal channel preferences still apply. Email and SMS require a configured provider. These manual requests are delivered immediately, outside automatic digests and quiet hours.
 
-Edit the assessment normally if the job changes. Earlier signatures stay in **Activity**, and the current crew needs fresh signatures for the changed job. Previous requests cannot sign changed content; tap **Request** again when ready. Adding people to the same job preserves the signatures already collected. **Add crew**, **Sign**, **Request**, **Clear**, and **Remove** also work after **Submit & lock**. The job content stays locked. Clearing a signature withdraws its previous personal request; tap **Request** to send a new one. Open **Activity** and expand **show changes** to see saved signing details.
+Edit the assessment normally if the job changes. Earlier signatures stay in **Previous signatures**. The current crew needs fresh signatures for changed content. Earlier email links offer **Review current JSA** until they expire; they never sign the changed content automatically. Adding people to the same job preserves existing signatures. Crew and signing controls also work after **Submit & lock** while the job content stays locked. Clearing a signature withdraws its personal request; choose **Request** to send a new one. **Activity** records the changes.
 
 ## Attached assessment apps
 
@@ -263,7 +263,7 @@ People with permission to review hazard assessments can record an advisory decis
 
 ## Finishing up
 
-1. When everything is rated and signed, open **Actions**, choose **Submit & lock**, then tap **Submit & lock** again in the confirmation. This locks the job content and runs its submit flows. You can still add crew and collect signatures. **Unlock** reopens the job content without clearing signatures. Changing the content after unlocking prepares fresh signature spaces; earlier signatures stay in **Activity**.
+1. When everything is rated and signed, open **Actions**, choose **Submit & lock**, then tap **Submit & lock** again in the confirmation. This locks the job content and runs its submit flows. You can still add crew and collect signatures. **Unlock** reopens the job content without clearing signatures. Changing the content after unlocking prepares fresh signature spaces; earlier signatures stay in **Previous signatures**.
    - **Submit & lock** stays greyed out until every person on the current crew has signed. Remove unsigned people who are no longer joining the job before submitting.
 2. Use **Print / PDF** for a paper copy, or **Send email** to share it.
 
@@ -281,7 +281,7 @@ You need signal to add, edit, move, or delete tasks, hazards, PPE, and questions
 
 ## Tips
 
-- Changing the job keeps earlier signatures in **Activity** and prepares fresh signature spaces. Adding crew members preserves signatures already collected for the same job.
+- Changing the job keeps earlier signatures in **Previous signatures** and prepares fresh signature spaces. Adding crew members preserves signatures already collected for the same job.
 - Conditions change. If the job changes, update the assessment (use **Unlock** first if submitted), or start a new one.
 - **Completed by** on the record and on the assessment list is the person who filled the assessment in. BeaconHS records it when the assessment is started — there is nothing to type, and it cannot be edited. It is the **Completed by** line on the printed PDF too.
 - **Print blank** on the assessment list prints a paper copy to fill in by hand — for a job where a phone is not practical. Pick the assessment type first: the sheet carries that type's real hazards, PPE and questions, with the **Specific controls**, **Applies**, and answer columns left empty and a ruled sign-on block at the end. Key it into BeaconHS afterwards so the record is the system of record.
@@ -300,7 +300,11 @@ You need signal to add, edit, move, or delete tasks, hazards, PPE, and questions
 Tap a crew member’s **Tap to sign** space to open their signature pad. Draw and tap **Done**; the next unsigned person appears in the same drawer.
 
 
-When signing as yourself, your Account signature-reuse setting can offer **Use my saved signature** or fill your empty pad. Review it and finish the usual signing action. When collecting a signature from another person, ask that person to sign; your saved signature is not offered for their slot.`,
+When signing as yourself, your Account signature-reuse setting can offer **Use my saved signature** or fill your empty pad. Review it and finish the usual signing action. When collecting a signature from another person, ask that person to sign; your saved signature is not offered for their slot.
+
+To include a contractor or visitor, choose **Add external worker**, enter their **Full name** and optional company, then choose **Add to crew**. Ask that worker to sign their own space on your device; no account is needed. Email requests are for employees with an account. If a JSA changes after a request is sent, the link explains the change and offers **Review current JSA**. Expired requests must be resent by the supervisor. Changing job details, hazards, controls or plans requires fresh signatures. Reordering rows alone keeps signatures. Open **Previous signatures** to search earlier signers, filter by **Signing version**, and choose **View signed version** to read the exact earlier job content. Those signatures do not approve the current version. On new Fall Protection Plans, **Rescue equipment** means the equipment used to retrieve a person safely.
+
+Some earlier signatures have no saved content snapshot. Their ink remains visible in **Previous signatures**, with **Earlier content snapshot unavailable** instead of a version link. BeaconHS does not reconstruct what those workers reviewed.`,
   },
   {
     slug: 'inspections',

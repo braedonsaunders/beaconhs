@@ -1,9 +1,9 @@
 'use server'
+import { signingResult } from '@/lib/hazid-signing-action-result'
 
 import { randomUUID } from 'node:crypto'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import { unstable_rethrow } from 'next/navigation'
 import { assertCan } from '@beaconhs/tenant'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
@@ -29,7 +29,7 @@ import {
   SIGNING_REQUEST_DAYS,
   type SigningContext,
 } from '@/lib/hazid-signing'
-import { HazidSigningError, type SigningResult } from '@/lib/hazid-signing-result'
+import { HazidSigningError } from '@/lib/hazid-signing-result'
 import { isUuid } from '@/lib/list-params'
 
 async function signingContext(): Promise<SigningContext> {
@@ -542,20 +542,6 @@ async function performChangeSignature(
   refresh(input.assessmentId)
 }
 
-async function signingResult<T>(run: () => Promise<T>): Promise<SigningResult<T>> {
-  try {
-    return { ok: true, data: await run() }
-  } catch (error) {
-    unstable_rethrow(error)
-    if (error instanceof HazidSigningError) return { ok: false, error: error.message }
-    console.error('[hazid-signing] action failed', error)
-    return {
-      ok: false,
-      error:
-        'Could not save the signing change. Your work was not reported as complete. Try again.',
-    }
-  }
-}
 export async function addSigningCrew(input: Parameters<typeof performAddSigningCrew>[0]) {
   return signingResult(() => performAddSigningCrew(input))
 }

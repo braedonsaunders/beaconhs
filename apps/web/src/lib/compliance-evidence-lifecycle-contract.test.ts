@@ -144,7 +144,7 @@ describe('immediate compliance evidence lifecycle', () => {
     const remove = between(
       signing,
       'async function performChangeSignature',
-      'async function signingResult<T>',
+      'export async function addSigningCrew',
     )
     expect(capture).toContain(
       'await withStoredSignatureAttachment(ctx, ink, async (tx, attachmentId)',
