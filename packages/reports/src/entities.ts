@@ -458,10 +458,16 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         obligation.source_module,
         obligation.title AS obligation_title,
         status.subject_key,
-        CASE
-          WHEN person.id IS NULL THEN NULL
-          ELSE person.last_name || ', ' || person.first_name
+        CASE WHEN status.person_id IS NULL THEN NULL ELSE
+          coalesce(nullif(trim(concat_ws(', ', nullif(trim(person.last_name), ''), nullif(trim(person.first_name), ''))), ''), 'Person unavailable')
         END AS person_name,
+        CASE WHEN status.person_id IS NOT NULL THEN
+          concat_ws(' — ', coalesce(nullif(trim(concat_ws(', ', nullif(trim(person.last_name), ''), nullif(trim(person.first_name), ''))), ''), 'Person unavailable'), signoff.task)
+        ELSE coalesce(
+          nullif(concat_ws(' · ', nullif(ppe_type.name, ''), nullif(ppe.serial_number, '')), ''),
+          nullif(concat_ws(' — ', nullif(action.reference, ''), nullif(action.title, '')), ''),
+          'Record unavailable'
+        ) END AS subject_label,
         status.status,
         status.period_start,
         status.period_end,
@@ -480,7 +486,20 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN people person
         ON person.tenant_id = status.tenant_id
        AND person.id = status.person_id
-       AND person.deleted_at IS NULL
+      LEFT JOIN job_title_tasks signoff
+        ON signoff.tenant_id = status.tenant_id
+       AND signoff.id::text = status.subject_ref->>'taskId'
+       AND obligation.source_module = 'job_title_signoff'
+      LEFT JOIN ppe_items ppe
+        ON ppe.tenant_id = status.tenant_id
+       AND ppe.id::text = status.subject_ref->>'recordId'
+       AND obligation.source_module = 'ppe_inspection'
+      LEFT JOIN ppe_types ppe_type
+        ON ppe_type.tenant_id = ppe.tenant_id AND ppe_type.id = ppe.type_id
+      LEFT JOIN corrective_actions action
+        ON action.tenant_id = status.tenant_id
+       AND action.id::text = status.subject_ref->>'caId'
+       AND obligation.source_module = 'corrective_action'
       LEFT JOIN departments department
         ON department.tenant_id = status.tenant_id
        AND department.id = person.department_id
@@ -510,7 +529,13 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         filterExpression: '"report_compliance_status"."department_id"',
       },
       { key: 'group_id_list', label: 'Person group', kind: 'text', filterValueMode: 'csv-set' },
-      { key: 'subject_key', label: 'Subject', kind: 'text' },
+      {
+        key: 'subject_key',
+        label: 'Person / record',
+        kind: 'text',
+        expression: '"report_compliance_status"."subject_label"',
+        filterExpression: '"report_compliance_status"."subject_key"',
+      },
       { key: 'person_name', label: 'Employee name', kind: 'text' },
       { key: 'status', label: 'Status', kind: 'enum' },
       { key: 'period_start', label: 'Period start', kind: 'date' },

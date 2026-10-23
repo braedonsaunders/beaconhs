@@ -63,8 +63,9 @@ export async function runBeaconReport(
   const filters = mergeFilters(query.filters ?? null, options.runtimeFilters ?? null)
   const presentation = reportPresentationFromLayout(options.layout)
   validateReportPresentation(presentation, query, catalog)
+  const identityProjection = distinctIdentityProjection({ ...query, filters }, catalog)
   const { compiled, fields } = reportCountProjection(
-    compileCustomReport({ ...query, filters }, tenantId, catalog, options),
+    compileCustomReport(identityProjection.query, tenantId, identityProjection.catalog, options),
     query.entity,
     catalog,
     presentation,
@@ -104,4 +105,29 @@ function mergeFilters(
   if (!definition) return runtime
   if (!runtime) return definition
   return { combinator: 'and', rules: [definition, runtime] }
+}
+
+/** Name projections must not merge separate people/records in distinct counts. */
+function distinctIdentityProjection(query: ReportCustomQuery, catalog: ReportEntityCatalog) {
+  const entity = catalog.entities.find((source) => source.key === query.entity)
+  if (query.mode !== 'summarize' || !entity || !query.measures) return { query, catalog }
+  const columns = [...entity.columns]
+  const measures = query.measures.map((measure, index) => {
+    const column = columns.find((item) => item.key === measure.column)
+    if (measure.fn !== 'count_distinct' || !column?.filterExpression || column.hidden)
+      return measure
+    let key = '__distinct_identity_' + index
+    while (columns.some((item) => item.key === key)) key += '_'
+    columns.push({ ...column, key, expression: column.filterExpression, hidden: false })
+    return { ...measure, column: key }
+  })
+  return {
+    query: { ...query, measures },
+    catalog: {
+      ...catalog,
+      entities: catalog.entities.map((source) =>
+        source === entity ? { ...entity, columns } : source,
+      ),
+    },
+  }
 }

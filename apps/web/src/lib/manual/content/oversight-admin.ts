@@ -334,7 +334,9 @@ Seeded and team-created reports use the same editable report definition. There i
 
 Every published Builder app you can currently open appears as its own named data source under **Apps**. The source is automatically limited to that app's responses. Draft, archived, and role-restricted apps are not exposed. Timed check-ins appear as **Monitored sessions**; they are a general Builder app capability, not a separate native module.
 
-The report list, full viewer, exports, and schedules all run this same saved definition. Seed provenance only lets BeaconHS restore a missing default during setup; it does not make the report read-only.`,
+The report list, full viewer, exports, and schedules all run this same saved definition. Seed provenance only lets BeaconHS restore a missing default during setup; it does not make the report read-only.
+
+Compliance reports, including scheduled PDFs, show people by name and other subjects by their record label. If a linked record is unavailable, the report says so instead of printing an internal ID.`,
   },
   {
     slug: 'ai-briefs',
