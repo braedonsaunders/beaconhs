@@ -81,7 +81,7 @@ export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string
     `Reference: ${entry.reference}`,
     `Date: ${entry.entryDate}`,
     `By: ${author}`,
-    `Site: ${data.e.siteName ?? '—'}`,
+    `Location: ${data.e.siteName ?? '—'}`,
     '',
     entry.bodyText ?? '',
   ].join('\n')

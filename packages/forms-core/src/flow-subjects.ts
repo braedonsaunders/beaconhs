@@ -26,6 +26,12 @@ export type FlowFieldDef = {
   photoSource?: boolean
   /** The field accepts a plain-text photo-analysis result. */
   textOutput?: boolean
+  /**
+   * The value is sanitized rich-text HTML (lists, paragraphs, emphasis).
+   * Document templates merge it raw with `{{{key}}}`; a plain `{{key}}` still
+   * reduces it to text.
+   */
+  rich?: boolean
 }
 
 /**

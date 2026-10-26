@@ -144,7 +144,7 @@ describe('journal pagination', () => {
         author_name: 'Example author',
         supervisor_name: 'Example supervisor',
         site_name: 'Main shop',
-        body_text: paragraphs.join('\n\n'),
+        body_html: `${paragraphs.map((p) => `<p>${p}</p>`).join('')}<ol><li><p>Final list item</p></li></ol>`,
       },
       { escapeHtml: true },
     )
@@ -162,5 +162,6 @@ describe('journal pagination', () => {
     const allText = result.text.join('\n')
     for (let i = 1; i <= paragraphs.length; i++) expect(allText).toContain(`Observation ${i}:`)
     expect(result.text.at(-1)).toContain('Observation 18:')
+    expect(result.text.at(-1)).toMatch(/1\.\s*Final list item/)
   }, 180_000)
 })

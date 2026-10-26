@@ -44,6 +44,8 @@ const ROW = 'page-break-inside:avoid;'
 const HEAD_CELL = 'border:none;padding:14px 0 6px;'
 const NARR =
   'border:1px solid #e2e8f0;border-left:3px solid #0f172a;background:#f8fafc;padding:8px 10px;font-size:11.5px;color:#0f172a;line-height:1.55;white-space:pre-wrap;'
+const RICH_NARR =
+  'border:1px solid #e2e8f0;border-left:3px solid #0f172a;background:#f8fafc;padding:2px 10px;font-size:11.5px;color:#0f172a;line-height:1.55;overflow-wrap:anywhere;'
 const RIGHT = 'text-align:right;font-variant-numeric:tabular-nums;'
 
 /** Letterhead: document title + subtitle left, reference (or blank) right. */
@@ -187,6 +189,20 @@ function narrative(title: string, token: string, gate = ''): string {
     `<tr data-if="${g}" style="page-break-inside:auto;"><td style="border:none;padding:12px 0 0;">` +
     `<div style="${H2}break-after:avoid;page-break-after:avoid;">${title}</div>` +
     `<div style="${NARR}margin-top:6px;">${token}</div>` +
+    `</td></tr></table>`
+  )
+}
+
+/**
+ * Narrative block for a sanitized rich-text value (`{{{token}}}`): the value
+ * carries its own paragraphs and lists, so it must not be pre-wrapped.
+ */
+function richNarrative(title: string, key: string, gate = key): string {
+  return (
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 10px;">` +
+    `<tr data-if="${gate}" style="page-break-inside:auto;"><td style="border:none;padding:12px 0 0;">` +
+    `<div style="${H2}break-after:avoid;page-break-after:avoid;">${title}</div>` +
+    `<div style="${RICH_NARR}margin-top:6px;">{{{${key}}}}</div>` +
     `</td></tr></table>`
   )
 }
@@ -563,12 +579,12 @@ const JOURNAL = wrap(
       p('Entry date', '{{entry_date}}'),
       p('Author', '{{author_name}}'),
       p('Supervisor', '{{supervisor_name}}'),
-      p('Site', '{{site_name}}'),
+      p('Location', '{{site_name}}'),
       pIf('weather', 'Weather', '{{weather}}'),
       pIf('tags', 'Tags', '{{tags}}'),
       pIf('title', 'Title', '{{title}}'),
     ]) +
-    narrative('Entry', '{{body_text}}') +
+    richNarrative('Entry', 'body_html') +
     photos(),
 )
 

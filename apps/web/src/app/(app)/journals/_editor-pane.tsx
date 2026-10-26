@@ -274,7 +274,7 @@ function EntryEditor({
           {entry.status === 'draft' && entry.canSubmit ? (
             <JournalSubmitButton
               submitting={submitting}
-              disabled={!fields.supervisorPersonId.value}
+              disabled={!fields.supervisorPersonId.value || !fields.siteOrgUnitId.value}
               onClick={submit}
             />
           ) : null}
@@ -337,6 +337,16 @@ function EntryEditor({
             tagSuggestions={tagSuggestions}
             editable={editable}
             requiredForSubmission={entry.status === 'draft'}
+            siteOption={
+              entry.siteOrgUnitId && entry.siteName
+                ? { value: entry.siteOrgUnitId, label: entry.siteName }
+                : undefined
+            }
+            supervisorOption={
+              entry.supervisorPersonId && entry.supervisorName
+                ? { value: entry.supervisorPersonId, label: entry.supervisorName }
+                : undefined
+            }
           />
         </div>
 

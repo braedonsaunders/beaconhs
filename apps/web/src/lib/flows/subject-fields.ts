@@ -18,7 +18,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { MODULE_FLOW_PROFILES } from './module-profiles'
 import { COMPONENT_SUBJECT_FIELDS, COMPONENT_SUBJECT_LABELS } from './component-subjects'
 
-type SubjectFieldOption = { key: string; label: string }
+type SubjectFieldOption = { key: string; label: string; rich?: boolean }
 type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }
 /** A repeating child collection exposed for {{#each}} tables. */
 type SubjectCollection = { key: string; label: string; fields: SubjectFieldOption[] }
@@ -71,7 +71,13 @@ export async function loadSubjectFields(
   if (!subjectType || !subjectKey) return []
   if (subjectType === 'module') {
     const profile = MODULE_FLOW_PROFILES[subjectKey]
-    if (profile) return profile.fields.map((f) => ({ key: f.key, label: f.label }))
+    if (profile) {
+      return profile.fields.map((f) => ({
+        key: f.key,
+        label: f.label,
+        ...(f.rich ? { rich: true } : {}),
+      }))
+    }
     return COMPONENT_SUBJECT_FIELDS[subjectKey]?.map((f) => ({ ...f })) ?? []
   }
   if (subjectType === 'form_template') {

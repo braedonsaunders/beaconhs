@@ -54,7 +54,7 @@ Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **
 2. Resume today’s entry or use the draft created automatically for you. To choose another day, tap **New entry**. Older entries stay in **Browse**.
 3. Type what happened. Your words save automatically as you go — there is no save button.
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
-5. Choose an active **Supervisor**. You can save a draft without one, but you must choose one before submitting. Set the location if it applies.
+5. Choose the **Location** and an active **Supervisor**. You can save a draft without them, but you must choose both before submitting.
 
 Your words save to this device first, then send to BeaconHS. The badge in the header shows **Saved on device**, **Offline · saved on device**, or **Synced**. You can keep writing with no signal — the entry sends by itself when signal comes back, even if you close the app. Entries you already opened stay available offline. Opening another entry, starting a new date, adding photos, and AI writing help need signal. See [Working without signal](/help/forms) for how recovery and conflicts work.
 
@@ -86,7 +86,7 @@ Older imported entries can also show an **Attached files** list below the photos
 
 ## Printing a journal
 
-Open the entry, then choose **PDF** from the three-dot menu. Long entries continue onto the next page, using the space below the details on the first page. Photos follow the entry text. Your administrator can change the layout under **PDF templates**.
+Open the entry, then choose **PDF** from the three-dot menu. The PDF keeps your paragraphs, lists, and bold or italic text. Long entries continue onto the next page, using the space below the details on the first page. Photos follow the entry text. Your administrator can change the layout under **PDF templates**.
 
 ## Tags
 
@@ -94,7 +94,7 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 
 ## Submitting
 
-1. Choose an active **Supervisor** in the full editor, then tap **Submit** in the header when your entry is done. You can write and save a draft before choosing a supervisor. **Submit** becomes available after you have chosen a supervisor, and stays above the scrolling text on a phone.
+1. Choose the **Location** and an active **Supervisor** in the full editor, then tap **Submit** in the header when your entry is done. You can write and save a draft before choosing them. **Submit** becomes available after you have chosen both, and stays above the scrolling text on a phone.
 2. **Submit** needs signal. It sends your latest words first, then marks the entry **Submitted**. Autosave alone keeps an entry as a draft. Without signal, BeaconHS says so and your entry stays on this device.
 3. Submitted entries become read-only. To correct your own entry, tap **Unlock**, confirm, make your changes, then **Submit** again. Unlocking is permission-checked and recorded in Activity.
 

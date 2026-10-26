@@ -95,14 +95,15 @@ const entry: JournalEntryDetail = {
   entryDate: '2026-10-05',
   status: 'draft',
   definition: 'worker',
-  siteOrgUnitId: null,
+  siteOrgUnitId: 'site',
   supervisorPersonId: 'supervisor',
   personId: 'person',
   createdByTenantUserId: 'member',
   tags: [],
   photos: [],
   authorName: 'Evan Saunders',
-  siteName: null,
+  siteName: 'Kemira',
+  supervisorName: 'Jacob Kolomaya',
   updatedAt: '2026-10-05T12:00:00Z',
   submittedAt: null,
   locked: false,
@@ -158,6 +159,12 @@ describe('saved journal submit controls', () => {
     expect(mocks.submit).not.toHaveBeenCalled()
     await render({ supervisorPersonId: 'supervisor' })
     expect(submitButton()!.disabled).toBe(false)
+  })
+  it('blocks submission when the location is missing', async () => {
+    await render({ siteOrgUnitId: null, siteName: null })
+    expect(submitButton()!.disabled).toBe(true)
+    await act(async () => submitButton()!.click())
+    expect(mocks.submit).not.toHaveBeenCalled()
   })
   it('pushes the queued body edit before submitting and locking the draft', async () => {
     await render()

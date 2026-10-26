@@ -38,7 +38,11 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 import { submitEntry } from './_actions'
 
 const id = '10000000-0000-4000-8000-000000000001'
-function setup(submitted: boolean, existingStatus: string | null = 'draft') {
+function setup(
+  submitted: boolean,
+  existingStatus: string | null = 'draft',
+  requirements = { hasLocation: true, hasSupervisor: false },
+) {
   let predicate: SQL | undefined
   const tx = {
     update: () => ({
@@ -53,7 +57,7 @@ function setup(submitted: boolean, existingStatus: string | null = 'draft') {
       const query = {
         from: () => query,
         where: () => query,
-        limit: async () => (existingStatus ? [{ status: existingStatus }] : []),
+        limit: async () => (existingStatus ? [{ status: existingStatus, ...requirements }] : []),
       }
       return query
     },
@@ -73,7 +77,7 @@ beforeEach(() => {
   mocks.ai.mockResolvedValue(false)
 })
 
-describe('journal supervisor submission requirement', () => {
+describe('journal submission requirements', () => {
   it('requires an active supervisor in the atomic update, including for administrators', async () => {
     const query = setup(false)
     expect(await submitEntry(id)).toEqual({
@@ -85,12 +89,30 @@ describe('journal supervisor submission requirement', () => {
     expect(compiled.sql).toContain('"people"."id" = "journal_entries"."supervisor_person_id"')
     expect(compiled.sql).toContain('"people"."tenant_id" = "journal_entries"."tenant_id"')
     expect(compiled.sql).toContain('"people"."deleted_at" is null')
+    expect(compiled.sql).toContain('"org_units"."id" = "journal_entries"."site_org_unit_id"')
+    expect(compiled.sql).toContain('"org_units"."tenant_id" = "journal_entries"."tenant_id"')
+    expect(compiled.sql).toContain('"org_units"."deleted_at" is null')
     expect(compiled.params).toContain('active')
     expect(compiled.params).toContain('draft')
     expect(mocks.event).not.toHaveBeenCalled()
     expect(mocks.audit).not.toHaveBeenCalled()
     expect(mocks.compliance).not.toHaveBeenCalled()
     expect(mocks.ai).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      { hasLocation: false, hasSupervisor: true },
+      'Choose a location before submitting your journal.',
+    ],
+    [
+      { hasLocation: false, hasSupervisor: false },
+      'Choose a location and an active supervisor before submitting your journal.',
+    ],
+  ])('names the missing requirement for a draft (%o)', async (requirements, error) => {
+    setup(false, 'draft', requirements)
+    expect(await submitEntry(id)).toEqual({ ok: false, error })
+    expect(mocks.event).not.toHaveBeenCalled()
   })
 
   it.each([

@@ -12,6 +12,7 @@ import { cn, SearchSelect } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { RecordFieldError } from '@/components/record-field-error'
 import type { RecordFieldHandle } from '@/lib/offline-drafts/offline-record'
+import type { PickerOption } from '@/lib/picker-options'
 import { TagEditor } from './_tag-editor'
 import { JournalSupervisorField } from './_supervisor-field'
 import { canonicalJournalTags } from './_tag-policy'
@@ -34,11 +35,16 @@ export function MetadataBar({
   tagSuggestions,
   editable,
   requiredForSubmission,
+  siteOption,
+  supervisorOption,
 }: {
   fields: JournalMetadataFields
   tagSuggestions: TagSuggestion[]
   editable: boolean
   requiredForSubmission: boolean
+  /** Saved location/supervisor labels, shown without waiting on a lookup. */
+  siteOption?: PickerOption
+  supervisorOption?: PickerOption
 }) {
   const tGenerated = useGeneratedTranslations()
   const { entryDate, definition, siteOrgUnitId, supervisorPersonId, tags } = fields
@@ -84,17 +90,24 @@ export function MetadataBar({
           label={tGenerated('m_055f11420b2da4')}
           icon={<MapPin size={13} />}
           error={siteOrgUnitId.error}
+          required={requiredForSubmission}
+          hint={
+            requiredForSubmission && !siteOrgUnitId.value ? (
+              <GeneratedValue value={'Choose a location before submitting your journal.'} />
+            ) : null
+          }
         >
           <RemoteSearchSelect
             lookup="journal-locations"
             value={siteOrgUnitId.value}
+            initialOption={siteOption}
             disabled={!editable}
             clearable
             emptyLabel={tGenerated('m_1ad901c0a1f003')}
             placeholder={tGenerated('m_1ad901c0a1f003')}
             searchPlaceholder={tGenerated('m_016e087c3c8544')}
             sheetTitle="Location"
-            ariaLabel="Location"
+            ariaLabel={requiredForSubmission ? 'Location (required for submission)' : 'Location'}
             onChange={(v) => siteOrgUnitId.commit(v || '')}
           />
         </Field>
@@ -102,6 +115,7 @@ export function MetadataBar({
         <div className="space-y-1">
           <JournalSupervisorField
             value={supervisorPersonId.value || null}
+            initialOption={supervisorOption}
             disabled={!editable}
             requiredForSubmission={requiredForSubmission}
             onChange={(value) => supervisorPersonId.commit(value ?? '')}
@@ -127,11 +141,15 @@ function Field({
   label,
   icon,
   error,
+  required = false,
+  hint = null,
   children,
 }: {
   label: string
   icon?: React.ReactNode
   error: string | null
+  required?: boolean
+  hint?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -143,8 +161,10 @@ function Field({
       >
         <GeneratedValue value={icon} />
         <GeneratedValue value={label} />
+        {required ? <span aria-hidden="true">*</span> : null}
       </span>
       <GeneratedValue value={children} />
+      {hint ? <p className="text-xs text-amber-700 dark:text-amber-300">{hint}</p> : null}
       <RecordFieldError error={error} />
     </label>
   )

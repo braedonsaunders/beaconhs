@@ -589,6 +589,13 @@
       "when": 1792702800000,
       "tag": "0084_hazard_signing_usability",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793016000000,
+      "tag": "0085_journal_pdf_rich_body",
+      "breakpoints": true
     }
   ]
 }

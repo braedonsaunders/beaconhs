@@ -20,6 +20,13 @@ describe('template builder HTML', () => {
     expect(mergeFieldBlockHtml({ key: 'x}}<script>alert(1)</script>{{x' })).toBeNull()
   })
 
+  it('merges rich-text fields raw in a block so their lists and paragraphs print', () => {
+    expect(mergeFieldBlockHtml({ key: 'body_html', rich: true })).toBe(
+      '<div style="color:#0f172a;font-size:13px;line-height:1.55">{{{body_html}}}</div>',
+    )
+    expect(mergeFieldBlockHtml({ key: 'x}}}<b>{{{x', rich: true })).toBeNull()
+  })
+
   it('serializes GrapesJS structure with its separately authored CSS', () => {
     expect(
       serializeTemplateEditor({

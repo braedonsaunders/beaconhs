@@ -169,6 +169,7 @@ const entry: JournalEntryDetail = {
   photos: [],
   authorName: 'Evan Saunders',
   siteName: null,
+  supervisorName: null,
   updatedAt: '2026-10-05T12:00:00Z',
   submittedAt: null,
   locked: false,
@@ -271,7 +272,9 @@ describe('one journal editor', () => {
     await act(async () => opening.resolve({ ok: true, entry }))
     expect(container.querySelector('input[type="date"]')).not.toBeNull()
     expect(container.querySelector('[aria-label="Log type"]')).not.toBeNull()
-    expect(container.querySelector('[aria-label="Location"]')).not.toBeNull()
+    expect(
+      container.querySelector('[aria-label="Location (required for submission)"]'),
+    ).not.toBeNull()
     expect(
       container.querySelector('[aria-label="Supervisor (required for submission)"]'),
     ).not.toBeNull()

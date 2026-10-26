@@ -18,6 +18,7 @@ import {
   journalEntries,
   journalEntryPhotos,
   journalEntryTags,
+  orgUnits,
   people,
 } from '@beaconhs/db/schema'
 import { AI_VISION_LIMITS, describePhoto, extractEntryMeta } from '@beaconhs/ai'
@@ -115,6 +116,33 @@ export async function unlockEntry(id: string): Promise<ActionOk | ActionErr> {
   return { ok: true }
 }
 
+// A journal is submittable only with a live location and an active supervisor.
+// Both checks sit inside the atomic draft→submitted update, so no client can
+// skip them; the failure path re-reads them to name what is missing.
+const liveLocationSql = sql`exists (
+  select 1 from ${orgUnits}
+  where ${orgUnits.id} = ${journalEntries.siteOrgUnitId}
+    and ${orgUnits.tenantId} = ${journalEntries.tenantId}
+    and ${orgUnits.deletedAt} is null
+)`
+const activeSupervisorSql = sql`exists (
+  select 1 from ${people}
+  where ${people.id} = ${journalEntries.supervisorPersonId}
+    and ${people.tenantId} = ${journalEntries.tenantId}
+    and ${activePeopleWhere()}
+)`
+
+function journalSubmissionRequirementError(entry: {
+  hasLocation: boolean
+  hasSupervisor: boolean
+}): string {
+  if (!entry.hasLocation && !entry.hasSupervisor) {
+    return 'Choose a location and an active supervisor before submitting your journal.'
+  }
+  if (!entry.hasLocation) return 'Choose a location before submitting your journal.'
+  return 'Choose an active supervisor before submitting your journal.'
+}
+
 export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
   const where = await journalMutationWhere(ctx, id, 'submit')
@@ -125,23 +153,16 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
     const rows = await tx
       .update(journalEntries)
       .set({ status: 'submitted', submittedAt, lockedAt: submittedAt })
-      .where(
-        and(
-          where,
-          eq(journalEntries.status, 'draft'),
-          sql`exists (
-            select 1 from ${people}
-            where ${people.id} = ${journalEntries.supervisorPersonId}
-              and ${people.tenantId} = ${journalEntries.tenantId}
-              and ${activePeopleWhere()}
-          )`,
-        ),
-      )
+      .where(and(where, eq(journalEntries.status, 'draft'), liveLocationSql, activeSupervisorSql))
       .returning({ reference: journalEntries.reference })
     const submitted = rows[0]
     if (!submitted) {
       const [existing] = await tx
-        .select({ status: journalEntries.status })
+        .select({
+          status: journalEntries.status,
+          hasLocation: sql<boolean>`${liveLocationSql}`,
+          hasSupervisor: sql<boolean>`${activeSupervisorSql}`,
+        })
         .from(journalEntries)
         .where(where)
         .limit(1)
@@ -151,7 +172,7 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
           ? 'Entry not found.'
           : existing.status !== 'draft'
             ? 'This entry has already been submitted.'
-            : 'Choose an active supervisor before submitting your journal.',
+            : journalSubmissionRequirementError(existing),
       }
     }
     await recordDomainEvent(tx, {

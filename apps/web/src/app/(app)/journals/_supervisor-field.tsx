@@ -3,14 +3,17 @@
 import { UserCog } from 'lucide-react'
 import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
+import type { PickerOption } from '@/lib/picker-options'
 
 export function JournalSupervisorField({
   value,
+  initialOption,
   disabled,
   requiredForSubmission = true,
   onChange,
 }: {
   value: string | null
+  initialOption?: PickerOption
   disabled: boolean
   requiredForSubmission?: boolean
   onChange: (value: string | null) => void
@@ -27,6 +30,7 @@ export function JournalSupervisorField({
         <RemoteSearchSelect
           lookup="journal-supervisors"
           value={value ?? ''}
+          initialOption={initialOption}
           disabled={disabled}
           clearable
           emptyLabel={tGeneratedValue('None')}

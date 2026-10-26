@@ -13,6 +13,8 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
+import { escapeHtml } from '@beaconhs/email-render'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
@@ -20,6 +22,27 @@ import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, personName } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 import { photoDocumentUrl } from '@/lib/photo-document-url'
+
+/**
+ * The entry body as sanitized HTML for document templates (`{{{body_html}}}`),
+ * so printed journals keep their paragraphs, lists, and emphasis. Migrated
+ * entries carry their HTML in `body_text`; a genuinely plain-text body keeps
+ * its line breaks.
+ */
+export function journalBodyDocumentHtml(
+  bodyHtml: string | null | undefined,
+  bodyText: string | null | undefined,
+): string {
+  const source = bodyHtml?.trim() ? bodyHtml : (bodyText ?? '')
+  if (!source.trim()) return ''
+  if (/<[a-z][\s\S]*>/i.test(source)) return sanitizeDocumentHtml(source)
+  return source
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+}
 
 export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): FlowSubjectAdapter {
   return {
@@ -85,6 +108,7 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
         reference: r.reference ?? null,
         title: r.title ?? null,
         body_text: r.bodyText ?? null,
+        body_html: journalBodyDocumentHtml(r.bodyHtml, r.bodyText),
         entry_date: fmtDate(r.entryDate),
         author_name: personName({
           firstName: e.authFirst,

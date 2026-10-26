@@ -91,6 +91,7 @@ const MONTHS_ABBR = [
   'Dec',
 ]
 const authorPerson = alias(people, 'journal_author')
+const supervisorPerson = alias(people, 'journal_supervisor')
 
 function dayLabel(iso: string): string {
   const [, m, d] = iso.split('-')
@@ -342,10 +343,13 @@ export async function getEntry(
         siteName: orgUnits.name,
         firstName: authorPerson.firstName,
         lastName: authorPerson.lastName,
+        supervisorFirstName: supervisorPerson.firstName,
+        supervisorLastName: supervisorPerson.lastName,
       })
       .from(journalEntries)
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
       .leftJoin(authorPerson, eq(authorPerson.id, journalAuthorPersonId()))
+      .leftJoin(supervisorPerson, eq(supervisorPerson.id, journalEntries.supervisorPersonId))
       .where(and(eq(journalEntries.id, id), isNull(journalEntries.deletedAt), scope))
       .limit(1)
     if (!row) return null
@@ -402,6 +406,9 @@ export async function getEntry(
       })),
       authorName: row.firstName ? `${row.firstName} ${row.lastName ?? ''}`.trim() : null,
       siteName: row.siteName ?? null,
+      supervisorName: row.supervisorFirstName
+        ? `${row.supervisorFirstName} ${row.supervisorLastName ?? ''}`.trim()
+        : null,
       updatedAt: row.e.updatedAt.toISOString(),
       submittedAt: row.e.submittedAt ? row.e.submittedAt.toISOString() : null,
       locked: Boolean(row.e.lockedAt) || row.e.status !== 'draft',

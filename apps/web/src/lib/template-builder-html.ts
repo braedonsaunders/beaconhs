@@ -1,4 +1,9 @@
-export type TemplateMergeField = { key: string; label?: string }
+export type TemplateMergeField = {
+  key: string
+  label?: string
+  /** Sanitized rich-text value: merged raw so its lists and paragraphs survive. */
+  rich?: boolean
+}
 export type TemplateCollection = {
   key: string
   label: string
@@ -38,8 +43,13 @@ function escapeHtml(value: string): string {
 
 export function mergeFieldBlockHtml(field: TemplateMergeField): string | null {
   const key = safeTemplateKey(field.key)
-  return key ? `<span style="color:#0f172a;">{{${key}}}</span>` : null
+  if (!key) return null
+  return field.rich
+    ? `<div style="${RICH_TEXT_STYLE}">{{{${key}}}}</div>`
+    : `<span style="color:#0f172a;">{{${key}}}</span>`
 }
+
+const RICH_TEXT_STYLE = 'color:#0f172a;font-size:13px;line-height:1.55'
 
 const TABLE_HEADER_STYLE =
   'text-align:left;border-bottom:2px solid #e2e8f0;padding:6px 8px;font-size:11px;color:#475569;font-weight:700;text-transform:uppercase'

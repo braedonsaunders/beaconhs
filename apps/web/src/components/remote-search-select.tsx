@@ -74,12 +74,15 @@ export function RemoteSearchSelect({
   const tGeneratedValue = useGeneratedValueTranslations()
   const [query, setQuery] = useState('')
   const [remoteOptions, setRemoteOptions] = useState<PickerOption[]>([])
-  const [loading, setLoading] = useState(!disabled)
+  // A disabled picker still shows its saved choice: it skips searching but
+  // resolves the selected ID's label unless the caller already supplied it.
+  const labelHydrated = !value || initialOption?.value === value
+  const [loading, setLoading] = useState(!disabled || !labelHydrated)
   const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    if (disabled) return
+    if (disabled && labelHydrated) return
 
     const controller = new AbortController()
     const timer = window.setTimeout(async () => {
@@ -123,7 +126,7 @@ export function RemoteSearchSelect({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [contextId, disabled, includeInactive, loadOptions, lookup, query, value])
+  }, [contextId, disabled, includeInactive, labelHydrated, loadOptions, lookup, query, value])
 
   const options = useMemo(() => {
     const excluded = new Set(excludedValues)

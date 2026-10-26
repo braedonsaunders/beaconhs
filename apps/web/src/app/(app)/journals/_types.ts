@@ -90,6 +90,7 @@ export type JournalEntryDetail = {
   photos: JournalPhoto[]
   authorName: string | null
   siteName: string | null
+  supervisorName: string | null
   updatedAt: string
   submittedAt: string | null
   locked: boolean

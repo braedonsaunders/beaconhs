@@ -94,11 +94,11 @@ describe('long narrative sections', () => {
     const journal = MODULE_PDF_TEMPLATE_SEEDS.find((seed) => seed.subjectKey === 'journals')!
     const narrativeRow = tables(journal.html)
       .flatMap((table) => [...table.querySelectorAll('tr')])
-      .find((row) => row.getAttribute('data-if') === 'body_text')!
+      .find((row) => row.getAttribute('data-if') === 'body_html')!
     expect(narrativeRow.style.pageBreakInside).toBe('auto')
     expect(narrativeRow.querySelector('td > div')?.getAttribute('style')).toContain(
       'break-after:avoid',
     )
-    expect(narrativeRow.textContent).toContain('{{body_text}}')
+    expect(narrativeRow.textContent).toContain('{{{body_html}}}')
   })
 })
