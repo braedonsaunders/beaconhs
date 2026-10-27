@@ -9,6 +9,7 @@ import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { journalEntries, orgUnits, people } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
+import { actingUserEmailIdentity } from '@/lib/email-sender'
 import { getAuthorPersonId } from './_lib'
 import {
   journalCanReadAll,
@@ -103,6 +104,7 @@ export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string
     subject,
     html,
     text,
+    ...(await actingUserEmailIdentity(ctx)),
     meta: { tenantId: ctx.tenantId, category: 'journal' },
   })
   await recordAudit(ctx, {

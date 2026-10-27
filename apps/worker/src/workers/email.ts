@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq'
 import { and, eq } from 'drizzle-orm'
-import { sendVia } from '@beaconhs/emails'
+import { resolveSendIdentity, sendVia } from '@beaconhs/emails'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import {
   briefRunDeliveries,
@@ -123,7 +123,14 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
   const suppressed = categorySuppressed || delivery?.kind === 'suppressed'
   const transport = delivery?.kind === 'transport' ? delivery.transport : null
   const providerKey = suppressed ? 'suppressed' : (transport?.provider ?? 'unconfigured')
-  const from = transport?.from ?? 'unconfigured'
+  // Log the identity the send will actually use (per-send sender name/reply-to).
+  const identity = transport
+    ? resolveSendIdentity(transport, {
+        senderName: job.data.senderName,
+        replyTo: job.data.replyTo,
+      })
+    : null
+  const from = identity?.from ?? 'unconfigured'
 
   // 1. Insert the log row. For a suppressed send it is terminal (failed +
   // suppressed flag); otherwise it starts 'queued' so the viewer shows it in
@@ -139,7 +146,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
         cc: [],
         bcc: [],
         fromAddr: from,
-        replyToAddr: transport?.replyTo ?? null,
+        replyToAddr: identity?.replyTo ?? null,
         subject: job.data.subject,
         htmlSize: byteLen(job.data.html),
         textSize: byteLen(job.data.text),
@@ -190,6 +197,8 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
       html: job.data.html,
       text: job.data.text,
       attachments: job.data.attachments,
+      senderName: job.data.senderName,
+      replyTo: job.data.replyTo,
     }
     // A job carrying several recipients was enqueued as a deliberate shared
     // message; the fan-out path still produces one address per job.

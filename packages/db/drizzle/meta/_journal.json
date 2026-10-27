@@ -603,6 +603,13 @@
       "when": 1793102400000,
       "tag": "0086_training_class_legacy_timezone",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1793106000000,
+      "tag": "0087_clear_legacy_azure_provenance",
+      "breakpoints": true
     }
   ]
 }

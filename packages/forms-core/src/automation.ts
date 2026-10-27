@@ -161,6 +161,11 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     // notification. Each is gated at send-time by whether that transport is set
     // up for the tenant.
     channel: z.enum(['email', 'sms', 'in_app']).optional(),
+    // Who the email appears to come from. Absent ⇒ 'beaconhs' (the configured
+    // sender — right for system notices). 'submitter' shows "<submitter> via
+    // BeaconHS" and sets Reply-To to the submitter, keeping the verified
+    // From address. Email channel only.
+    sender: z.enum(['beaconhs', 'submitter']).optional(),
     // How the body is composed. Absent ⇒ legacy 'inline' (back-compat: every
     // stored graph still validates because subject/bodyTemplate stay optional).
     mode: z.enum(['inline', 'template', 'design']).optional(),

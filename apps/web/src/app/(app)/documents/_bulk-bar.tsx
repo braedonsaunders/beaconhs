@@ -60,12 +60,25 @@ export function BulkDocumentsBar({
           setError(tGeneratedValue(res.error))
           return
         }
-        toast.success(
-          tGenerated('m_1c89fad4ce184c', {
-            value0: res.updated,
-            value1: res.skipped ? `, skipped ${res.skipped}` : '',
-          }),
-        )
+        const blockedText = (res.blocked ?? [])
+          .map(
+            (b) =>
+              `${b.title}: ${b.reason}${b.bookTitles.length ? ` (${b.bookTitles.join(', ')})` : ''}`,
+          )
+          .join('\n')
+        if (res.updated === 0 && blockedText) {
+          toast.error(tGeneratedValue('Nothing was archived.'), {
+            description: tGeneratedValue(blockedText),
+          })
+        } else {
+          toast.success(
+            tGenerated('m_1c89fad4ce184c', {
+              value0: res.updated,
+              value1: res.skipped ? `, skipped ${res.skipped}` : '',
+            }),
+            blockedText ? { description: tGeneratedValue(blockedText) } : undefined,
+          )
+        }
         onClear()
         router.refresh()
       })

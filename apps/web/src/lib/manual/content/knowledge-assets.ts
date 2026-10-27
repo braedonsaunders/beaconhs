@@ -473,7 +473,7 @@ Open **Documents** in the left menu. You will see cards for every published docu
 ## Find and read a document
 
 1. Open [Documents](/documents).
-2. Type a word in the search box — it says **Search title or description**. Document keys also match, even when not displayed. You can also filter by **Category** or **Type**. Managers can choose **Active** to show draft, published, and under-review documents together without archived documents. The top-bar search uses this same filter.
+2. Type a word in the search box — it says **Search title or description**. Document keys also match, even when not displayed. You can also filter by **Category** or **Type**. For managers, the list starts on **Active** — draft, published, and under-review documents together, without archived ones. Choose **Archived** to see retired documents, or **All** to see everything. The top-bar search uses this same filter.
 3. Tap **Read document** on the document you want.
 4. The published PDF opens full screen. Tap **Download** to save a copy, or **New tab** to open it for printing.
 5. Scroll inside the PDF to read each page. The page counter follows the page taking up most of the view.
@@ -617,7 +617,7 @@ If AI is set up for your company, an **AI** button appears in the Write toolbar.
 
 Changes the assistant makes save into the working draft like your own edits — nothing publishes until you click **Publish**.
 
-After the published PDF finishes preparing, **Send email** sends that exact published version. Draft content is never emailed. Each recipient and Cc address receives a private copy.
+After the published PDF finishes preparing, **Send email** sends that exact published version. Draft content is never emailed. Each recipient and Cc address receives a private copy. The email shows your name as the sender, and replies come to you.
 
 If the editor says the workspace is unavailable, a platform administrator must restore the workspace before the editor can open or save the file.
 
@@ -691,7 +691,7 @@ A document cannot be unpublished, archived, or deleted while it belongs to a pub
 
 ## Archive or delete
 
-- **Archive** (select documents in the list, pick **Archive**) retires a document but keeps it findable under the Archived filter. Use this for superseded documents. Unpublish any book that contains it first.
+- **Archive** (select documents in the list, pick **Archive**) retires a document but keeps it findable under the Archived filter. Use this for superseded documents. Unpublish any book that contains it first. If a document cannot be archived, the result names it and says why — for example, which published book still contains it.
 - **Delete** removes a document completely: click **Delete** on the document's page, or select documents in the list and pick **Delete**. Readers lose access and it disappears from all lists. It is removed from draft books, but a published book must be unpublished first. Version history is kept for audit.
 - A document that an active compliance obligation still requires cannot be unpublished, archived, or deleted — pause or delete the obligation first.
 

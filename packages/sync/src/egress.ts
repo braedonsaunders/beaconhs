@@ -747,3 +747,34 @@ export async function secureFetch(
     url = next
   }
 }
+
+/**
+ * Fetch a file from an explicit host allow-list, size-capped.
+ *
+ * For one-off legacy-file recovery (e.g. images the old Beacon stored in
+ * Azure Blob): the caller names the exact hosts it trusts, anything else —
+ * including a redirect off the list — is refused before bytes are read.
+ * Returns null on any non-200 so batch callers can report and move on.
+ */
+export async function fetchAllowListedBytes(
+  rawUrl: string,
+  options: { allowedHosts: readonly string[]; maxBytes?: number; timeoutMs?: number },
+): Promise<{ bytes: Buffer; contentType: string | null } | null> {
+  let url: URL
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'https:') return null
+  const allowed = new Set(options.allowedHosts.map((h) => h.toLowerCase()))
+  if (!allowed.has(url.hostname.toLowerCase())) return null
+  const response = await secureFetch(url, {
+    maxResponseBytes: options.maxBytes ?? MAX_SECURE_FETCH_RESPONSE_BYTES,
+    timeoutMs: options.timeoutMs ?? 30_000,
+    maxRedirects: 0,
+  })
+  if (response.status !== 200) return null
+  const bytes = Buffer.from(await response.arrayBuffer())
+  return { bytes, contentType: response.headers.get('content-type') }
+}

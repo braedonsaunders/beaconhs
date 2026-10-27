@@ -12,7 +12,21 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('drizzle-orm', () => ({ and: vi.fn(), eq: vi.fn() }))
-vi.mock('@beaconhs/emails', () => ({ sendVia: mocks.sendVia }))
+vi.mock('@beaconhs/emails', () => ({
+  sendVia: mocks.sendVia,
+  // Faithful stand-in for the real identity rule (unit-tested in
+  // @beaconhs/emails): per-send name shows as "<name> via BeaconHS" on the
+  // configured address; per-send reply-to wins.
+  resolveSendIdentity: (
+    transport: { from: string; replyTo?: string },
+    input: { senderName?: string; replyTo?: string },
+  ) => ({
+    from: input.senderName
+      ? `${input.senderName} via BeaconHS <${transport.from.replace(/^.*<|>$/g, '')}>`
+      : transport.from,
+    replyTo: input.replyTo ?? transport.replyTo,
+  }),
+}))
 vi.mock('@beaconhs/db', () => ({ db: {}, withSuperAdmin: mocks.withSuperAdmin }))
 vi.mock('@beaconhs/events', () => ({
   isNotificationCategoryEnabled: mocks.categoryEnabled,
@@ -140,6 +154,38 @@ describe('email worker provider policy', () => {
       providerMessageId: 'provider-message-1',
       sentAt: expect.any(Date),
     })
+  })
+
+  it('logs and sends the per-send sender identity when the job carries one', async () => {
+    const transport = {
+      provider: 'sendgrid' as const,
+      apiKey: 'SG.secret',
+      from: 'BeaconHS <beacon@example.com>',
+      replyTo: 'support@example.com',
+    }
+    mocks.resolveDelivery.mockResolvedValue({
+      kind: 'transport',
+      transport,
+      source: 'platform',
+    })
+    const { processEmail } = await import('./email')
+    const withSender = job()
+    withSender.data.senderName = 'Jane Foreman'
+    withSender.data.replyTo = 'jane@example.com'
+
+    await expect(processEmail(withSender)).resolves.toBeUndefined()
+
+    expect(mocks.inserted).toContainEqual(
+      expect.objectContaining({
+        fromAddr: 'Jane Foreman via BeaconHS <beacon@example.com>',
+        replyToAddr: 'jane@example.com',
+      }),
+    )
+    expect(mocks.sendVia).toHaveBeenCalledWith(
+      transport,
+      expect.objectContaining({ senderName: 'Jane Foreman', replyTo: 'jane@example.com' }),
+      { allowMultipleRecipients: false },
+    )
   })
 
   it('suppresses a queued automatic email when its tenant category was turned off', async () => {

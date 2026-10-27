@@ -25,6 +25,10 @@ export type PdfEmailPayload = {
   attachments?: EmailAttachment[]
   /** Deliver one shared message rather than a private copy each. */
   deliverAsSingleMessage?: boolean
+  /** Per-send sender display name ("<name> via BeaconHS"); see delivery-input. */
+  senderName?: string
+  /** Per-send Reply-To; overrides the configured transport reply-to. */
+  replyTo?: string
 }
 
 export type PdfArtifactTarget = { kind: 'form_response'; responseId: string }

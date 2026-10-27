@@ -18,11 +18,12 @@ import {
 import { useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import type { Editor } from 'grapesjs'
-import { ArrowLeft, FileText, Save } from 'lucide-react'
+import { ArrowLeft, Copy, FileText, Save } from 'lucide-react'
 import { Button, Input, Select, Textarea } from '@beaconhs/ui'
-import { savePdfTemplateDesign } from '../_actions'
+import { savePdfTemplateAsCopy, savePdfTemplateDesign } from '../_actions'
 import { serializeTemplateEditor } from '@/lib/template-builder-html'
 
 const PdfBuilder = dynamic(() => import('../_builder.client'), {
@@ -92,6 +93,7 @@ export function PdfTemplateEditor({
   const [footerHtml, setFooterHtml] = useState(template.footerHtml)
   const [tab, setTab] = useState<'design' | 'html' | 'preview'>('design')
   const [previewHtml, setPreviewHtml] = useState('')
+  const router = useRouter()
   const [busy, setBusy] = useState(false)
   // The authoritative markup between tab switches. The designer owns it while
   // the Design tab is open; the HTML tab edits this string directly and the
@@ -137,6 +139,37 @@ export function PdfTemplateEditor({
       })
       if (res.ok) toast.success(tGenerated('m_0a0569b726b225'))
       else toast.error(tGeneratedValue(res.error ?? tGenerated('m_0731204fbd1b17')))
+    } catch {
+      toast.error(tGenerated('m_0731204fbd1b17'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onSaveAsCopy = async () => {
+    const sourceHtml = currentHtml()
+    if (sourceHtml === null) {
+      toast.error(tGenerated('m_004a5b87102f57'))
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await savePdfTemplateAsCopy({
+        id: template.id,
+        name: `${name} (copy)`,
+        sourceHtml,
+        paperSize,
+        orientation,
+        marginMm,
+        headerHtml,
+        footerHtml,
+      })
+      if (res.ok && res.id) {
+        toast.success(tGeneratedValue('Saved as a copy.'))
+        router.push(`/admin/pdf-templates/${res.id}`)
+      } else {
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0731204fbd1b17')))
+      }
     } catch {
       toast.error(tGenerated('m_0731204fbd1b17'))
     } finally {
@@ -231,6 +264,9 @@ export function PdfTemplateEditor({
             aria-label={tGenerated('m_1c6c76aa5568a9')}
             title={tGenerated('m_1c6c76aa5568a9')}
           />
+          <Button variant="outline" onClick={onSaveAsCopy} disabled={busy}>
+            <Copy size={14} /> <GeneratedValue value="Save as copy" />
+          </Button>
           <Button onClick={onSave} disabled={busy}>
             <Save size={14} />{' '}
             <GeneratedValue

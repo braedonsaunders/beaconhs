@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./limits": "./src/limits.ts",
-    "./docx-page-size": "./src/docx-page-size.ts"
+    "./docx-page-size": "./src/docx-page-size.ts",
+    "./external-images": "./src/external-images.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

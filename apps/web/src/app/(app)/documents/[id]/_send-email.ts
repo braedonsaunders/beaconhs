@@ -8,6 +8,7 @@ import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { documentCategories, documentVersions, documents } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { appBaseUrl } from '@/lib/app-base-url'
+import { actingUserEmailIdentity } from '@/lib/email-sender'
 import { recordAudit } from '@/lib/audit'
 
 export async function sendDocumentEmail(
@@ -134,6 +135,7 @@ export async function sendDocumentEmail(
     subject,
     html,
     text,
+    ...(await actingUserEmailIdentity(ctx)),
     meta: {
       tenantId: ctx.tenantId,
       category: 'document_send',

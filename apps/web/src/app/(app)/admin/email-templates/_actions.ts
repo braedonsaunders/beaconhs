@@ -6,8 +6,10 @@
 // only. All mutations recordAudit (entityType='email_template').
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
+import type { Database } from '@beaconhs/db'
 import { emailTemplates } from '@beaconhs/db/schema'
 import { renderEmail } from '@beaconhs/email-render'
 import { enqueueEmail } from '@beaconhs/jobs'
@@ -96,10 +98,8 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
   const compiled = compileBuilderHtml(STARTER_HTML)
 
   const newId = await ctx.db(async (tx) => {
-    const existing = await tx
-      .select({ key: emailTemplates.key })
-      .from(emailTemplates)
-      .where(isNull(emailTemplates.deletedAt))
+    // The (tenant, key) unique index covers soft-deleted rows too — probe all.
+    const existing = await tx.select({ key: emailTemplates.key }).from(emailTemplates)
     const taken = new Set(existing.map((r) => r.key))
     let key = base
     let n = 2
@@ -206,6 +206,127 @@ export async function deleteEmailTemplate(formData: FormData): Promise<void> {
     summary: 'Deleted email template',
   })
   revalidatePath('/admin/email-templates')
+}
+
+async function uniqueTemplateKey(tx: Database, base: string): Promise<string> {
+  // Probe ALL rows — the unique index covers soft-deleted templates too.
+  const existing = await tx.select({ key: emailTemplates.key }).from(emailTemplates)
+  const taken = new Set(existing.map((r) => r.key))
+  let key = base
+  let n = 2
+  while (taken.has(key)) key = `${base}-${n++}`
+  return key
+}
+
+function copyName(name: string): string {
+  return normalizeTemplateName(`${name} (copy)`) ?? `${name.slice(0, 192)} (copy)`
+}
+
+/** Row action: duplicate a template and open the copy in the builder. */
+export async function duplicateEmailTemplate(formData: FormData): Promise<void> {
+  const ctx = await requireManage()
+  const id = String(formData.get('id') ?? '')
+  if (!isUuid(id)) return
+  const created = await ctx.db(async (tx) => {
+    const [source] = await tx
+      .select()
+      .from(emailTemplates)
+      .where(and(eq(emailTemplates.id, id), isNull(emailTemplates.deletedAt)))
+      .limit(1)
+    if (!source) return null
+    const name = copyName(source.name)
+    const key = await uniqueTemplateKey(tx, slugifyTemplateKey(name))
+    const [row] = await tx
+      .insert(emailTemplates)
+      .values({
+        tenantId: ctx.tenantId,
+        key,
+        name,
+        description: source.description,
+        category: source.category,
+        recordSubjectType: source.recordSubjectType,
+        recordSubjectKey: source.recordSubjectKey,
+        subjectTemplate: source.subjectTemplate,
+        compiledHtml: source.compiledHtml,
+        sourceHtml: source.sourceHtml,
+        mergeFields: source.mergeFields,
+        isActive: source.isActive,
+        createdByTenantUserId: ctx.membership?.id ?? null,
+      })
+      .returning({ id: emailTemplates.id })
+    return row ? { id: row.id, sourceName: source.name, name } : null
+  })
+  if (!created) return
+  await recordAudit(ctx, {
+    entityType: 'email_template',
+    entityId: created.id,
+    action: 'create',
+    summary: `Duplicated email template "${created.sourceName}" as "${created.name}"`,
+  })
+  revalidatePath('/admin/email-templates')
+  redirect(`/admin/email-templates/${created.id}`)
+}
+
+/** Builder action: save the current design as a NEW template, leaving the original untouched. */
+export async function saveEmailTemplateAsCopy(input: {
+  id: string
+  name: string
+  subjectTemplate: string
+  sourceHtml: string
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const ctx = await requireManage()
+  if (!input || !isUuid(input.id)) return { ok: false, error: 'Invalid template id.' }
+  const name = normalizeTemplateName(input.name)
+  if (!name) return { ok: false, error: 'Enter a template name of 200 characters or fewer.' }
+  const subjectTemplate = normalizeTemplateSubject(input.subjectTemplate)
+  if (!subjectTemplate) return { ok: false, error: 'Enter a valid email subject.' }
+  if (typeof input.sourceHtml !== 'string') {
+    return { ok: false, error: 'The email design is invalid.' }
+  }
+  let compiled: ReturnType<typeof compileBuilderHtml>
+  try {
+    compiled = compileBuilderHtml(inlineEmailCss(input.sourceHtml))
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid email design.' }
+  }
+  if (compiled.errors.length > 0) return { ok: false, error: compiled.errors.join(' ') }
+  const created = await ctx.db(async (tx) => {
+    const [source] = await tx
+      .select()
+      .from(emailTemplates)
+      .where(and(eq(emailTemplates.id, input.id), isNull(emailTemplates.deletedAt)))
+      .limit(1)
+    if (!source) return null
+    const key = await uniqueTemplateKey(tx, slugifyTemplateKey(name))
+    const [row] = await tx
+      .insert(emailTemplates)
+      .values({
+        tenantId: ctx.tenantId,
+        key,
+        name,
+        description: source.description,
+        category: source.category,
+        recordSubjectType: source.recordSubjectType,
+        recordSubjectKey: source.recordSubjectKey,
+        subjectTemplate,
+        compiledHtml: compiled.html,
+        sourceHtml: compiled.sanitizedSource,
+        mergeFields: source.mergeFields,
+        isActive: source.isActive,
+        createdByTenantUserId: ctx.membership?.id ?? null,
+      })
+      .returning({ id: emailTemplates.id })
+    return row ?? null
+  })
+  if (!created) return { ok: false, error: 'Template not found.' }
+  await recordAudit(ctx, {
+    entityType: 'email_template',
+    entityId: created.id,
+    action: 'create',
+    summary: `Saved a copy of an email template as "${name}"`,
+  })
+  revalidatePath('/admin/email-templates')
+  return { ok: true, id: created.id }
 }
 
 export async function sendTestEmailTemplate(input: {

@@ -142,6 +142,28 @@ describe('normalizeEmailDeliveryInput', () => {
     ).toThrow(/attachment/i)
   })
 
+  it('keeps a valid per-send sender name and reply-to, and drops blank ones', () => {
+    expect(
+      normalizeEmailDeliveryInput({
+        ...BASE,
+        senderName: '  Jane Foreman  ',
+        replyTo: ' jane@example.com ',
+      }),
+    ).toMatchObject({ senderName: 'Jane Foreman', replyTo: 'jane@example.com' })
+    const blank = normalizeEmailDeliveryInput({ ...BASE, senderName: ' ', replyTo: '' })
+    expect(blank).not.toHaveProperty('senderName')
+    expect(blank).not.toHaveProperty('replyTo')
+  })
+
+  it('rejects a header-unsafe sender name and an invalid reply-to', () => {
+    expect(() =>
+      normalizeEmailDeliveryInput({ ...BASE, senderName: 'Jane\r\nBcc: x@y.zz' }),
+    ).toThrow(/sender name/)
+    expect(() => normalizeEmailDeliveryInput({ ...BASE, replyTo: 'not-an-email' })).toThrow(
+      /reply-to/,
+    )
+  })
+
   it('omits an empty attachment list from the normalized provider payload', () => {
     expect(normalizeEmailDeliveryInput({ ...BASE, attachments: [] })).not.toHaveProperty(
       'attachments',

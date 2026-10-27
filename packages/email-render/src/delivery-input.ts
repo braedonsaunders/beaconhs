@@ -13,6 +13,15 @@ export type EmailDeliveryInput = {
   html: string
   text: string
   attachments?: EmailAttachmentPayload[]
+  /**
+   * Per-send sender display name (a person, e.g. the record's submitter or
+   * the acting user). The transport keeps the configured From ADDRESS and
+   * shows "<senderName> via BeaconHS" as the display name, so replies and
+   * recognition work without spoofing an unverified From domain.
+   */
+  senderName?: string
+  /** Per-send Reply-To address; overrides the configured transport reply-to. */
+  replyTo?: string
 }
 
 export type NormalizedEmailDeliveryInput = Omit<EmailDeliveryInput, 'to'> & {
@@ -210,11 +219,35 @@ export function normalizeEmailDeliveryInput(
     }
   }
 
+  // Per-send identity: validate like a configured From name / reply-to.
+  let senderName: string | undefined
+  if (input.senderName !== undefined) {
+    const trimmed = input.senderName.trim()
+    if (trimmed) {
+      if (trimmed.length > 128 || /[<>\r\n]/.test(trimmed)) {
+        throw new Error('Email sender name is invalid.')
+      }
+      senderName = trimmed
+    }
+  }
+  let replyTo: string | undefined
+  if (input.replyTo !== undefined) {
+    const trimmed = input.replyTo.trim()
+    if (trimmed) {
+      if (!isValidEmailAddress(trimmed)) {
+        throw new Error('Email reply-to address is invalid.')
+      }
+      replyTo = trimmed
+    }
+  }
+
   return {
     to,
     subject,
     html: input.html,
     text: input.text,
+    ...(senderName ? { senderName } : {}),
+    ...(replyTo ? { replyTo } : {}),
     // Provider APIs distinguish an omitted attachments field from an empty
     // array. In particular, SendGrid rejects `attachments: []` with HTTP 400.
     // Canonicalise both "not supplied" and "supplied but empty" to omission

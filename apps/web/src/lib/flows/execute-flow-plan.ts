@@ -620,6 +620,29 @@ export async function executeFlowPlan(
             failed.push('send_email (no recipients)')
             break
           }
+          // Sender: 'submitter' sends as "<name> via BeaconHS" with Reply-To
+          // at the submitter; anything else keeps the configured sender.
+          let senderIdentity: { senderName?: string; replyTo?: string } = {}
+          if (action.sender === 'submitter') {
+            const sub = await getSubmitter()
+            if (sub.email) {
+              let name: string | null = null
+              if (sub.userId) {
+                const [u] = await ctx.db((tx) =>
+                  tx
+                    .select({ name: users.name })
+                    .from(users)
+                    .where(eq(users.id, sub.userId!))
+                    .limit(1),
+                )
+                name = u?.name ?? null
+              }
+              senderIdentity = {
+                ...(name ? { senderName: name } : {}),
+                replyTo: sub.email,
+              }
+            }
+          }
           const spreadsheetConfigs = (action.spreadsheetAttachments ?? []).filter(
             (attachment) => !attachment.when || evaluateLogicRule(attachment.when, evalCtx),
           )
@@ -642,6 +665,7 @@ export async function executeFlowPlan(
               category: adapter.notifyCategory,
               tenantId: ctx.tenantId,
               attachments: spreadsheetAttachments,
+              ...senderIdentity,
               // One shared message, so the PDF is attached once instead of
               // duplicating its base64 into a job per recipient.
               deliverAsSingleMessage: true,
@@ -671,6 +695,7 @@ export async function executeFlowPlan(
               text,
               html,
               attachments: spreadsheetAttachments,
+              ...senderIdentity,
               meta: { tenantId: ctx.tenantId, category: adapter.notifyCategory },
               // The body is rendered ONCE, before recipients are resolved, and
               // carries no per-recipient token — so everyone belongs on one

@@ -16,11 +16,16 @@ import {
 import { useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import type { Editor } from 'grapesjs'
-import { ArrowLeft, Mail, Save, Send } from 'lucide-react'
+import { ArrowLeft, Copy, Mail, Save, Send } from 'lucide-react'
 import { Button, Input } from '@beaconhs/ui'
-import { saveEmailTemplateDesign, sendTestEmailTemplate } from '../_actions'
+import {
+  saveEmailTemplateAsCopy,
+  saveEmailTemplateDesign,
+  sendTestEmailTemplate,
+} from '../_actions'
 import { serializeTemplateEditor } from '@/lib/template-builder-html'
 
 const EmailBuilder = dynamic(() => import('../_builder.client'), {
@@ -55,7 +60,8 @@ export function EmailTemplateEditor({
   const [name, setName] = useState(template.name)
   const [subject, setSubject] = useState(template.subjectTemplate)
   const [testTo, setTestTo] = useState('')
-  const [busy, setBusy] = useState<null | 'save' | 'test'>(null)
+  const router = useRouter()
+  const [busy, setBusy] = useState<null | 'save' | 'test' | 'copy'>(null)
 
   const snapshot = () => {
     const ed = editorRef.current
@@ -81,6 +87,33 @@ export function EmailTemplateEditor({
       })
       if (res.ok) {
         toast.success(tGenerated('m_0a0569b726b225'))
+      } else {
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0731204fbd1b17')))
+      }
+    } catch {
+      toast.error(tGenerated('m_0731204fbd1b17'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const onSaveAsCopy = async () => {
+    const snap = snapshot()
+    if (!snap) {
+      toast.error(tGenerated('m_004a5b87102f57'))
+      return
+    }
+    setBusy('copy')
+    try {
+      const res = await saveEmailTemplateAsCopy({
+        id: template.id,
+        name: `${name} (copy)`,
+        subjectTemplate: subject,
+        sourceHtml: snap.sourceHtml,
+      })
+      if (res.ok && res.id) {
+        toast.success(tGeneratedValue('Saved as a copy.'))
+        router.push(`/admin/email-templates/${res.id}`)
       } else {
         toast.error(tGeneratedValue(res.error ?? tGenerated('m_0731204fbd1b17')))
       }
@@ -164,6 +197,9 @@ export function EmailTemplateEditor({
           />
           <Button variant="outline" onClick={onSendTest} disabled={busy !== null}>
             <Send size={14} /> <GeneratedText id="m_12b6e101ca2a00" />
+          </Button>
+          <Button variant="outline" onClick={onSaveAsCopy} disabled={busy !== null}>
+            <Copy size={14} /> <GeneratedValue value="Save as copy" />
           </Button>
           <Button onClick={onSave} disabled={busy !== null}>
             <Save size={14} />{' '}
