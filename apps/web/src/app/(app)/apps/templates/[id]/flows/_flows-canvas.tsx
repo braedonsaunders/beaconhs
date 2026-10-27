@@ -433,6 +433,7 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
               to: [{ type: 'submitter' }],
               subject: 'Submission received',
               bodyTemplate: 'Thanks — your submission has been received.',
+              individualCopies: true,
             },
           },
         },
@@ -1957,6 +1958,28 @@ function ActionInspector({
               <GeneratedValue
                 value={
                   (a.channel ?? 'email') === 'email' ? (
+                    <Field label={tGeneratedValue('Delivery')}>
+                      <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={a.individualCopies ?? false}
+                          disabled={readOnly}
+                          onChange={(e) => set({ ...a, individualCopies: e.target.checked })}
+                          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        <GeneratedValue
+                          value={tGeneratedValue(
+                            'Each recipient gets their own copy (recipients cannot see each other)',
+                          )}
+                        />
+                      </label>
+                    </Field>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  (a.channel ?? 'email') === 'email' ? (
                     <Field label={tGeneratedValue('Sender')}>
                       <Select
                         value={a.sender ?? 'beaconhs'}
@@ -2608,7 +2631,13 @@ function MonitorNum({
 function defaultAction(kind: ActionData['action'], fields: ActionFieldOptions): ActionData {
   switch (kind) {
     case 'send_email':
-      return { action: 'send_email', to: [{ type: 'submitter' }], subject: '', bodyTemplate: '' }
+      return {
+        action: 'send_email',
+        to: [{ type: 'submitter' }],
+        subject: '',
+        bodyTemplate: '',
+        individualCopies: true,
+      }
     case 'create_capa':
       return { action: 'create_capa', titleTemplate: '', severity: 'medium' }
     case 'create_incident':

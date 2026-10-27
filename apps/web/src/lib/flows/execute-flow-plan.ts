@@ -666,9 +666,11 @@ export async function executeFlowPlan(
               tenantId: ctx.tenantId,
               attachments: spreadsheetAttachments,
               ...senderIdentity,
-              // One shared message, so the PDF is attached once instead of
-              // duplicating its base64 into a job per recipient.
-              deliverAsSingleMessage: true,
+              subjectType: adapter.auditEntityType,
+              subjectId: adapter.subjectId,
+              // Legacy graphs (flag absent) keep one shared message; steps
+              // opted into individual copies fan out to a private copy each.
+              deliverAsSingleMessage: action.individualCopies !== true,
             }
             // Resolve the PDF DOCUMENT template: the flow's explicit pick, else
             // (unless the flow forces the field summary) the subject's assigned
@@ -696,12 +698,16 @@ export async function executeFlowPlan(
               html,
               attachments: spreadsheetAttachments,
               ...senderIdentity,
-              meta: { tenantId: ctx.tenantId, category: adapter.notifyCategory },
-              // The body is rendered ONCE, before recipients are resolved, and
-              // carries no per-recipient token — so everyone belongs on one
-              // message rather than receiving N identical private copies.
-              // Notification and auth mail keep the private-copy default.
-              deliverAsSingleMessage: true,
+              meta: {
+                tenantId: ctx.tenantId,
+                category: adapter.notifyCategory,
+                subjectType: adapter.auditEntityType,
+                subjectId: adapter.subjectId,
+              },
+              // Legacy graphs (flag absent) keep one shared message — the body
+              // is rendered once with no per-recipient token. Steps opted into
+              // individual copies fan out so recipients never see each other.
+              deliverAsSingleMessage: action.individualCopies !== true,
             },
             jobId(nodeId, 'email') ? { jobId: jobId(nodeId, 'email') } : undefined,
           )

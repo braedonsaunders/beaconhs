@@ -324,7 +324,12 @@ async function emailRenderedPdf(
         contentType: 'application/pdf',
       },
     ],
-    meta: { tenantId: email.tenantId, category: email.category },
+    meta: {
+      tenantId: email.tenantId,
+      category: email.category,
+      subjectType: email.subjectType,
+      subjectId: email.subjectId,
+    },
     deliverAsSingleMessage: email.deliverAsSingleMessage,
     senderName: email.senderName,
     replyTo: email.replyTo,

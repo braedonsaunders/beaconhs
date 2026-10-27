@@ -140,6 +140,8 @@ export async function sendDocumentEmail(
       tenantId: ctx.tenantId,
       category: 'document_send',
       userId: ctx.userId,
+      subjectType: 'document',
+      subjectId: documentId,
     },
   })
 

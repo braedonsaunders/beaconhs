@@ -105,7 +105,12 @@ export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string
     html,
     text,
     ...(await actingUserEmailIdentity(ctx)),
-    meta: { tenantId: ctx.tenantId, category: 'journal' },
+    meta: {
+      tenantId: ctx.tenantId,
+      category: 'journal',
+      subjectType: 'journal_entry',
+      subjectId: entryId,
+    },
   })
   await recordAudit(ctx, {
     entityType: 'journal_entry',

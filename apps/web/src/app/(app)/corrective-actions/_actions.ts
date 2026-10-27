@@ -786,6 +786,8 @@ export async function sendCorrectiveActionEmail(args: {
       tenantId: ctx.tenantId,
       category: 'corrective_action_send',
       userId: ctx.userId,
+      subjectType: 'corrective_action',
+      subjectId: args.caId,
     },
   })
 

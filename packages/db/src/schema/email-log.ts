@@ -55,6 +55,10 @@ export const emailLog = pgTable(
     // Category for filtering — e.g. 'auth', 'incident', 'ca', 'report',
     // 'compliance', 'forms', or 'integration'.
     categoryKey: text('category_key'),
+    // The record this email is about, when it is about one (audit entity
+    // type + id, e.g. 'training_class'). Lets a record page list its emails.
+    subjectType: text('subject_type'),
+    subjectId: uuid('subject_id'),
     // Free-form metadata: { incidentId, retryAttempt, etc. }
     meta: jsonb('meta').$type<Record<string, unknown>>().default({}).notNull(),
     // Lifecycle timestamps
@@ -70,6 +74,12 @@ export const emailLog = pgTable(
     categoryIdx: index('email_log_category_idx').on(t.tenantId, t.categoryKey, t.createdAt),
     recipientIdx: index('email_log_recipient_idx').on(t.recipientPrimary, t.createdAt),
     jobIdx: index('email_log_job_idx').on(t.jobId),
+    subjectIdx: index('email_log_subject_idx').on(
+      t.tenantId,
+      t.subjectType,
+      t.subjectId,
+      t.createdAt,
+    ),
   }),
 )
 

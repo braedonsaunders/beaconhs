@@ -138,7 +138,15 @@ export async function runSessionOverdueFlows(args: {
               subject: rendered.subject,
               text: rendered.text,
               html: rendered.html,
-              meta: { tenantId, category: 'monitored_session' },
+              meta: {
+                tenantId,
+                category: 'monitored_session',
+                subjectType: 'form_response',
+                subjectId: responseId,
+              },
+              // Worker mail has always fanned out; only an explicit shared
+              // opt-out (individualCopies false) joins everyone on one message.
+              deliverAsSingleMessage: action.individualCopies === false,
             },
             { jobId: `session-overdue-email|${suffix}` },
           )

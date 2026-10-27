@@ -37,6 +37,10 @@ export type EmailJobData = {
     equipmentMaintenanceReminder?: boolean
     reportRunDeliveryId?: string
     briefRunDeliveryId?: string
+    /** The record this email is about (audit entity type), e.g. 'training_class'. */
+    subjectType?: string
+    /** The record id `subjectType` points at. */
+    subjectId?: string
   }
 }
 

@@ -29,6 +29,9 @@ export type PdfEmailPayload = {
   senderName?: string
   /** Per-send Reply-To; overrides the configured transport reply-to. */
   replyTo?: string
+  /** The record this email is about (audit entity type + id), for email_log. */
+  subjectType?: string
+  subjectId?: string
 }
 
 export type PdfArtifactTarget = { kind: 'form_response'; responseId: string }

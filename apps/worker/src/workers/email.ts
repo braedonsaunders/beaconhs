@@ -154,6 +154,8 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
         textBody: job.data.text,
         status: suppressed ? 'failed' : 'queued',
         categoryKey,
+        subjectType: job.data.meta?.subjectType ?? null,
+        subjectId: job.data.meta?.subjectId ?? null,
         errorMessage: suppressed
           ? categorySuppressed
             ? `Automatic ${disabledCategory} notifications are disabled for this workspace.`

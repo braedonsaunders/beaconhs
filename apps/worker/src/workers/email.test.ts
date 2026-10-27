@@ -108,6 +108,25 @@ describe('email worker provider policy', () => {
     })
   })
 
+  it('persists the record subject linkage from the job meta', async () => {
+    mocks.resolveDelivery.mockResolvedValue({ kind: 'suppressed' })
+    const { processEmail } = await import('./email')
+    const linked = job()
+    linked.data.meta = {
+      tenantId: 'tenant-1',
+      category: 'training',
+      subjectType: 'training_class',
+      subjectId: '5b0f3c3e-2f7a-4d6e-9a51-0c6f4c1b2d3e',
+    }
+
+    await expect(processEmail(linked)).resolves.toBeUndefined()
+
+    expect(mocks.inserted[0]).toMatchObject({
+      subjectType: 'training_class',
+      subjectId: '5b0f3c3e-2f7a-4d6e-9a51-0c6f4c1b2d3e',
+    })
+  })
+
   it('records and retries an unconfigured provider instead of reporting success', async () => {
     mocks.resolveDelivery.mockResolvedValue({ kind: 'unconfigured' })
     const { processEmail } = await import('./email')

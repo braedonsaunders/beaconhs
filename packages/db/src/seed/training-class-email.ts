@@ -129,6 +129,7 @@ export async function seedTrainingClassBookingEmail(
               action: 'send_email',
               mode: 'template',
               templateId: template.id,
+              individualCopies: true,
               to: [{ type: 'field', field: 'attendee_emails' }],
             },
           },

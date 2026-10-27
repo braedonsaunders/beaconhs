@@ -155,6 +155,23 @@ describe('send_email design source', () => {
   })
 })
 
+describe('send_email individual copies', () => {
+  it('round-trips the per-recipient delivery flag and keeps it absent by default', () => {
+    const individual = actionDataSchema.parse({
+      action: 'send_email',
+      to: [{ type: 'submitter' }],
+      individualCopies: true,
+    })
+    expect(individual).toMatchObject({ individualCopies: true })
+
+    const legacy = actionDataSchema.parse({
+      action: 'send_email',
+      to: [{ type: 'submitter' }],
+    })
+    expect(legacy).not.toHaveProperty('individualCopies')
+  })
+})
+
 describe('contextual email recipients', () => {
   it('accepts department-scoped groups, location contacts, and compliance recipients', () => {
     const parsed = actionDataSchema.parse({

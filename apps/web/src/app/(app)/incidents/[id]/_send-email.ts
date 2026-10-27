@@ -227,6 +227,8 @@ export async function sendIncidentEmail(
       tenantId: ctx.tenantId,
       category: 'incident_send',
       userId: ctx.userId,
+      subjectType: 'incident',
+      subjectId: incidentId,
     },
   })
 

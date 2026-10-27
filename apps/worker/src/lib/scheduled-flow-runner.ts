@@ -128,6 +128,7 @@ export async function scanScheduledFlows(now: Date = new Date()): Promise<Schedu
                     text: rendered.text,
                     html: rendered.html,
                     meta: { tenantId: t.id, category: 'automation' },
+                    deliverAsSingleMessage: action.individualCopies === false,
                   },
                   { jobId: `scheduled-flow-email|${jobSuffix}` },
                 )

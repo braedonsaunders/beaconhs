@@ -105,7 +105,13 @@ export async function sendInspectionEmail(
     html,
     text,
     ...(await actingUserEmailIdentity(ctx)),
-    meta: { tenantId: ctx.tenantId, category: 'inspection_record_send', userId: ctx.userId },
+    meta: {
+      tenantId: ctx.tenantId,
+      category: 'inspection_record_send',
+      userId: ctx.userId,
+      subjectType: 'inspection_record',
+      subjectId: recordId,
+    },
   })
   await recordAudit(ctx, {
     entityType: 'inspection_record',

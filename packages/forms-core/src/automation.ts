@@ -169,6 +169,10 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     // BeaconHS" and sets Reply-To to the submitter, keeping the verified
     // From address. Email channel only.
     sender: z.enum(['beaconhs', 'submitter']).optional(),
+    // Email channel only. True ⇒ every recipient gets their own copy, so
+    // recipients never see each other's addresses. Absent keeps the stored
+    // graph's legacy behaviour at each executor; new steps are authored true.
+    individualCopies: z.boolean().optional(),
     // How the body is composed. Absent ⇒ legacy 'inline' (back-compat: every
     // stored graph still validates because subject/bodyTemplate stay optional).
     mode: z.enum(['inline', 'template', 'design']).optional(),

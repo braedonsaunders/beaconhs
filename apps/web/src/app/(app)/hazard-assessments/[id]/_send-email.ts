@@ -266,6 +266,8 @@ export async function sendHazidEmail(
     filename: `${data.a.reference}.pdf`,
     tenantId: ctx.tenantId,
     category: 'hazid_assessment_send',
+    subjectType: 'hazid_assessment',
+    subjectId: assessmentId,
     deliverAsSingleMessage: true,
     ...(await actingUserEmailIdentity(ctx)),
   })

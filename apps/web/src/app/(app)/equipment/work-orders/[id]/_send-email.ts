@@ -153,6 +153,8 @@ export async function sendWorkOrderEmail(
       tenantId: ctx.tenantId,
       category: 'equipment_work_order_send',
       userId: ctx.userId,
+      subjectType: 'equipment_work_order',
+      subjectId: workOrderId,
     },
   })
 

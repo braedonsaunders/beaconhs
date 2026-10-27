@@ -638,6 +638,13 @@
       "when": 1793120400000,
       "tag": "0091_builder_external_capture_and_delete_own",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1793124000000,
+      "tag": "0100_email_subject_linkage_and_individual_class_emails",
+      "breakpoints": true
     }
   ]
 }
