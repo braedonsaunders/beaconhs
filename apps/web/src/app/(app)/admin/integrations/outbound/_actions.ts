@@ -305,7 +305,11 @@ export async function resendOutboundDelivery(formData: FormData): Promise<void> 
   revalidatePath(`/admin/integrations/outbound/${automationId}`)
   revalidatePath('/admin/integrations')
   const classId = String(formData.get('classId') ?? '').trim()
-  if (triggerKey === 'training.class.completed' && isUuid(classId)) {
+  if (
+    (triggerKey === 'training.class.completed' ||
+      triggerKey === 'training.class.schedule_changed') &&
+    isUuid(classId)
+  ) {
     revalidatePath(`/training/classes/${classId}`)
   }
 }

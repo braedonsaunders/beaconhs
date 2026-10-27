@@ -29,6 +29,7 @@ import {
 import {
   orgUnits,
   people,
+  tenantIntegrations,
   tenantUsers,
   trainingAssessments,
   trainingClasses,
@@ -283,10 +284,42 @@ export default async function TrainingClassPage({
       }
     }
 
+    // Attendees a connected schedule system cannot book (no employee ID),
+    // shown only when this tenant actually sends class schedules anywhere.
+    const [scheduleAutomation] =
+      !cls.completedAt && !cls.cancelledAt
+        ? await tx
+            .select({ id: tenantIntegrations.id })
+            .from(tenantIntegrations)
+            .where(
+              and(
+                eq(tenantIntegrations.enabled, true),
+                eq(tenantIntegrations.triggerKey, 'training.class.schedule_changed'),
+                isNull(tenantIntegrations.deletedAt),
+              ),
+            )
+            .limit(1)
+        : []
+    const unbookableAttendees = scheduleAutomation
+      ? await tx
+          .select({ firstName: people.firstName, lastName: people.lastName })
+          .from(trainingClassAttendees)
+          .innerJoin(people, eq(people.id, trainingClassAttendees.personId))
+          .where(
+            and(
+              attendeeBase,
+              inArray(trainingClassAttendees.status, ['registered', 'attended']),
+              or(isNull(people.externalEmployeeId), eq(people.externalEmployeeId, '')),
+            ),
+          )
+          .orderBy(asc(people.lastName), asc(people.firstName))
+      : []
+
     return {
       cls,
       course,
       attendees,
+      unbookableAttendees,
       attendeeCount,
       filteredAttendeeCount,
       reviewedAttendeeCount,
@@ -305,6 +338,7 @@ export default async function TrainingClassPage({
     cls,
     course,
     attendees,
+    unbookableAttendees,
     attendeeCount,
     filteredAttendeeCount,
     reviewedAttendeeCount,
@@ -451,6 +485,25 @@ export default async function TrainingClassPage({
               classId={id}
               canResend={ctx.isSuperAdmin || can(ctx, 'admin.integrations.manage')}
             />
+          ) : null}
+          {!isCompleted && (canManageClasses || can(ctx, 'admin.integrations.manage')) ? (
+            <SubjectDeliveryWarnings
+              ctx={ctx}
+              triggerKey="training.class.schedule_changed"
+              subjectId={id}
+              classId={id}
+              canResend={ctx.isSuperAdmin || can(ctx, 'admin.integrations.manage')}
+            />
+          ) : null}
+          {unbookableAttendees.length > 0 ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              <GeneratedValue value={tGeneratedValue('Not booked: no employee ID —')} />{' '}
+              <GeneratedValue
+                value={unbookableAttendees
+                  .map((a) => `${a.firstName} ${a.lastName}`.trim())
+                  .join(', ')}
+              />
+            </div>
           ) : null}
           <GeneratedValue
             value={
