@@ -17,6 +17,7 @@ import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm'
 import {
   departments,
   people,
+  tenantUsers,
   trainingClassAttendees,
   trainingClasses,
   trainingCourses,
@@ -473,12 +474,10 @@ export async function markClassComplete(formData: FormData): Promise<void> {
 
     const startsAt = new Date(cls.startsAt)
     const endsAt = new Date(cls.endsAt)
-    const startDay = Date.UTC(
-      startsAt.getUTCFullYear(),
-      startsAt.getUTCMonth(),
-      startsAt.getUTCDate(),
-    )
-    const endDay = Date.UTC(endsAt.getUTCFullYear(), endsAt.getUTCMonth(), endsAt.getUTCDate())
+    // Day boundaries are calendar days in the tenant's timezone, not UTC:
+    // an evening class in Toronto is already the next UTC day.
+    const startDay = Date.parse(`${dateIsoInTimeZone(startsAt, ctx.timezone)}T00:00:00Z`)
+    const endDay = Date.parse(`${dateIsoInTimeZone(endsAt, ctx.timezone)}T00:00:00Z`)
     const spanDays = Math.max(1, Math.round((endDay - startDay) / 86_400_000) + 1)
     const lengthDays = cls.lengthDays ?? spanDays
     const hoursPerDay =
@@ -487,6 +486,23 @@ export async function markClassComplete(formData: FormData): Promise<void> {
         : spanDays === 1
           ? Math.max(0, (endsAt.getTime() - startsAt.getTime()) / 3_600_000)
           : 8
+    // The internal instructor is credited like an attendee (legacy timesheet
+    // behaviour) when they resolve to an active person with an employee id.
+    const [instructorPerson] = cls.instructorTenantUserId
+      ? await tx
+          .select({
+            personId: people.id,
+            externalEmployeeId: people.externalEmployeeId,
+            firstName: people.firstName,
+            lastName: people.lastName,
+            departmentName: departments.name,
+          })
+          .from(people)
+          .innerJoin(tenantUsers, eq(tenantUsers.userId, people.userId))
+          .leftJoin(departments, eq(departments.id, people.departmentId))
+          .where(and(eq(tenantUsers.id, cls.instructorTenantUserId), activePeopleWhere()))
+          .limit(1)
+      : []
     await recordDomainEvent(tx, {
       tenantId: ctx.tenantId,
       eventType: 'training.class.completed',
@@ -500,6 +516,16 @@ export async function markClassComplete(formData: FormData): Promise<void> {
           endsAt: endsAt.toISOString(),
           hoursPerDay,
           lengthDays,
+          timeZone: ctx.timezone,
+          instructor:
+            instructorPerson?.externalEmployeeId != null &&
+            instructorPerson.externalEmployeeId !== ''
+              ? {
+                  ...instructorPerson,
+                  attended: true,
+                  hours: hoursPerDay * lengthDays,
+                }
+              : null,
           attendees: roster.map((person) => ({
             personId: person.personId,
             externalEmployeeId: person.externalEmployeeId,

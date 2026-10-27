@@ -55,10 +55,27 @@ export function trainingClassCompletedEvent(
     endsAt: string
     hoursPerDay: number
     lengthDays: number
+    timeZone: string
     attendees: TrainingAttendeeFact[]
+    // The class's internal instructor, when they are a linked person with an
+    // external employee id. Legacy timesheet export credited the trainer's
+    // hours alongside attendees, so the event carries them as an extra item.
+    instructor?: TrainingAttendeeFact | null
   },
 ): IntegrationEvent {
-  const items: Item[] = e.attendees.map((a) => ({
+  // Only people who actually attended are credited — a no-show must never
+  // reach a timesheet/payroll destination. The instructor is appended once,
+  // unless they already appear on the attended roster.
+  const credited = e.attendees.filter((a) => a.attended)
+  if (
+    e.instructor?.attended &&
+    e.instructor.externalEmployeeId &&
+    !credited.some((a) => a.personId === e.instructor!.personId)
+  ) {
+    credited.push(e.instructor)
+  }
+  const instructorId = e.instructor?.personId
+  const items: Item[] = credited.map((a) => ({
     classId: e.classId,
     'course.code': s(e.course.code),
     'course.name': s(e.course.name),
@@ -66,6 +83,8 @@ export function trainingClassCompletedEvent(
     endsAt: iso(e.endsAt),
     hoursPerDay: e.hoursPerDay,
     lengthDays: e.lengthDays,
+    timeZone: e.timeZone,
+    role: instructorId === a.personId ? 'instructor' : 'attendee',
     personId: a.personId,
     externalEmployeeId: a.externalEmployeeId,
     firstName: s(a.firstName),

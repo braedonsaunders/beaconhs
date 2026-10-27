@@ -105,15 +105,36 @@ function missingConn(c: Conn, password: string): string | null {
   return null
 }
 
-// --- date helpers (UTC) ----------------------------------------------------
-function atUtcMidnight(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-}
+// --- date helpers ------------------------------------------------------------
+// Week rows are calendar dates in the tenant's timezone: a class starting
+// Sunday 7:30 PM in Toronto is a Sunday class even though the stored instant
+// is already Monday in UTC. Resolve the start instant to its calendar date in
+// the event's timezone first, then do pure calendar arithmetic (anchored to
+// UTC midnights, which DST cannot skew).
 function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * 86_400_000)
 }
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10)
+}
+function calendarDateInTimeZone(instant: Date, timeZone: string | undefined): Date {
+  let zone = timeZone?.trim() || 'UTC'
+  try {
+    // Throws RangeError for an unknown IANA zone.
+    new Intl.DateTimeFormat('en-US', { timeZone: zone })
+  } catch {
+    zone = 'UTC'
+  }
+  const parts: Record<string, string> = {}
+  for (const p of new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(instant)) {
+    parts[p.type] = p.value
+  }
+  return new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)))
 }
 
 interface WeekRow {
@@ -121,9 +142,15 @@ interface WeekRow {
   dateEnd: string
   dayHours: number[]
 }
-function buildWeekRows(startsAtIso: string, hoursPerDay: number, lengthDays: number): WeekRow[] {
-  const start = atUtcMidnight(new Date(startsAtIso))
-  if (Number.isNaN(start.getTime())) return []
+export function buildWeekRows(
+  startsAtIso: string,
+  hoursPerDay: number,
+  lengthDays: number,
+  timeZone?: string,
+): WeekRow[] {
+  const instant = new Date(startsAtIso)
+  if (Number.isNaN(instant.getTime())) return []
+  const start = calendarDateInTimeZone(instant, timeZone)
   const span = Math.max(1, Math.floor(lengthDays))
   const last = addDays(start, span - 1)
   const rows: WeekRow[] = []
@@ -199,7 +226,11 @@ function withDepartment(item: Item, m: Mapping): Item {
   return { ...item, department: dept }
 }
 
-function weeklySubItems(item: Item): Item[] {
+export function weeklySubItems(item: Item): Item[] {
+  // A weekly timesheet row must never credit someone who did not attend.
+  // Events emitted before the attended-only fix (and still queued for a
+  // re-send) can carry no-shows, so the guard lives here as well as at emit.
+  if (item.attended === false) return []
   const startsAt = item.startsAt
   const hoursPerDay = Number(item.hoursPerDay)
   const lengthDays = Number(item.lengthDays)
@@ -210,7 +241,12 @@ function weeklySubItems(item: Item): Item[] {
   ) {
     return [item]
   }
-  const weeks = buildWeekRows(startsAt, hoursPerDay, lengthDays)
+  const weeks = buildWeekRows(
+    startsAt,
+    hoursPerDay,
+    lengthDays,
+    typeof item.timeZone === 'string' ? item.timeZone : undefined,
+  )
   if (weeks.length === 0) return [item]
   return weeks.map((wk) => ({
     ...item,

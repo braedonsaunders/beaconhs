@@ -40,6 +40,8 @@ export const TRIGGERS: TriggerDef[] = [
       f('departmentName', 'Department', 'string', 'Field Ops'),
       f('hours', 'Credited hours', 'number', 8),
       f('attended', 'Attended', 'boolean', true),
+      f('role', 'Role', 'string', 'attendee', 'attendee, or instructor for the internal trainer'),
+      f('timeZone', 'Time zone', 'string', 'America/Toronto'),
     ],
   },
   {
