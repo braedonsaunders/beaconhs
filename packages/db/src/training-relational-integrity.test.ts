@@ -52,7 +52,7 @@ const noActionRelationships = [
   'training_assessments.tenant_id,submitted_by_tenant_user_id->tenant_users.tenant_id,id',
   'training_assessments.tenant_id,compliance_obligation_id->compliance_obligations.tenant_id,id',
   'training_classes.tenant_id,instructor_tenant_user_id->tenant_users.tenant_id,id',
-  'training_classes.tenant_id,site_org_unit_id->org_units.tenant_id,id',
+  'training_classes.tenant_id,customer_org_unit_id->org_units.tenant_id,id',
   'training_enrollments.tenant_id,assigned_by_tenant_user_id->tenant_users.tenant_id,id',
   'training_lesson_progress.tenant_id,evaluated_by_tenant_user_id->tenant_users.tenant_id,id',
   'training_records.tenant_id,class_id->training_classes.tenant_id,id',

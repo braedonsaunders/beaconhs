@@ -638,6 +638,13 @@
       "when": 1793120400000,
       "tag": "0091_builder_external_capture_and_delete_own",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1793124000000,
+      "tag": "0101_training_class_days_customer",
+      "breakpoints": true
     }
   ]
 }
