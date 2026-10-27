@@ -30,11 +30,9 @@ export function BeaconScheduleList({
   // The shared list's search input is fully controlled, so hold the typed
   // value locally and debounce the URL navigation behind it — one router
   // push per pause in typing instead of one per keystroke.
-  const [localQuery, setLocalQuery] = useState(query)
+  const [searchDraft, setSearchDraft] = useState({ query, value: query })
+  const localQuery = searchDraft.query === query ? searchDraft.value : query
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    setLocalQuery(query)
-  }, [query])
   useEffect(
     () => () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -42,8 +40,9 @@ export function BeaconScheduleList({
     [],
   )
   const navigate = (next: { q?: string; status?: string; page?: number }) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     const params = new URLSearchParams()
-    const q = next.q ?? query
+    const q = next.q ?? localQuery
     const filter = next.status ?? status
     const targetPage = next.page ?? 1
     if (q) params.set('q', q)
@@ -62,7 +61,7 @@ export function BeaconScheduleList({
       perPage={25}
       canManage={canManage}
       onQueryChange={(q) => {
-        setLocalQuery(q)
+        setSearchDraft({ query, value: q })
         if (debounceRef.current) clearTimeout(debounceRef.current)
         debounceRef.current = setTimeout(() => navigate({ q }), 300)
       }}
