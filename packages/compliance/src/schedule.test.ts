@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   frequencyProgress,
+  isInSeason,
+  isMonthInSeason,
+  nextSeasonStartAt,
   resolveCronWindow,
   resolveFrequencyWindow,
   validateCronRecurrence,
@@ -9,6 +12,16 @@ import {
 const toronto = 'America/Toronto'
 
 describe('frequency compliance schedule', () => {
+  it('handles seasons that wrap over New Year and skips next due into season start', () => {
+    const activeMonths = { from: 11, to: 3 }
+    expect(isMonthInSeason(1, activeMonths)).toBe(true)
+    expect(isMonthInSeason(7, activeMonths)).toBe(false)
+    const recurrence = { kind: 'frequency' as const, frequency: 'month' as const, activeMonths }
+    const clock = { now: new Date('2026-07-10T16:00:00Z'), timezone: toronto }
+    expect(isInSeason(recurrence, clock)).toBe(false)
+    expect(nextSeasonStartAt(recurrence, clock)?.toISOString()).toBe('2026-11-01T04:00:00.000Z')
+  })
+
   it('keeps the previous weekly period active until the next scheduled fire', () => {
     const beforeFire = resolveFrequencyWindow(
       { kind: 'frequency', frequency: 'week', cron: '0 8 * * 1' },

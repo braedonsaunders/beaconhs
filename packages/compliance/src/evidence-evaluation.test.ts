@@ -172,6 +172,18 @@ describe('rolling completion validity', () => {
   })
 })
 
+it('treats a new-edition acknowledgement as an event with no fixed calendar deadline', () => {
+  const clock = { now: new Date('2026-10-20T16:00:00Z'), timezone: 'America/Toronto' }
+  expect(
+    resolveEvidenceEvaluationWindow({ kind: 'event', newEditionDueDays: 30 }, clock, clock.now),
+  ).toMatchObject({
+    kind: 'event',
+    dueOn: null,
+    deadlinePassed: false,
+    nextDueAt: null,
+  })
+})
+
 it('keeps a rolling requirement overdue until the in-progress quiz is passed', () => {
   const recurrence = {
     kind: 'frequency' as const,

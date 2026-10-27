@@ -511,11 +511,77 @@ export function resolveCompletionCalendarWindow(
   }
 }
 
+// ---- Seasonal (activeMonths) ----------------------------------------------
+
+export function isMonthInSeason(
+  month: number,
+  activeMonths: { from: number; to: number },
+): boolean {
+  const { from, to } = activeMonths
+  return from <= to ? month >= from && month <= to : month >= from || month <= to
+}
+
+export function validateActiveMonths(recurrence: ComplianceRecurrence): void {
+  const am = recurrence.activeMonths
+  if (!am) return
+  if (
+    !Number.isInteger(am.from) ||
+    !Number.isInteger(am.to) ||
+    am.from < 1 ||
+    am.from > 12 ||
+    am.to < 1 ||
+    am.to > 12
+  )
+    throw new Error('Active months must be whole months from January (1) to December (12)')
+  if (recurrence.kind !== 'frequency' && recurrence.kind !== 'cron' && recurrence.kind !== 'event')
+    throw new Error('Active months only apply to recurring obligations')
+}
+
+export function isInSeason(recurrence: ComplianceRecurrence, clock: ComplianceClock): boolean {
+  if (!recurrence.activeMonths) return true
+  const { month } = calendarDate(clock.periodAt ?? clock.now, clock.timezone)
+  return isMonthInSeason(month, recurrence.activeMonths)
+}
+
+/** Zoned midnight on the first day of the next season-start month strictly after `after`. */
+export function nextSeasonStartAt(
+  recurrence: ComplianceRecurrence,
+  clock: ComplianceClock,
+  after: Date = clock.now,
+): Date | null {
+  const am = recurrence.activeMonths
+  if (!am) return null
+  const current = calendarDate(after, clock.timezone)
+  for (let offset = 0; offset <= 12; offset++) {
+    const candidate = addCalendarMonths(
+      { year: current.year, month: current.month, day: 1 },
+      offset,
+    )
+    if (candidate.month !== am.from) continue
+    const at = zonedMidnight(candidate, clock.timezone)
+    if (at.getTime() > after.getTime()) return at
+  }
+  return null
+}
+
+/** Push a next-due instant that lands out of season forward to the season start. */
+export function seasonAdjustedNextDueAt(
+  recurrence: ComplianceRecurrence,
+  clock: ComplianceClock,
+  nextDueAt: Date | null,
+): Date | null {
+  if (!nextDueAt || !recurrence.activeMonths) return nextDueAt
+  const { month } = calendarDate(nextDueAt, clock.timezone)
+  if (isMonthInSeason(month, recurrence.activeMonths)) return nextDueAt
+  return nextSeasonStartAt(recurrence, clock, new Date(nextDueAt.getTime() - 1)) ?? nextDueAt
+}
+
 /** Validate cron/cadence/offset compatibility without writing anything. */
 export function validateFrequencyRecurrence(
   recurrence: ComplianceRecurrence,
   clock: ComplianceClock,
 ): void {
+  validateActiveMonths(recurrence)
   if (recurrence.deadline) {
     resolveCompletionCalendarWindow(recurrence, clock)
     return
@@ -541,6 +607,7 @@ export function validateCronRecurrence(
   recurrence: ComplianceRecurrence,
   clock: ComplianceClock,
 ): void {
+  validateActiveMonths(recurrence)
   const expression = cronExpression(recurrence)
   const offset = offsetMilliseconds(recurrence)
   let occurrence = nextCronOccurrence(expression, new Date(clock.now.getTime() - 1), clock.timezone)

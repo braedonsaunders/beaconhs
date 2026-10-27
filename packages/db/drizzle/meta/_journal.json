@@ -596,6 +596,13 @@
       "when": 1793016000000,
       "tag": "0085_journal_pdf_rich_body",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1793040000000,
+      "tag": "0091_compliance_obligation_cutover",
+      "breakpoints": true
     }
   ]
 }

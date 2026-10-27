@@ -3,7 +3,12 @@ import type { Database } from '@beaconhs/db'
 import { compliancePeriodSnapshots, auditLog, type CompliancePeriodRule } from '@beaconhs/db/schema'
 import { type ResolvedMember } from './audience'
 import { evaluateObligation, type ComplianceObligation, type EvalSubjectRow } from './evaluate'
-import { resolveCronWindow, resolveFrequencyWindow, type ComplianceClock } from './schedule'
+import {
+  isMonthInSeason,
+  resolveCronWindow,
+  resolveFrequencyWindow,
+  type ComplianceClock,
+} from './schedule'
 
 export const COMPLIANCE_HISTORY_LIMITS = [3, 6, 12, 24] as const
 
@@ -198,6 +203,11 @@ export async function evaluateComplianceHistory(
   const unique = new Map<string, (typeof candidates)[number]>()
   for (const row of candidates) {
     if (!activeAtEnd(row.periodEndAt)) continue
+    const historicalSeason = row.rule.recurrence.activeMonths
+    if (historicalSeason) {
+      const month = Number(row.periodStart.slice(5, 7))
+      if (!isMonthInSeason(month, historicalSeason)) continue
+    }
     const key =
       row.rule.recurrence.kind === 'cron'
         ? row.periodStartAt.toISOString()
@@ -228,6 +238,8 @@ export async function evaluateComplianceHistory(
     if (!ob.recurrence.deadline && current.scheduledAt < ob.createdAt) break
     if (
       activeAtEnd(current.periodEndAt) &&
+      (!ob.recurrence.activeMonths ||
+        isMonthInSeason(Number(current.periodStart.slice(5, 7)), ob.recurrence.activeMonths)) &&
       current.periodEndAt <= clock.now &&
       current.dueAt < clock.now &&
       current.periodEndAt > ob.createdAt &&
