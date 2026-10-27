@@ -49,8 +49,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
-import { recentActivityForEntity } from '@/lib/audit'
-import { ActivityFeed } from '@/components/activity-feed'
+import { RecordActivity } from '@/components/record-activity'
 import { CredentialOutputsCard } from '@/components/credential-outputs-card'
 import { ConfirmButton } from '@/components/confirm-button'
 import { StatTile, type StatTone } from '@/components/stat-tile'
@@ -234,9 +233,6 @@ export default async function TrainingRecordPage({
   const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
   const status: 'ok' | 'expiring' | 'expired' | 'no_expiry' =
     daysLeft === null ? 'no_expiry' : daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'expiring' : 'ok'
-
-  const activity =
-    active === 'activity' ? await recentActivityForEntity(ctx, 'training_record', id, 50) : []
 
   const basePath = `/training/records/${id}`
   const attachmentsCloseHref = `${basePath}?tab=attachments`
@@ -606,7 +602,13 @@ export default async function TrainingRecordPage({
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+                    <RecordActivity
+                      ctx={ctx}
+                      entityType="training_record"
+                      entityId={id}
+                      basePath={basePath}
+                      searchParams={sp}
+                    />
                   </CardContent>
                 </Card>
               ) : null
