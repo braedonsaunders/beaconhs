@@ -26,6 +26,7 @@ import { can, resolveRegulatoryTerminology } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { levelLabel } from '@/lib/org-hierarchy'
+import { trackClassCustomerFromSettings } from '@/lib/training-class-settings'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { PageContainer } from '@/components/page-layout'
 
@@ -81,6 +82,7 @@ async function saveSettings(formData: FormData) {
       otherApplicableLegislation: formData.get('otherApplicableLegislation'),
     },
   })
+  const trackClassCustomer = formData.get('trackClassCustomer') === 'on'
   const kioskPinInput = String(formData.get('kioskPin') ?? '').trim()
   const clearKioskPin = formData.get('clearKioskPin') === 'on'
   const normalizedKioskPin = kioskPinInput ? normalizeKioskPin(kioskPinInput) : null
@@ -108,7 +110,14 @@ async function saveSettings(formData: FormData) {
         enabledLanguages: languagePolicy.enabledLocales,
         hierarchy,
         branding,
-        settings: { ...(before?.settings ?? {}), regulatoryTerminology },
+        settings: {
+          ...(before?.settings ?? {}),
+          regulatoryTerminology,
+          training: {
+            ...((before?.settings?.training as Record<string, unknown> | undefined) ?? {}),
+            trackClassCustomer,
+          },
+        },
         kioskPin,
       })
       .where(eq(tenants.id, ctx.tenantId))
@@ -139,6 +148,7 @@ async function saveSettings(formData: FormData) {
           hierarchy: before.hierarchy,
           branding: before.branding,
           regulatoryTerminology: resolveRegulatoryTerminology(before.settings),
+          trackClassCustomer: trackClassCustomerFromSettings(before.settings),
           kioskEnabled: Boolean(before.kioskPin),
         }
       : null,
@@ -150,6 +160,7 @@ async function saveSettings(formData: FormData) {
       hierarchy,
       branding,
       regulatoryTerminology,
+      trackClassCustomer,
       kioskEnabled: Boolean(kioskPin),
     },
     metadata: { clearedLocaleOverrides: clearedOverrides.length },
@@ -175,6 +186,7 @@ export default async function AdminSettingsPage() {
   const enabled = new Set(tenant.enabledLanguages)
   const hierarchy = tenant.hierarchy
   const regulatory = resolveRegulatoryTerminology(tenant.settings)
+  const trackClassCustomer = trackClassCustomerFromSettings(tenant.settings)
   const kioskUrl = tenant.kioskPin ? `${appBaseUrl()}/kiosk?t=${tenant.slug}` : null
   const tenantLogoUrl = await resolveTenantLogoUrl({
     tenantId: tenant.id,
@@ -452,6 +464,27 @@ export default async function AdminSettingsPage() {
                   </label>
                 ))}
               />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <GeneratedValue value="Training classes" />
+              </CardTitle>
+              <CardDescription>
+                <GeneratedValue value="Record the customer each training class was delivered for. The Customer field then appears on the class form, the class list, and the calendar." />
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
+                <input
+                  type="checkbox"
+                  name="trackClassCustomer"
+                  defaultChecked={trackClassCustomer}
+                />
+                <GeneratedValue value="Track the customer for each class" />
+              </label>
             </CardContent>
           </Card>
 

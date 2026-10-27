@@ -20,7 +20,7 @@ function context(location: string | null, notes: string | null, startsAt: string
             completedAt: null,
             cancelledAt: null,
           },
-          siteName: 'Saved site',
+          customerName: 'Acme Construction',
           courseDescription: 'Course description',
         },
       ])
@@ -40,7 +40,9 @@ describe('training class print and flow values', () => {
     const values = await adapter.loadValues()
     expect(values.starts_at).toBe('Oct 30, 2026, 7:30 AM')
     expect(values.ends_at).toBe('Oct 30, 2026, 12:00 PM')
-    expect(values.site_name).toBe('North Conference Room')
+    expect(values.location).toBe('North Conference Room')
+    expect(values.customer_name).toBe('Acme Construction')
+    expect(values).not.toHaveProperty('site_name')
     expect(values).not.toHaveProperty('course_description')
     expect(values.notes).toBe('')
     const job = adapter.pdfJob!(values)
@@ -95,7 +97,7 @@ describe('training class print and flow values', () => {
     ])
   })
 
-  it('falls back to the saved site and observes winter offsets', async () => {
+  it('keeps location and customer separate and observes winter offsets', async () => {
     const adapter = createTrainingClassFlowAdapter(
       context(null, 'Bring PPE', '2026-12-01T13:30:00Z', '2026-12-01T19:00:00Z'),
       'class',
@@ -103,7 +105,8 @@ describe('training class print and flow values', () => {
     const values = await adapter.loadValues()
     expect(values.starts_at).toBe('Dec 1, 2026, 8:30 AM')
     expect(values.ends_at).toBe('Dec 1, 2026, 2:00 PM')
-    expect(values.site_name).toBe('Saved site')
+    expect(values.location).toBe('')
+    expect(values.customer_name).toBe('Acme Construction')
     expect(values.notes).toBe('Bring PPE')
   })
 })

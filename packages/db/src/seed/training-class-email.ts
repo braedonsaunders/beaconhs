@@ -9,7 +9,7 @@ import { formAutomations } from '../schema/forms'
 const TEMPLATE_KEY = 'training-class-booking'
 const SUBJECT = 'Training Class: {{course_name}} - {{starts_at}}'
 const PREVIOUS_BODY =
-  'A training class was scheduled.\n\nCourse: {{course_name}}\nStarts: {{starts_at}}\nEnds: {{ends_at}}\nClass location: {{site_name}}\nInstructor: {{instructor_name}}'
+  'A training class was scheduled.\n\nCourse: {{course_name}}\nStarts: {{starts_at}}\nEnds: {{ends_at}}\nClass location: {{location}}\nInstructor: {{instructor_name}}'
 
 // Editable source for the native email designer. Row markers survive the
 // designer's HTML parser; compile only after sanitizing, exactly as on save.
@@ -21,7 +21,8 @@ export const TRAINING_CLASS_BOOKING_SOURCE = `
     <tr><td style="padding:4px 8px 4px 0;font-weight:bold;vertical-align:top;">Course</td><td style="padding:4px 0;">{{course_name}}</td></tr>
     <tr><td style="padding:4px 8px 4px 0;font-weight:bold;vertical-align:top;">Starts</td><td style="padding:4px 0;">{{starts_at}}</td></tr>
     <tr><td style="padding:4px 8px 4px 0;font-weight:bold;vertical-align:top;">Ends</td><td style="padding:4px 0;">{{ends_at}}</td></tr>
-    <tr data-if="site_name"><td style="padding:4px 8px 4px 0;font-weight:bold;vertical-align:top;">Class location</td><td style="padding:4px 0;">{{site_name}}</td></tr>
+    <tr data-if="location"><td style="padding:4px 8px 4px 0;font-weight:bold;vertical-align:top;">Class location</td><td style="padding:4px 0;">{{location}}</td></tr>
+    <tr data-if="customer_name"><td style="padding:4px 8px 4px 0;font-weight:bold;vertical-align:top;">Customer</td><td style="padding:4px 0;">{{customer_name}}</td></tr>
     <tr data-if="instructor_name"><td style="padding:4px 8px 4px 0;font-weight:bold;vertical-align:top;">Instructor</td><td style="padding:4px 0;">{{instructor_name}}</td></tr>
     <tr data-if="notes"><td style="padding:4px 8px 4px 0;font-weight:bold;vertical-align:top;">Notes</td><td style="padding:4px 0;">{{notes}}</td></tr>
   </table>
@@ -65,7 +66,8 @@ export async function seedTrainingClassBookingEmail(
         { key: 'course_name', label: 'Course' },
         { key: 'starts_at', label: 'Starts at' },
         { key: 'ends_at', label: 'Ends at' },
-        { key: 'site_name', label: 'Class location' },
+        { key: 'location', label: 'Class location' },
+        { key: 'customer_name', label: 'Customer' },
         { key: 'instructor_name', label: 'Instructor' },
         { key: 'notes', label: 'Notes' },
         { key: 'attendee_count', label: 'Attendee count' },

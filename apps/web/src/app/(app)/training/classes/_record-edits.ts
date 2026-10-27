@@ -2,11 +2,12 @@
 // queued on the device by the class page and applied by /api/records/sync
 // (see lib/record-sync). Same rules the inline editor has always had — the
 // `training.class.manage` permission, completed classes are final and
-// cancelled ones must be reopened first, the course must be live, the site a
-// site, the instructor an active user, the schedule ordered, capacity never
-// below the roster, reminders only with a working reminder email flow, one
-// audit entry per changed field — plus a compare-and-set against the value
-// the device last saw.
+// cancelled ones must be reopened first, the course must be live, the
+// customer a customer (and only when the tenant tracks one), the instructor
+// an active user, the schedule ordered, capacity never below the roster,
+// reminders only with a working reminder email flow, one audit entry per
+// changed field — plus a compare-and-set against the value the device last
+// saw.
 //
 // Ops: the class columns, and `schedule` — start and end edited together as
 // `{ startsAt, endsAt }` wall-clock values in the worker's timezone.
@@ -21,6 +22,7 @@ import {
   trainingCourses,
 } from '@beaconhs/db/schema'
 import { materializeEvidenceTargetsObligations } from '@beaconhs/compliance'
+import { DEFAULT_CREDITED_HOURS_PER_DAY, deriveClassLengthDays } from '@beaconhs/integrations'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { datetimeLocalValue } from '@/lib/datetime'
 import type { RecordSyncPatch } from '@/lib/offline-drafts/protocol'
@@ -36,6 +38,10 @@ import {
 } from '@/lib/record-sync/edits'
 import { assertClassEmailConfigured, ClassEmailError } from '@/lib/training-class-email'
 import {
+  trackClassCustomerInTransaction,
+  trainingClassTimeZone,
+} from '@/lib/training-class-settings'
+import {
   TRAINING_CLASS_MUTABLE_FIELDS,
   parseTrainingClassField,
   type ParsedTrainingClassField,
@@ -49,8 +55,28 @@ function isField(op: string): op is TrainingClassMutableField {
   return (TRAINING_CLASS_MUTABLE_FIELDS as readonly string[]).includes(op)
 }
 
-function currentValue(row: ClassRow, field: TrainingClassMutableField): FieldValue {
-  return field === 'schedule' ? { startsAt: row.startsAt, endsAt: row.endsAt } : row[field]
+/**
+ * Days / credited hours are shown prefilled with their derived values when the
+ * columns are null (weekdays spanned; 8 paid hours), so the saver's compare
+ * base must be that same derived value — never the raw null, or the first
+ * edit would read as a conflict. Clearing a field writes null, which simply
+ * returns it to the derived value.
+ */
+function currentValue(
+  row: ClassRow,
+  field: TrainingClassMutableField,
+  timeZone: string,
+): FieldValue {
+  if (field === 'schedule') return { startsAt: row.startsAt, endsAt: row.endsAt }
+  if (field === 'lengthDays') {
+    return row.lengthDays ?? deriveClassLengthDays(row.startsAt, row.endsAt, timeZone)
+  }
+  if (field === 'hoursPerDay') {
+    return row.hoursPerDay != null
+      ? String(Number(row.hoursPerDay))
+      : String(DEFAULT_CREDITED_HOURS_PER_DAY)
+  }
+  return row[field]
 }
 
 /** The wire value the class page shows for a field. */
@@ -87,13 +113,22 @@ async function assertCourseAvailable(tx: Database, courseId: string): Promise<vo
   if (!course) throw new Error('Course not found.')
 }
 
-async function assertSite(tx: Database, siteId: string): Promise<void> {
-  const [site] = await tx
+async function assertCustomer(
+  tx: Database,
+  ctx: RequestContext,
+  customerId: string,
+): Promise<void> {
+  if (!(await trackClassCustomerInTransaction(tx, ctx.tenantId))) {
+    throw new Error('Customer tracking is turned off for training classes.')
+  }
+  const [customer] = await tx
     .select({ id: orgUnits.id })
     .from(orgUnits)
-    .where(and(eq(orgUnits.id, siteId), eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
+    .where(
+      and(eq(orgUnits.id, customerId), eq(orgUnits.level, 'customer'), isNull(orgUnits.deletedAt)),
+    )
     .limit(1)
-  if (!site) throw new Error('Site not found.')
+  if (!customer) throw new Error('Customer not found.')
 }
 
 async function assertActiveInstructor(tx: Database, tenantUserId: string): Promise<void> {
@@ -125,15 +160,16 @@ function classOp(
   row: ClassRow,
   field: TrainingClassMutableField,
   reminderEmailProblem: string | null,
+  classTimeZone: string,
 ): ErasedRecordOp {
   return recordOp<FieldValue>({
-    current: currentValue(row, field),
+    current: currentValue(row, field, classTimeZone),
     parse: async (wire) => {
       const { value } = parseTrainingClassField(field, wire, ctx.timezone)
       if (field === 'courseId' && value !== row.courseId) {
         await assertCourseAvailable(tx, value as string)
       }
-      if (field === 'siteOrgUnitId' && value) await assertSite(tx, value as string)
+      if (field === 'customerOrgUnitId' && value) await assertCustomer(tx, ctx, value as string)
       if (field === 'instructorTenantUserId' && value) {
         await assertActiveInstructor(tx, value as string)
       }
@@ -179,8 +215,11 @@ function trainingClassSpec(reminderEmailProblem: string | null) {
       if (row.cancelledAt) throw recordLocked('Reopen the class before changing its details.')
       return row
     },
-    resolve: (tx, ctx, row, op) =>
-      isField(op) ? classOp(tx, ctx, row, op, reminderEmailProblem) : null,
+    resolve: async (tx, ctx, row, op) => {
+      if (!isField(op)) return null
+      const classTimeZone = await trainingClassTimeZone(tx, ctx.tenantId)
+      return classOp(tx, ctx, row, op, reminderEmailProblem, classTimeZone)
+    },
     afterWrites: async (tx, ctx, row, changes) => {
       await auditFieldChanges(tx, ctx, { entityType: 'training_class', entityId: row.id }, changes)
       const changedCourse = changes.find((change) => change.op === 'courseId')

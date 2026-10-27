@@ -41,6 +41,11 @@ import { primaryPersonTitleName } from '@beaconhs/db'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { datetimeLocalValue, formatDateTime } from '@/lib/datetime'
+import {
+  trackClassCustomerInTransaction,
+  trainingClassTimeZone,
+} from '@/lib/training-class-settings'
+import { DEFAULT_CREDITED_HOURS_PER_DAY, deriveClassLengthDays } from '@beaconhs/integrations'
 import { clamp, isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
@@ -199,12 +204,12 @@ export default async function TrainingClassPage({
     const memberIds = attendees.map((a) => a.person.id)
     // Hydrate only the current values. Candidate lists come from the bounded,
     // permission-scoped picker endpoint while a manager searches.
-    const [selectedSiteRows, selectedInstructorRows] = await Promise.all([
-      cls.siteOrgUnitId
+    const [selectedCustomerRows, selectedInstructorRows] = await Promise.all([
+      cls.customerOrgUnitId
         ? tx
             .select({ id: orgUnits.id, name: orgUnits.name, code: orgUnits.code })
             .from(orgUnits)
-            .where(eq(orgUnits.id, cls.siteOrgUnitId))
+            .where(eq(orgUnits.id, cls.customerOrgUnitId))
             .limit(1)
         : Promise.resolve([]),
       cls.instructorTenantUserId
@@ -285,8 +290,10 @@ export default async function TrainingClassPage({
       attendeeCount,
       filteredAttendeeCount,
       reviewedAttendeeCount,
-      selectedSite: selectedSiteRows[0] ?? null,
+      selectedCustomer: selectedCustomerRows[0] ?? null,
       selectedInstructor: selectedInstructorRows[0] ?? null,
+      trackCustomer: await trackClassCustomerInTransaction(tx, ctx.tenantId),
+      classTimeZone: await trainingClassTimeZone(tx, ctx.tenantId),
       hasContent: Number(lessonCount?.c ?? 0) > 0,
       hasQuiz: quizTypeIds.length > 0,
       quizByPerson,
@@ -301,8 +308,10 @@ export default async function TrainingClassPage({
     attendeeCount,
     filteredAttendeeCount,
     reviewedAttendeeCount,
-    selectedSite,
+    selectedCustomer,
     selectedInstructor,
+    trackCustomer,
+    classTimeZone,
     hasContent,
     hasQuiz,
     quizByPerson,
@@ -447,15 +456,25 @@ export default async function TrainingClassPage({
             value={
               active === 'details' ? (
                 <ClassDetailFields
+                  trackCustomer={trackCustomer}
                   initial={{
                     courseId: cls.courseId,
                     title: cls.title,
                     startsAt: datetimeLocalValue(startsAt, ctx.timezone),
                     endsAt: datetimeLocalValue(endsAt, ctx.timezone),
-                    siteOrgUnitId: cls.siteOrgUnitId,
+                    customerOrgUnitId: cls.customerOrgUnitId,
                     location: cls.location,
                     instructorTenantUserId: cls.instructorTenantUserId,
                     capacity: cls.capacity != null ? String(cls.capacity) : null,
+                    // Prefill with the derived values the saver uses as its
+                    // compare base (weekdays spanned; 8 paid hours).
+                    lengthDays: String(
+                      cls.lengthDays ?? deriveClassLengthDays(startsAt, endsAt, classTimeZone),
+                    ),
+                    hoursPerDay:
+                      cls.hoursPerDay != null
+                        ? String(Number(cls.hoursPerDay))
+                        : String(DEFAULT_CREDITED_HOURS_PER_DAY),
                     notes: cls.notes,
                     reminderHours: cls.reminderHours == null ? null : String(cls.reminderHours),
                   }}
@@ -467,11 +486,11 @@ export default async function TrainingClassPage({
                           hint: course.code,
                         }
                       : undefined,
-                    site: selectedSite
+                    customer: selectedCustomer
                       ? {
-                          value: selectedSite.id,
-                          label: selectedSite.name,
-                          hint: selectedSite.code ?? undefined,
+                          value: selectedCustomer.id,
+                          label: selectedCustomer.name,
+                          hint: selectedCustomer.code ?? undefined,
                         }
                       : undefined,
                     instructor: selectedInstructor

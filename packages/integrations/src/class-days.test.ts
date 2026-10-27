@@ -27,19 +27,22 @@ test('calendarDateInTimeZone resolves the tenant calendar day, not UTC', () => {
 })
 
 test('explicit lengthDays expands across weekdays only, skipping the weekend', () => {
-  assert.deepEqual(expandClassDays({ startsAt: fri, endsAt: friEnd, lengthDays: 3, timeZone: TZ }), [
-    '2026-10-16', // Fri
-    '2026-10-19', // Mon
-    '2026-10-20', // Tue
-  ])
+  assert.deepEqual(
+    expandClassDays({ startsAt: fri, endsAt: friEnd, lengthDays: 3, timeZone: TZ }),
+    [
+      '2026-10-16', // Fri
+      '2026-10-19', // Mon
+      '2026-10-20', // Tue
+    ],
+  )
 })
 
 test('a weekend start with an explicit length rolls forward to Monday', () => {
   const sat = new Date('2026-10-17T13:00:00.000Z') // Sat 9 AM Toronto
-  assert.deepEqual(
-    expandClassDays({ startsAt: sat, endsAt: sat, lengthDays: 2, timeZone: TZ }),
-    ['2026-10-19', '2026-10-20'],
-  )
+  assert.deepEqual(expandClassDays({ startsAt: sat, endsAt: sat, lengthDays: 2, timeZone: TZ }), [
+    '2026-10-19',
+    '2026-10-20',
+  ])
 })
 
 test('without lengthDays the weekdays inside the span are the class days', () => {
@@ -54,9 +57,10 @@ test('without lengthDays the weekdays inside the span are the class days', () =>
 test('a weekend-only class entered by start/end still counts once', () => {
   const sat = new Date('2026-10-17T13:00:00.000Z')
   const satEnd = new Date('2026-10-17T21:00:00.000Z')
-  assert.deepEqual(expandClassDays({ startsAt: sat, endsAt: satEnd, lengthDays: null, timeZone: TZ }), [
-    '2026-10-17',
-  ])
+  assert.deepEqual(
+    expandClassDays({ startsAt: sat, endsAt: satEnd, lengthDays: null, timeZone: TZ }),
+    ['2026-10-17'],
+  )
   assert.equal(deriveClassLengthDays(sat, satEnd, TZ), 1)
 })
 
@@ -64,7 +68,11 @@ test('deriveClassLengthDays never returns less than one', () => {
   assert.equal(deriveClassLengthDays(friEnd, fri, TZ), 1) // end before start
   assert.equal(deriveClassLengthDays(fri, friEnd, TZ), 1)
   assert.equal(
-    deriveClassLengthDays(new Date('2026-09-30T12:00:00.000Z'), new Date('2026-10-02T20:00:00.000Z'), TZ),
+    deriveClassLengthDays(
+      new Date('2026-09-30T12:00:00.000Z'),
+      new Date('2026-10-02T20:00:00.000Z'),
+      TZ,
+    ),
     3, // Wed Sep 30, Thu Oct 1, Fri Oct 2 — month boundary
   )
 })

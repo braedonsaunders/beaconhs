@@ -782,7 +782,8 @@ const TRAINING_CLASS = wrap(
       p('Course', '{{course_name}} ({{course_code}})'),
       p('Starts', '{{starts_at}}'),
       p('Ends', '{{ends_at}}'),
-      p('Location', '{{site_name}}'),
+      p('Location', '{{location}}'),
+      pIf('customer_name', 'Customer', '{{customer_name}}'),
       p('Instructor', '{{instructor_name}}'),
       p('Capacity', '{{capacity}}'),
       p(

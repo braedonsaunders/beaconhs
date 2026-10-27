@@ -58,7 +58,7 @@ function bookingGraph(): AutomationGraph {
             mode: 'inline',
             subject: 'Our class: {{course_name}}',
             bodyTemplate:
-              'A training class was scheduled.\n\nCourse: {{course_name}}\nStarts: {{starts_at}}\nEnds: {{ends_at}}\nClass location: {{site_name}}\nInstructor: {{instructor_name}}\n\n',
+              'A training class was scheduled.\n\nCourse: {{course_name}}\nStarts: {{starts_at}}\nEnds: {{ends_at}}\nClass location: {{location}}\nInstructor: {{instructor_name}}\n\n',
             to: [
               { type: 'field', field: 'attendee_emails' },
               { type: 'literal', email: 'coordinator@example.com' },
@@ -86,7 +86,8 @@ describe('native training booking email default', () => {
         course_name: 'First aid',
         starts_at: 'Oct 30, 2026, 7:30 AM',
         ends_at: 'Oct 30, 2026, 12:00 PM',
-        site_name: 'North Conference Room',
+        location: 'North Conference Room',
+        customer_name: 'Acme Construction',
         instructor_name: '',
         notes: '',
         attendee_count: 2,
@@ -103,6 +104,8 @@ describe('native training booking email default', () => {
     expect(email.html).not.toContain('{{')
     expect(email.text).toContain('mackenzie@example.com')
     expect(email.text).toContain('matt@example.com')
+    expect(email.text).toContain('North Conference Room')
+    expect(email.text).toContain('Acme Construction')
     expect(email.text).toContain('7:30 AM')
     expect(email.text).toContain('12:00 PM')
     expect(email.text).not.toContain('Instructor')
