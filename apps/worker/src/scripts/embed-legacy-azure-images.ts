@@ -19,7 +19,9 @@
 // Training PPTX decks (lesson + library masters) get the same treatment.
 //
 // Idempotent: embedded files have no external image relationships left, so
-// re-runs skip them. A failed download leaves that file untouched.
+// re-runs skip them. A failed download leaves that file untouched. Files an
+// earlier pass embedded but left with pictures still LINKING the media (which
+// renders nothing) are repaired in place on any run.
 
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
@@ -32,7 +34,11 @@ import {
 } from '@beaconhs/db/schema'
 import { getObject, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
-import { embedExternalImages, findExternalImages } from '@beaconhs/office/external-images'
+import {
+  embedExternalImages,
+  findExternalImages,
+  repairLinkedEmbeddedImages,
+} from '@beaconhs/office/external-images'
 import { fetchAllowListedBytes } from '@beaconhs/sync/egress'
 import { renderDocumentVersion } from '../workers/document-render'
 
@@ -195,6 +201,48 @@ async function deckTargets(): Promise<Target[]> {
   return targets
 }
 
+// In place: same key, and the attachment stamp bump is the WOPI version
+// token — an editor holding the old file cannot overwrite this. A published
+// version's snapshot is re-rendered so readers see the change.
+async function writeInPlace(
+  target: Target,
+  bytes: Buffer,
+  summary: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await putObject({ key: target.r2Key, body: bytes, contentType: target.contentType })
+  await withTenant(db, target.tenantId, async (tx) => {
+    await tx
+      .update(attachments)
+      .set({ sizeBytes: bytes.length, updatedAt: new Date() })
+      .where(eq(attachments.id, target.attachmentId))
+    if (target.render) {
+      await tx
+        .update(documentVersions)
+        .set({ renderStatus: 'pending', renderError: null })
+        .where(eq(documentVersions.id, target.render.versionId))
+    }
+    await audit(tx, {
+      tenantId: target.tenantId,
+      entityType: target.auditEntityType,
+      entityId: target.auditEntityId,
+      action: 'update',
+      summary,
+      metadata: {
+        ...metadata,
+        ...(target.render ? { versionId: target.render.versionId } : {}),
+      },
+    })
+  })
+  if (target.render) {
+    await renderDocumentVersion({
+      tenantId: target.tenantId,
+      documentId: target.render.documentId,
+      versionId: target.render.versionId,
+    })
+  }
+}
+
 function parseLimit(argv: readonly string[]): number {
   const flag = argv.indexOf('--limit')
   if (flag === -1) return Number.POSITIVE_INFINITY
@@ -212,6 +260,7 @@ async function main() {
 
   let affected = 0
   let embeddedImages = 0
+  let repairedPictures = 0
   let failed = 0
   let remaining = 0
 
@@ -231,7 +280,28 @@ async function main() {
           `  note: ${target.label} also links ${refs.length - azureRefs.length} image(s) from other hosts — left alone`,
         )
       }
-      if (azureRefs.length === 0) continue
+      if (azureRefs.length === 0) {
+        // An earlier pass embedded the media but left the pictures LINKING it,
+        // which renders nothing. Convert those links to embeds in place.
+        const repair = await repairLinkedEmbeddedImages(bytes)
+        if (repair.repaired === 0) continue
+        repairedPictures += repair.repaired
+        if (!apply) {
+          console.log(`  would repair ${repair.repaired} picture(s) in ${target.label}`)
+          continue
+        }
+        await writeInPlace(
+          target,
+          repair.bytes,
+          `Repaired ${repair.repaired} embedded legacy picture(s) in ${target.label}`,
+          {
+            attachmentId: target.attachmentId,
+            repairedPictures: repair.repaired,
+          },
+        )
+        console.log(`  repaired ${repair.repaired} picture(s) in ${target.label}`)
+        continue
+      }
       if (affected >= limit) {
         remaining++
         continue
@@ -251,40 +321,12 @@ async function main() {
       }
       if (result.embedded.length === 0) continue
       embeddedImages += result.embedded.length
-      // In place: same key, and the attachment stamp bump is the WOPI version
-      // token — an editor holding the old file cannot overwrite this.
-      await putObject({ key: target.r2Key, body: result.bytes, contentType: target.contentType })
-      await withTenant(db, target.tenantId, async (tx) => {
-        await tx
-          .update(attachments)
-          .set({ sizeBytes: result.bytes.length, updatedAt: new Date() })
-          .where(eq(attachments.id, target.attachmentId))
-        if (target.render) {
-          await tx
-            .update(documentVersions)
-            .set({ renderStatus: 'pending', renderError: null })
-            .where(eq(documentVersions.id, target.render.versionId))
-        }
-        await audit(tx, {
-          tenantId: target.tenantId,
-          entityType: target.auditEntityType,
-          entityId: target.auditEntityId,
-          action: 'update',
-          summary: `Embedded ${result.embedded.length} legacy linked image(s) into ${target.label}`,
-          metadata: {
-            attachmentId: target.attachmentId,
-            images: result.embedded,
-            ...(target.render ? { versionId: target.render.versionId } : {}),
-          },
-        })
-      })
-      if (target.render) {
-        await renderDocumentVersion({
-          tenantId: target.tenantId,
-          documentId: target.render.documentId,
-          versionId: target.render.versionId,
-        })
-      }
+      await writeInPlace(
+        target,
+        result.bytes,
+        `Embedded ${result.embedded.length} legacy linked image(s) into ${target.label}`,
+        { attachmentId: target.attachmentId, images: result.embedded },
+      )
       console.log(`  embedded ${result.embedded.length} image(s) in ${target.label}`)
     } catch (error) {
       failed++
@@ -295,6 +337,9 @@ async function main() {
   console.log(
     `\n${apply ? 'embedded into' : 'would embed into'} ${affected} file(s), ${embeddedImages} image(s); failures: ${failed}`,
   )
+  if (repairedPictures > 0) {
+    console.log(`${apply ? 'repaired' : 'would repair'} ${repairedPictures} linked picture(s)`)
+  }
   if (remaining > 0) console.log(`${remaining} affected file(s) left — run again to continue.`)
   if (!apply) console.log('Re-run with --apply to write the changes.')
   process.exit(failed > 0 ? 1 : 0)

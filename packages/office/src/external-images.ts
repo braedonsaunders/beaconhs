@@ -111,6 +111,166 @@ function ensureContentType(contentTypesXml: string, ext: string): string {
   )
 }
 
+/** The part a .rels file describes (word/_rels/document.xml.rels → word/document.xml). */
+function sourcePartPath(relsPath: string): string {
+  return relsPath.replace(/\/_rels\//, '/').replace(/\.rels$/, '')
+}
+
+const BLIP = /<(?:[A-Za-z0-9]+:)?blip\b[^>]*>/g
+
+/**
+ * A DrawingML picture LINKS its image with `r:link` and EMBEDS it with
+ * `r:embed`. Once a relationship points inside the package, its pictures must
+ * use `r:embed` — renderers ignore a `r:link` to a package part, so the
+ * picture silently disappears even though the media is in the file.
+ */
+function linksToEmbeds(xml: string, ids: ReadonlySet<string>): { xml: string; changed: number } {
+  let changed = 0
+  const next = xml.replace(BLIP, (tag) => {
+    const link = /\s([A-Za-z0-9]+):link="([^"]*)"/.exec(tag)
+    if (!link || !ids.has(link[2]!)) return tag
+    changed++
+    const prefix = link[1]!
+    const withoutLink = tag.replace(link[0], '')
+    const embedAttr = new RegExp(`\\s${prefix}:embed="[^"]*"`)
+    return embedAttr.test(withoutLink)
+      ? withoutLink.replace(embedAttr, ` ${prefix}:embed="${link[2]}"`)
+      : withoutLink.replace(/^(<(?:[A-Za-z0-9]+:)?blip)\b/, `$1 ${prefix}:embed="${link[2]}"`)
+  })
+  return { xml: next, changed }
+}
+
+/** Package-internal image relationships of one part: id → zip path of the media. */
+function internalImageTargets(relsPath: string, relsXml: string): Map<string, string> {
+  const targets = new Map<string, string>()
+  const dir = sourcePartDir(relsPath).split('/').filter(Boolean)
+  for (const tag of relsXml.match(RELATIONSHIP) ?? []) {
+    if (!IMAGE_TYPE.test(attr(tag, 'Type') ?? '')) continue
+    if ((attr(tag, 'TargetMode') ?? '').toLowerCase() === 'external') continue
+    const id = attr(tag, 'Id')
+    const target = attr(tag, 'Target')
+    if (!id || !target) continue
+    const segments = target.startsWith('/') ? [] : [...dir]
+    for (const segment of target.replace(/^\//, '').split('/')) {
+      if (segment === '..') segments.pop()
+      else if (segment && segment !== '.') segments.push(segment)
+    }
+    targets.set(id, segments.join('/'))
+  }
+  return targets
+}
+
+/** Pixel size of a PNG, JPEG, GIF or BMP image; null for anything else. */
+function imagePixelSize(bytes: Buffer): { width: number; height: number } | null {
+  if (bytes.length >= 24 && bytes.readUInt32BE(0) === 0x89504e47) {
+    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+  }
+  if (bytes.length >= 10 && bytes.toString('latin1', 0, 3) === 'GIF') {
+    return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) }
+  }
+  if (bytes.length >= 26 && bytes.toString('latin1', 0, 2) === 'BM') {
+    return { width: Math.abs(bytes.readInt32LE(18)), height: Math.abs(bytes.readInt32LE(22)) }
+  }
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2
+    while (offset + 9 < bytes.length && bytes[offset] === 0xff) {
+      const marker = bytes[offset + 1]!
+      const length = bytes.readUInt16BE(offset + 2)
+      const isFrame =
+        marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc
+      if (isFrame) {
+        return { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) }
+      }
+      offset += 2 + length
+    }
+  }
+  return null
+}
+
+const DRAWING = /<w:drawing>[\s\S]*?<\/w:drawing>/g
+// Letter page inside default margins; pictures larger than this are scaled down.
+const MAX_CX = 5_943_600
+const MAX_CY = 8_229_600
+
+/**
+ * The legacy export gave every linked picture a placeholder height, so once
+ * the picture renders it is squashed. Restore each embedded picture's aspect
+ * ratio from its image: keep the authored width (within the page), derive
+ * the height. Pictures already within 2% of their image's shape are untouched.
+ */
+async function fitPictureExtents(
+  zip: JSZip,
+  xml: string,
+  targets: ReadonlyMap<string, string>,
+): Promise<{ xml: string; changed: number }> {
+  const sizes = new Map<string, { width: number; height: number } | null>()
+  let changed = 0
+  let next = xml
+  for (const drawing of xml.match(DRAWING) ?? []) {
+    const embed = /<(?:[A-Za-z0-9]+:)?blip\b[^>]*\s[A-Za-z0-9]+:embed="([^"]*)"/.exec(drawing)?.[1]
+    const mediaPath = embed ? targets.get(embed) : undefined
+    if (!mediaPath) continue
+    if (!sizes.has(mediaPath)) {
+      const media = zip.file(mediaPath)
+      sizes.set(mediaPath, media ? imagePixelSize(await media.async('nodebuffer')) : null)
+    }
+    const size = sizes.get(mediaPath)
+    const extent = /<wp:extent\b[^>]*\bcx="(\d+)"[^>]*\bcy="(\d+)"/.exec(drawing)
+    if (!size || !extent || size.width <= 0 || size.height <= 0) continue
+    let cx = Number(extent[1])
+    let cy = Number(extent[2])
+    const ratio = size.height / size.width
+    if (cx <= 0 || Math.abs(cy / cx - ratio) / ratio <= 0.02) continue
+    cx = Math.min(cx, MAX_CX)
+    cy = Math.round(cx * ratio)
+    if (cy > MAX_CY) {
+      cx = Math.round((cx * MAX_CY) / cy)
+      cy = MAX_CY
+    }
+    const fitted = drawing
+      .replace(/(<wp:extent\b[^>]*\bcx=")\d+("[^>]*\bcy=")\d+"/, `$1${cx}$2${cy}"`)
+      .replace(/(<a:ext\b[^>]*\bcx=")\d+("[^>]*\bcy=")\d+"/, `$1${cx}$2${cy}"`)
+    if (fitted !== drawing) {
+      next = next.replace(drawing, fitted)
+      changed++
+    }
+  }
+  return { xml: next, changed }
+}
+
+/**
+ * Repair pictures an earlier embed pass left broken: those still `r:link`ing
+ * an image that is now inside the package, and those still carrying the
+ * legacy placeholder size. Returns the input unchanged when nothing needs it.
+ */
+export async function repairLinkedEmbeddedImages(
+  bytes: Buffer,
+): Promise<{ bytes: Buffer; repaired: number }> {
+  const zip = await JSZip.loadAsync(bytes)
+  let repaired = 0
+  for (const relsPath of Object.keys(zip.files)) {
+    if (!relsPath.endsWith('.rels')) continue
+    const relsXml = await zip.file(relsPath)?.async('string')
+    if (!relsXml) continue
+    const targets = internalImageTargets(relsPath, relsXml)
+    if (targets.size === 0) continue
+    const partPath = sourcePartPath(relsPath)
+    const part = zip.file(partPath)
+    if (!part) continue
+    const original = await part.async('string')
+    const relinked = linksToEmbeds(original, new Set(targets.keys()))
+    const fitted = await fitPictureExtents(zip, relinked.xml, targets)
+    if (fitted.xml === original) continue
+    repaired += Math.max(relinked.changed, fitted.changed)
+    zip.file(partPath, fitted.xml)
+  }
+  if (repaired === 0) return { bytes, repaired }
+  return {
+    bytes: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }),
+    repaired,
+  }
+}
+
 function rewriteRelationship(tag: string, target: string): string {
   return tag.replace(/\sTargetMode="[^"]*"/, '').replace(/Target="[^"]*"/, `Target="${target}"`)
 }
@@ -198,6 +358,18 @@ export async function embedExternalImages(
       return target ? rewriteRelationship(tag, target) : tag
     })
     if (next !== xml) zip.file(relsPath, next)
+    const partPath = sourcePartPath(relsPath)
+    const part = zip.file(partPath)
+    if (part) {
+      const original = await part.async('string')
+      const relinked = linksToEmbeds(original, new Set(changes.keys()))
+      const fitted = await fitPictureExtents(
+        zip,
+        relinked.xml,
+        internalImageTargets(relsPath, next),
+      )
+      if (fitted.xml !== original) zip.file(partPath, fitted.xml)
+    }
   }
 
   const contentTypes = zip.file(CONTENT_TYPES_PATH)
