@@ -101,15 +101,21 @@ function manifestRelationships(): ManifestRelationship[] {
     ...migrationSql.matchAll(
       /^\s+\('([^']+)', '([^']+)', '([^']+)', '([^']+)', '([^']+)', '([^']+)', '(cascade|no action|restrict|set null)'\)[,;](?:-->.*)?$/gm,
     ),
-  ].map((match) => ({
-    relationName: match[1]!,
-    childTable: match[2]!,
-    childColumn: match[3]!,
-    parentTable: match[4]!,
-    constraintName: match[5]!,
-    legacyConstraint: match[6]!,
-    deleteAction: match[7]! as DeleteAction,
-  }))
+  ].map((match) => {
+    const childTable = match[2]!
+    const childColumn = match[3]!
+    const isRenamedTrainingCustomer =
+      childTable === 'training_classes' && childColumn === 'site_org_unit_id'
+    return {
+      relationName: match[1]!,
+      childTable,
+      childColumn: isRenamedTrainingCustomer ? 'customer_org_unit_id' : childColumn,
+      parentTable: match[4]!,
+      constraintName: isRenamedTrainingCustomer ? 'training_classes_tenant_customer_fk' : match[5]!,
+      legacyConstraint: match[6]!,
+      deleteAction: match[7]! as DeleteAction,
+    }
+  })
   // The squashed source still describes the tables that existed before the
   // clean-cutover drop. Only relationships between live schema tables belong
   // in the post-cutover contract below.

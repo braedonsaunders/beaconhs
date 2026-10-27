@@ -72,20 +72,16 @@ BEGIN
   FOR tenant_row IN SELECT id FROM tenants LOOP
     PERFORM set_config('app.tenant_id', tenant_row.id::text, true);
 
-    -- Tenants carry no timezone of their own; the working timezone is the one
-    -- most of the tenant's users run in (the user default is America/Toronto).
+    -- Use the canonical workspace clock configured under Admin → Notifications.
     SELECT coalesce(
       (
-        SELECT u.timezone
-        FROM tenant_users tu
-        JOIN "user" u ON u.id = tu.user_id
-        WHERE tu.tenant_id = tenant_row.id
-          AND EXISTS (SELECT 1 FROM pg_timezone_names z WHERE z.name = u.timezone)
-        GROUP BY u.timezone
-        ORDER BY count(*) DESC, u.timezone
+        SELECT p.scan_timezone
+        FROM tenant_notification_policy p
+        WHERE p.tenant_id = tenant_row.id
+          AND EXISTS (SELECT 1 FROM pg_timezone_names z WHERE z.name = p.scan_timezone)
         LIMIT 1
       ),
-      'America/Toronto'
+      'UTC'
     ) INTO tenant_tz;
 
     UPDATE training_classes c
