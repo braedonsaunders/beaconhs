@@ -88,8 +88,8 @@ To filter first, then print, open **Reports → Training — Wallet cards**. Add
 ## See your classes
 
 1. Open **Training**, then tap the **Classes** tab.
-2. Search by class, course, code, or site. Filter by **Upcoming**, **Past**, or **All**.
-3. Each class shows the date, course, site, and a status: **Scheduled**, **Awaiting completion**, **Completed**, or **Cancelled**.
+2. Search by class, course, code, or location. Filter by **Upcoming**, **Past**, or **All**. When customer tracking is enabled, you can also filter by **Customer**.
+3. Each class shows the date, course, location, and a status: **Scheduled**, **Awaiting completion**, **Completed**, or **Cancelled**. When customer tracking is enabled, the customer appears as its own column.
 
 When a manager marks a class complete, timesheet exports credit only the people marked **Attended**, plus the class instructor when they are an employee in BeaconHS. People marked absent are never credited. If an export to another system fails, the completed class shows a warning with the error. An admin can fix the connection and click **Re-send** on the class or under **Admin → Integrations**.
 
@@ -327,8 +327,9 @@ Presenting never changes anyone's records. When the class is done, issue records
 ## Schedule and complete a class
 
 1. Open **Training → Classes** and select **Schedule new class**.
-2. On **Details**, choose the course, times, optional saved site, instructor, and maximum attendance. Type an address or room such as North Conference Room in **Class location**. This is a free-text field. Leave it blank to use the selected site.
+2. On **Details**, choose the course, times, instructor, and maximum attendance. Enter **Days** (weekdays only) and **Credited hours per day** (paid hours, defaulting to 8). The day count is prefilled from the weekday dates between the start and end. Type an address or room such as North Conference Room in **Class location**. This is a free-text field.
    - **Starts** and **Ends** save together. Enter both times. If End is not after Start, the page explains what to fix and keeps your edits until the range is valid.
+   - When an administrator turns on **Track the customer for each class** under **Admin → Settings**, choose the **Customer** the class was delivered for. Customer is optional and separate from the free-text class location.
 3. Open **Roster**. Search the existing roster or use **Add a person to the roster…** to search active workers by name, employee number, job title, or email. If the picker says more results exist, add more detail to the search. Select the worker and choose **Add**.
 4. Open **Completion** after the class. Search the roster and review attendance, grade, and pass state for every person on the current page.
 5. Choose **Save this page** before moving to another page. The reviewed count shows how many people remain.
@@ -336,15 +337,15 @@ Presenting never changes anyone's records. When the class is done, issue records
 
 A person marked as a no-show cannot pass. A cancelled class is read-only; choose **Reopen class** before changing details, the roster, or completion decisions. A completed class stays locked so its issued records cannot drift.
 
-Use **Actions → Print / PDF** in the class header for a paper session sheet. Times match the timezone used on the class page. The sheet includes the entered **Class location** or selected site and omits the course description. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
+Use **Actions → Print / PDF** in the class header for a paper session sheet. Times match the timezone used on the class page. The sheet includes the entered **Class location** and, when present, the **Customer**. It omits the course description. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
 
-Once the details and roster are confirmed, choose **Actions → Email class** and confirm. Initial emails are always manual. You can opt into **Automatic reminder email** on **Details** after configuring a reminder flow. Class emails use the class times and location and omit the course-description block containing qualified-instructor information. The default **Training class booking** email includes an **Attendees** table with each booked person’s name and email. Cancelled registrations are excluded. An administrator can edit the layout and table under **Admin → Email templates → Training class booking**. New workspaces receive this template and its manual email flow automatically.
+Once the details and roster are confirmed, choose **Actions → Email class** and confirm. Initial emails are always manual. You can opt into **Automatic reminder email** on **Details** after configuring a reminder flow. Class emails use the class times, location, and customer when present, and omit the course-description block containing qualified-instructor information. The default **Training class booking** email includes an **Attendees** table with each booked person’s name and email. Cancelled registrations are excluded. An administrator can edit the layout and table under **Admin → Email templates → Training class booking**. New workspaces receive this template and its manual email flow automatically.
 
 In **Reports → Training — Missing**, anyone booked into an upcoming class appears as **Booked**, even without an earlier certificate or compliance assignment. **Booked** takes priority over **Expiring**, **Expired**, and **Missing**. A booking is a plan to train; it does not count as a completed qualification. Cancelled or completed classes do not count as upcoming bookings.
 
 ## The class calendar
 
-Open **Classes**, then **Calendar**, for the month view. A class that runs over several days appears on **every** day it runs, marked with the day number — a three-day course shows as **(1/3)**, **(2/3)**, **(3/3)** — so the week does not look free when it is not. Each entry shows its start time, location, trainer, and how many people are booked; hover for the full details or select it to open the class. A class that started last month still appears on the days it runs into this one.
+Open **Classes**, then **Calendar**, for the month view. A class that runs over several days appears on **every weekday** it runs, marked with the day number — a three-day course shows as **(1/3)**, **(2/3)**, **(3/3)** — so the week does not look free when it is not. Each entry shows its start time, location, trainer, and how many people are booked. When customer tracking is enabled, it also shows the customer. Select an entry to open the class. A class that started last month still appears on the days it runs into this one.
 
 ## Enroll learners for sign-off
 
