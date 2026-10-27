@@ -183,7 +183,8 @@ export default async function TrainingClassesCalendarPage({
           lt(trainingClasses.startsAt, windowEndExclusive),
           or(
             gte(trainingClasses.endsAt, windowStart),
-            sql`${trainingClasses.lengthDays} is not null and ${trainingClasses.startsAt} + (${trainingClasses.lengthDays} * interval '2 days') >= ${windowStart}`,
+            // Raw sql params must be serializable: pass the instant as ISO text.
+            sql`${trainingClasses.lengthDays} is not null and ${trainingClasses.startsAt} + (${trainingClasses.lengthDays} * interval '2 days') >= ${windowStart.toISOString()}::timestamptz`,
           ),
         ),
       )
