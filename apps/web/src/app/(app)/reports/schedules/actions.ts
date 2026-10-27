@@ -124,6 +124,26 @@ export async function saveSchedule(
   }
 }
 
+export async function deleteSchedule(id: string): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.schedule')
+  const deleted = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .delete(reportSchedules)
+      .where(and(eq(reportSchedules.tenantId, ctx.tenantId!), eq(reportSchedules.id, id)))
+      .returning({ id: reportSchedules.id, name: reportSchedules.name })
+    return row ?? null
+  })
+  if (!deleted) throw new Error('Schedule not found.')
+  await recordAudit(ctx, {
+    entityType: 'report_schedule',
+    entityId: id,
+    action: 'delete',
+    summary: `Deleted report schedule "${deleted.name}"`,
+  })
+  revalidatePath('/reports/schedules')
+}
+
 export async function setScheduleActive(id: string, active: boolean): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')

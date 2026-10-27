@@ -610,6 +610,13 @@
       "when": 1793106000000,
       "tag": "0087_clear_legacy_azure_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793109600000,
+      "tag": "0088_ca_assignment_cutover",
+      "breakpoints": true
     }
   ]
 }

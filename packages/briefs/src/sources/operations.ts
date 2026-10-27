@@ -190,7 +190,6 @@ export const correctiveActionsSource: BriefSourceDefinition<EmptyParams> = {
       .where(
         and(
           isNull(correctiveActions.deletedAt),
-          eq(correctiveActions.isDraft, false),
           ne(correctiveActions.status, 'cancelled'),
           or(opened, closed, overdue),
           vis,

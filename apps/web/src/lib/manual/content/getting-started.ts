@@ -191,7 +191,7 @@ Open **Workspace** in the left menu, under Overview. You can also go straight to
 2. Look at the tiles:
    - **In progress** — drafts and unfinished entries you can resume.
    - **Compliance** — safety obligations assigned to you, with an overdue count.
-   - **Tasks** — open corrective actions assigned to you.
+   - **Corrective actions** — open corrective actions assigned to you.
    - **Training** — your records, expirations, and assigned courses.
    - **Incidents**, **Assessments**, and **Inspections** — records you reported, started, or carried out.
 3. Tap a tile to open the full list behind it.
@@ -435,7 +435,7 @@ When you ask what is on your plate, it checks the same work as Workspace:
 
 - **Compliance** — obligations still owed to you, including documents to acknowledge, forms, training assignments, and inspections.
 - **In progress** — drafts and unfinished entries, including forms.
-- **Tasks** — open corrective actions assigned to you.
+- **Corrective actions** — open corrective actions assigned to you.
 - **Training** — courses that are expired or expiring in the next 90 days.
 
 If your role can open the Compliance hub, you can also ask about another person, or who is outstanding across the company. Otherwise it stays on your own records. It cannot delete drafts for you.

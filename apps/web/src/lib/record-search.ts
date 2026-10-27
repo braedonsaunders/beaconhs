@@ -9,6 +9,7 @@ import {
   equipmentTypes,
   hazidAssessments,
   incidents,
+  orgUnits,
   people,
   ppeItems,
   ppeTypes,
@@ -100,6 +101,15 @@ export function recordSearchWhere(
           and ${ilike(name, term)}
       )`)
     }
+  }
+  if (kind === 'hazid_assessments') {
+    // The project (job) name begins with the job number crews search by.
+    matches.push(sql`exists (
+      select 1 from ${orgUnits}
+      where ${orgUnits.id} = ${hazidAssessments.projectOrgUnitId}
+        and ${orgUnits.tenantId} = ${hazidAssessments.tenantId}
+        and ${ilike(orgUnits.name, term)}
+    )`)
   }
   if (kind === 'ppe') {
     matches.push(sql`exists (

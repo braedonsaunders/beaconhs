@@ -3,6 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, isNull } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 import {
   attachments,
   caCompleteSteps,
@@ -48,17 +49,23 @@ export default async function CorrectiveActionPrintPage({
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
+    const assignedByUser = alias(tenantUsers, 'ca_print_assigned_by')
+    const assignedByAccount = alias(user, 'ca_print_assigned_by_user')
     const [row] = await tx
       .select({
         ca: correctiveActions,
         site: orgUnits,
         owner: tenantUsers,
         ownerAccount: user,
+        assignedBy: assignedByUser,
+        assignedByAccount,
       })
       .from(correctiveActions)
       .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .leftJoin(assignedByUser, eq(assignedByUser.id, correctiveActions.assignedByTenantUserId))
+      .leftJoin(assignedByAccount, eq(assignedByAccount.id, assignedByUser.userId))
       .where(and(eq(correctiveActions.id, id), isNull(correctiveActions.deletedAt)))
       .limit(1)
     if (!row) return null
@@ -96,7 +103,7 @@ export default async function CorrectiveActionPrintPage({
   })
 
   if (!data) notFound()
-  const { ca, site, owner, ownerAccount, photos, steps } = data
+  const { ca, site, owner, ownerAccount, assignedBy, assignedByAccount, photos, steps } = data
 
   await recordAudit(ctx, {
     entityType: 'corrective_action',
@@ -107,6 +114,7 @@ export default async function CorrectiveActionPrintPage({
   })
 
   const ownerLabel = ownerAccount?.name ?? owner?.displayName ?? '—'
+  const assignedByLabel = assignedByAccount?.name ?? assignedBy?.displayName ?? '—'
   const closed = ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone, ctx.locale) : '—'
   const verified = ca.verifiedAt
     ? formatDateTime(new Date(ca.verifiedAt), ctx.timezone, ctx.locale)
@@ -198,7 +206,8 @@ export default async function CorrectiveActionPrintPage({
           <Field label={tGenerated('m_168b365cc671bf')} value={ca.severity} />
           <Field label={tGenerated('m_0b9da892d6faf0')} value={ca.status.replace('_', ' ')} />
           <Field label={tGenerated('m_020146dd3d3d5a')} value={site?.name ?? '—'} />
-          <Field label={tGenerated('m_09e0cae12d3f44')} value={ownerLabel} />
+          <Field label={tGenerated('m_1a298419b85cba')} value={ownerLabel} />
+          <Field label={tGenerated('m_1a1bb1fe70c59a')} value={assignedByLabel} />
           <Field label={tGenerated('m_1d05fa7a091a9b')} value={ca.source ?? '—'} />
           <Field label={tGenerated('m_1b26f5ee6637e3')} value={ca.sourceEntityType ?? '—'} />
           <Field label={tGenerated('m_1e9e6bca0bc9ef')} value={ca.assignedOn ?? '—'} />

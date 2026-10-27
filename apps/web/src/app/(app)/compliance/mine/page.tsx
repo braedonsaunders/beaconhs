@@ -34,6 +34,12 @@ import {
 import { complianceActionLabel, resolveComplianceLink } from '../_resolve-link'
 import { StatusBadge, SummaryStrip } from '../_shared'
 import { ComplianceSubNav } from '../_sub-nav'
+import { dateIsoInTimeZone } from '@/lib/datetime'
+import {
+  EMPTY_MY_CORRECTIVE_ACTIONS,
+  loadMyOpenCorrectiveActions,
+} from '@/lib/my-corrective-actions'
+import { MyCorrectiveActionsBlock } from '@/components/my-corrective-actions-block'
 import { OBLIGATION_KINDS, type ObligationKind } from '../obligations/_meta'
 
 export async function generateMetadata() {
@@ -80,7 +86,12 @@ export default async function MyCompliancePage({
   )
 
   const allRows = person ? await personCompliance(ctx, person.id) : []
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = dateIsoInTimeZone(new Date(), ctx.timezone)
+  // Corrective actions assigned to me — membership-keyed, so they show even
+  // without a linked person record. A separate block, never in the percent.
+  const myCorrectiveActions = ctx.membership?.id
+    ? await ctx.db((tx) => loadMyOpenCorrectiveActions(tx, ctx.membership?.id, todayIso))
+    : EMPTY_MY_CORRECTIVE_ACTIONS
   const currentPeriodRows = allRows.filter(
     (row) =>
       row.kind !== 'document' &&
@@ -135,6 +146,13 @@ export default async function MyCompliancePage({
       }
     >
       <div className="space-y-6">
+        <GeneratedValue
+          value={
+            ctx.membership?.id ? (
+              <MyCorrectiveActionsBlock data={myCorrectiveActions} todayIso={todayIso} />
+            ) : null
+          }
+        />
         <GeneratedValue
           value={
             !person ? (

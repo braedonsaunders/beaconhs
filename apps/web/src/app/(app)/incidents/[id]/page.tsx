@@ -3002,7 +3002,7 @@ export default async function IncidentDetailPage({
                         <GeneratedText id="m_016e8ea73b729f" />
                       </span>
                       <Link
-                        href={`/corrective-actions/new?sourceEntityType=incident&sourceEntityId=${id}`}
+                        href={`/corrective-actions?drawer=new&sourceEntityType=incident&sourceEntityId=${id}`}
                         className="text-teal-700 hover:underline dark:text-teal-400"
                       >
                         <GeneratedText id="m_1f4c52fb482da1" />

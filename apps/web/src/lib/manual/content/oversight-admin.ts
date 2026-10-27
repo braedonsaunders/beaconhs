@@ -301,18 +301,18 @@ Compliance reports can filter by **Requirement**, **Employee**, **Department**, 
 
 Schedules send a report as a PDF email on a repeating schedule, so nobody has to remember to run it.
 
-1. Open the **Schedules** tab and click **New schedule**.
+1. Open the **Schedules** tab and click **New schedule**. A form opens on the side of the list.
 2. Pick the report and give the schedule a name.
-3. Under **Delivery**, set the **Cadence** (**Daily**, **Weekly**, or **Monthly**), **Repeat every**, the day, and the time. Monthly schedules can use a calendar date or a weekday pattern such as the first Monday.
-4. Add an optional **Start date** or **End date** when the delivery must run only for a fixed period.
+3. Set the **Cadence** (**Daily**, **Weekly**, or **Monthly**), **Repeat every**, the day, and the time. Monthly schedules can use a calendar date or a weekday pattern such as the first Monday.
+4. Add an optional **Starts on** or **Ends on** date when the delivery must run only for a fixed period.
 5. Under **Report filters**, add the same field rules used when running the report.
 6. Under **Recipients**, add team members, or type outside email addresses under **Additional email addresses**.
-7. Under **Email copy**, enter an optional subject or message. Leave them blank to use the standard report email.
-8. Click **Create schedule**.
+7. Under **Email**, enter an optional subject or message. Leave them blank to use the standard report email.
+8. Click **Create schedule**. The form closes and the new schedule appears in the list.
 
 The schedule runs with the current access of the member and active role that created or last edited it. If that membership is suspended, the role is removed, or access to a Builder app is revoked, the run fails without exposing that app's records. Edit and save the schedule to claim it under your current role.
 
-The **Schedules** tab shows every schedule with its next run and last run. Use **Search schedules and reports…** to find one by schedule or report name, and use the **Status** filter to show active or paused schedules. Use the pause button to stop one without deleting it.
+The **Schedules** tab shows every schedule with its next run and last run. Use **Search schedules and reports…** to find one by schedule or report name, and use the **Status** filter to show active or paused schedules. Use the pause button to stop one without deleting it, or the trash button to delete it — deleting also deletes its run history.
 
 Open a schedule to see **Run history**. Search by trigger or failure message, or use **Status** to show queued, running, succeeded, or failed runs. Use **Next** and **Previous** to move through older deliveries.
 

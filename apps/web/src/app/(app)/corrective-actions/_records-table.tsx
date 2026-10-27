@@ -20,6 +20,8 @@ export type RecordsTableRow = {
   createdAt: string
   siteName: string | null
   ownerName: string | null
+  assignedByName: string | null
+  assignedOn: string | null
   locked: boolean
 }
 
@@ -86,24 +88,45 @@ export function RecordsTable({
                     <GeneratedValue value={r.status.replace('_', ' ')} />
                   </Badge>
                 }
-                person={r.ownerName}
+                avatarName={r.ownerName}
                 title={tGeneratedValue(r.title)}
                 meta={
-                  <span className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}>
+                  <>
+                    <span className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}>
+                      <GeneratedValue
+                        value={
+                          r.dueOn ? (
+                            <GeneratedText
+                              id="m_0cff874a22a82c"
+                              values={{ value0: r.dueOn, value1: overdue ? ' · overdue' : '' }}
+                            />
+                          ) : (
+                            <GeneratedText id="m_08724406017e59" />
+                          )
+                        }
+                      />
+                      <GeneratedValue value={r.siteName ? ` · ${r.siteName}` : ''} />
+                    </span>
                     <GeneratedValue
                       value={
-                        r.dueOn ? (
-                          <GeneratedText
-                            id="m_0cff874a22a82c"
-                            values={{ value0: r.dueOn, value1: overdue ? ' · overdue' : '' }}
+                        <span className="block">
+                          <GeneratedText id="m_1a298419b85cba" />:{' '}
+                          <GeneratedValue value={r.ownerName ?? '—'} />
+                          <GeneratedValue
+                            value={
+                              r.assignedByName ? (
+                                <>
+                                  {' · '}
+                                  <GeneratedText id="m_1a1bb1fe70c59a" />:{' '}
+                                  <GeneratedValue value={r.assignedByName} />
+                                </>
+                              ) : null
+                            }
                           />
-                        ) : (
-                          <GeneratedText id="m_08724406017e59" />
-                        )
+                        </span>
                       }
                     />
-                    <GeneratedValue value={r.siteName ? ` · ${r.siteName}` : ''} />
-                  </span>
+                  </>
                 }
                 footer={
                   <>
@@ -168,7 +191,10 @@ export function RecordsTable({
                 <GeneratedText id="m_10cbe051fb5e05" />
               </SortTh>
               <SortTh column="owner" {...sortProps}>
-                <GeneratedText id="m_09e0cae12d3f44" />
+                <GeneratedText id="m_1a298419b85cba" />
+              </SortTh>
+              <SortTh column="assigned_by" {...sortProps}>
+                <GeneratedText id="m_1a1bb1fe70c59a" />
               </SortTh>
               <SortTh column="site" {...sortProps}>
                 <GeneratedText id="m_020146dd3d3d5a" />
@@ -264,6 +290,18 @@ export function RecordsTable({
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                       <GeneratedValue value={r.ownerName ?? '—'} />
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                      <GeneratedValue value={r.assignedByName ?? '—'} />
+                      <GeneratedValue
+                        value={
+                          r.assignedByName && r.assignedOn ? (
+                            <span className="block text-xs text-slate-400 dark:text-slate-500">
+                              <GeneratedValue value={r.assignedOn} />
+                            </span>
+                          ) : null
+                        }
+                      />
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                       <GeneratedValue value={r.siteName ?? '—'} />

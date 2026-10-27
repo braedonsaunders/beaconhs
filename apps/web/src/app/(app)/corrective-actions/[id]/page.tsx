@@ -214,6 +214,17 @@ export default async function CorrectiveActionPage({
       .where(eq(caCompleteSteps.caId, id))
       .orderBy(asc(caCompleteSteps.entityOrder))
 
+    let assignedByName: string | null = null
+    if (ca.assignedByTenantUserId) {
+      const [aRow] = await tx
+        .select({ tu: tenantUsers, u: user })
+        .from(tenantUsers)
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(eq(tenantUsers.id, ca.assignedByTenantUserId))
+        .limit(1)
+      assignedByName = aRow?.u?.name ?? aRow?.tu?.displayName ?? null
+    }
+
     let verifierName: string | null = null
     if (ca.verifiedByTenantUserId) {
       const [vRow] = await tx
@@ -225,7 +236,7 @@ export default async function CorrectiveActionPage({
       verifierName = vRow?.u?.name ?? vRow?.tu?.displayName ?? null
     }
 
-    return { ca, source, photoRows, stepsRaw, verifierName }
+    return { ca, source, photoRows, stepsRaw, verifierName, assignedByName }
   })
   if (!data) notFound()
   // Per-user record visibility: read.all → any; read.site → my sites; else → ones I own.
@@ -239,7 +250,7 @@ export default async function CorrectiveActionPage({
     ))
   )
     notFound()
-  const { ca, source, photoRows, stepsRaw, verifierName } = data
+  const { ca, source, photoRows, stepsRaw, verifierName, assignedByName } = data
 
   const activity = await recentActivityForEntity(ctx, 'corrective_action', id, 25)
   const locked = ca.locked
@@ -521,18 +532,26 @@ export default async function CorrectiveActionPage({
                 />
                 <LiveRemoteSelect
                   field="ownerTenantUserId"
-                  label={tGenerated('m_09e0cae12d3f44')}
+                  label={tGenerated('m_1a298419b85cba')}
                   initialValue={ca.ownerTenantUserId}
                   lookup="corrective-action-owners"
                   disabled={locked}
                 />
-                <LiveField
-                  field="assignedOn"
-                  label={tGenerated('m_1e9e6bca0bc9ef')}
-                  type="date"
-                  initialValue={ca.assignedOn}
-                  disabled={locked}
-                />
+                {/* Assigned-by is stamped by the system on every (re)assignment. */}
+                <div>
+                  <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                    <GeneratedText id="m_1a1bb1fe70c59a" />
+                  </div>
+                  <div className="mt-1 text-sm text-slate-700 dark:text-slate-300">
+                    <GeneratedValue
+                      value={
+                        assignedByName
+                          ? `${assignedByName}${ca.assignedOn ? ` · ${ca.assignedOn}` : ''}`
+                          : '—'
+                      }
+                    />
+                  </div>
+                </div>
                 <LiveField
                   field="dueOn"
                   label={tGenerated('m_04bfc1eaee3a4b')}

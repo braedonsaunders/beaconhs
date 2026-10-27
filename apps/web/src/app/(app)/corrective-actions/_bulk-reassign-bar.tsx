@@ -17,7 +17,7 @@ import { bulkReassignCorrectiveActions } from './_actions'
 /**
  * Floating action bar on the CA list page. Once the user ticks at least one
  * row checkbox, the bar slides up from the bottom with a count and the
- * single bulk action available right now: "Reassign owner".
+ * single bulk action available right now: "Reassign".
  *
  * Selection state lives in this client component (URL/cookie persistence
  * would just complicate things — the bar resets on navigation).
@@ -45,7 +45,7 @@ export function BulkReassignBar({
 
   function go() {
     if (!ownerId) {
-      setError(tGenerated('m_078d0c92c95c14'))
+      setError(tGenerated('m_1cf8dc3e2ccd3b'))
       return
     }
     setError(tGeneratedValue(null))
@@ -83,7 +83,7 @@ export function BulkReassignBar({
             lookup="corrective-action-owners"
             value={ownerId}
             onChange={(val) => setOwnerId(val)}
-            placeholder={tGenerated('m_00005ef3258bbe')}
+            placeholder={tGenerated('m_0969d994e26813')}
             searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
             sheetTitle="Select a person"
             className="h-8 min-w-[12rem]"

@@ -21,6 +21,7 @@ import {
 } from '@beaconhs/db/schema'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import {
   resolveCorrectiveActionInTx,
   resumeCorrectiveActionInTx,
@@ -444,7 +445,7 @@ async function syncCorrectiveActionForCriterionInTx(
       sourceEntityType: 'inspection_record',
       sourceEntityId: recordId,
       siteOrgUnitId: row.record.siteOrgUnitId,
-      assignedOn: new Date().toISOString().slice(0, 10),
+      assignedOn: dateIsoInTimeZone(new Date(), ctx.timezone),
       dueOn,
       assignedByTenantUserId:
         ctx.membership?.id === 'super-admin' ? null : (ctx.membership?.id ?? null),

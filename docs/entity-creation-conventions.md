@@ -75,7 +75,7 @@ Legend — Current/Target: `page-form` (separate /new) · `instant-create` (draf
 | Inspection record           | page-form              | inline-on-detail (criteria/sign)    | ✅ status=draft             | draft-first (hidden)    | drop `/new` → instant-create draft                     |
 | Training assessment attempt | page-form              | immersive player                    | ✅ status                   | draft-first             | drop `/new` → instant-create attempt                   |
 | Incident                    | page-form              | **separate /[id]/edit**             | partial (status,inProgress) | draft-first (hidden)    | merge edit→detail; /edit→redirect; New→draft           |
-| Corrective action           | page-form              | **separate /[id]/edit**             | no (needs flag)             | draft-first (hidden)    | add draft state; merge edit→detail; New→draft          |
+| Corrective action           | drawer (`?drawer=new`) | inline-on-detail                    | no (no draft state)         | drawer-on-list          | ✅ done — `/new` redirects to the drawer               |
 | Hazard assessment           | page-form (TypePicker) | redirect ✅ (inline detail)         | yes (inProgress)            | draft-first (hidden)    | New→quick-pick type then instant-create draft          |
 | Lone-worker session         | page-form              | detail (no /edit)                   | yes (status)                | quick-create _or_ draft | capture safety params (end/interval/grace) then detail |
 | Equipment item              | page-form              | inline-on-detail                    | no (needs flag)             | draft-first (badged)    | add draft flag; New→instant-create; keep detail editor |
@@ -157,9 +157,10 @@ inspection-assignment creation flow.
 2. **Tier 1 with existing draft state** (no schema change): inspection records, training assessment
    attempts, hazard assessments, training course/class/type/authority → drop `/new`, instant-create,
    merge any `/[id]/edit` into the detail surface.
-3. **Tier 1 needing a draft flag** (schema + list filters + sweep): incidents, corrective actions,
+3. **Tier 1 needing a draft flag** (schema + list filters + sweep): incidents,
    equipment items, PPE items. Add the draft notion, hidden-vs-badged per the table, wire the
-   abandoned-draft sweep into the existing worker.
+   abandoned-draft sweep into the existing worker. (Corrective actions shipped as a
+   drawer-on-list create instead — no draft state; the unused `is_draft` column was dropped.)
 4. **Edit-page merges**: convert remaining `separate-edit-page` (equipment, incidents, people,
    locations, ppe types, compliance, reports) so `/[id]` is the single editor and `/[id]/edit`
    redirects — mirroring hazard-assessments / inspections.

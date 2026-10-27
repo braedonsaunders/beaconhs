@@ -1766,6 +1766,69 @@ function complianceStatusBadge(status: string) {
   )
 }
 
+/** Corrective actions assigned to me — a separate block under My Compliance; never part of the compliance percent. */
+function MyCorrectiveActionsBlock({
+  data,
+}: {
+  data: DashboardMetrics['myCompliance']['correctiveActions']
+}) {
+  return (
+    <div className="border-t border-slate-100 dark:border-slate-800">
+      <Link
+        href="/my/tasks"
+        className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
+      >
+        <span className="font-medium text-slate-700 dark:text-slate-200">
+          <GeneratedText id="m_1aa4d05fdb9565" />
+        </span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          <GeneratedValue value={`${data.total} open`} />
+          <GeneratedValue value={data.overdue > 0 ? ` · ${data.overdue} overdue` : ''} />
+          <GeneratedValue value={data.dueSoon > 0 ? ` · ${data.dueSoon} due soon` : ''} />
+        </span>
+      </Link>
+      <GeneratedValue
+        value={
+          data.items.length > 0 ? (
+            <ul className="space-y-0.5 px-2 pb-2">
+              {data.items.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={`/corrective-actions/${item.id}` as never}
+                    className="group flex items-center justify-between gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
+                        <GeneratedValue value={item.title} />
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                        <GeneratedValue value={item.reference} />
+                        <GeneratedValue value={item.dueOn ? ` · due ${item.dueOn}` : ''} />
+                      </div>
+                    </div>
+                    <Badge
+                      variant={
+                        item.severity === 'critical' || item.severity === 'high'
+                          ? 'destructive'
+                          : item.severity === 'medium'
+                            ? 'warning'
+                            : 'secondary'
+                      }
+                      className="shrink-0"
+                    >
+                      <GeneratedValue value={item.severity} />
+                    </Badge>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : null
+        }
+      />
+    </div>
+  )
+}
+
 function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) {
   const tGenerated = useGeneratedTranslations()
   if (!data.linked) {
@@ -1777,9 +1840,14 @@ function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) 
         href="/compliance/mine"
         accent="teal"
       >
-        <EmptyRow>
-          <GeneratedText id="m_1fd21fce3080fd" />
-        </EmptyRow>
+        <div className="flex h-full flex-col">
+          <div className="min-h-0 flex-1">
+            <EmptyRow>
+              <GeneratedText id="m_1fd21fce3080fd" />
+            </EmptyRow>
+          </div>
+          <MyCorrectiveActionsBlock data={data.correctiveActions} />
+        </div>
       </CardShell>
     )
   }
@@ -1792,12 +1860,17 @@ function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) 
         href="/compliance/mine"
         accent="teal"
       >
-        <EmptyRow>
-          <span className="inline-flex items-center gap-2">
-            <ShieldCheck size={12} className="text-emerald-500" />
-            <GeneratedText id="m_15657905717ca3" />
-          </span>
-        </EmptyRow>
+        <div className="flex h-full flex-col">
+          <div className="min-h-0 flex-1">
+            <EmptyRow>
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck size={12} className="text-emerald-500" />
+                <GeneratedText id="m_15657905717ca3" />
+              </span>
+            </EmptyRow>
+          </div>
+          <MyCorrectiveActionsBlock data={data.correctiveActions} />
+        </div>
       </CardShell>
     )
   }
@@ -1879,6 +1952,7 @@ function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) 
             />
           </span>
         </Link>
+        <MyCorrectiveActionsBlock data={data.correctiveActions} />
       </div>
     </CardShell>
   )

@@ -17,6 +17,7 @@ import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import { recordVisibilityWhere } from '@beaconhs/tenant/visibility'
 import { verifyProposal, type CaPreview, type IncidentPreview } from '@/lib/assistant/proposals'
 
@@ -72,7 +73,7 @@ export async function commitCorrectiveAction(input: {
         sourceEntityType: p.sourceEntityType,
         sourceEntityId: p.sourceEntityId,
         siteOrgUnitId: p.siteOrgUnitId,
-        assignedOn: new Date().toISOString().slice(0, 10),
+        assignedOn: dateIsoInTimeZone(new Date(), ctx.timezone),
         dueOn: p.dueOn,
         assignedByTenantUserId: ctx.membership?.id,
         ownerTenantUserId: ctx.membership?.id,
@@ -94,7 +95,7 @@ export async function commitCorrectiveAction(input: {
             severity: p.severity,
             source: p.source,
             dueOn: p.dueOn,
-            assignedOn: new Date().toISOString().slice(0, 10),
+            assignedOn: dateIsoInTimeZone(new Date(), ctx.timezone),
           }),
           web: moduleFlowCommand(ctx, {
             subjectId: r.id,

@@ -348,7 +348,6 @@ export default async function FormResponsePage({
       ])
       const caBaseWhere = and(
         eq(correctiveActions.sourceFormResponseId, id),
-        eq(correctiveActions.isDraft, false),
         isNull(correctiveActions.deletedAt),
         caVisibility,
       )

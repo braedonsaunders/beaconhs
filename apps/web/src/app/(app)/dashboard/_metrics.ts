@@ -38,6 +38,11 @@ import { resolveComplianceLink } from '../compliance/_resolve-link'
 import { templateAccessWhere } from '../apps/_lib/access'
 import { moduleScope } from '../feed/_data'
 import { loadPersonalPpe } from './_personal-ppe'
+import { dateIsoInTimeZone } from '@/lib/datetime'
+import {
+  loadMyOpenCorrectiveActions,
+  type MyCorrectiveActionsSummary,
+} from '@/lib/my-corrective-actions'
 
 /**
  * One 12-element series of monthly values, oldest -> newest. Used to draw the
@@ -188,6 +193,8 @@ export type DashboardMetrics = {
       prefetch: boolean
     }>
     documents: { total: number; completed: number; outstanding: number }
+    /** Open corrective actions assigned to me — a separate block, never counted in the compliance percent. */
+    correctiveActions: MyCorrectiveActionsSummary
   }
 
   // In-progress entries the current user has started but not finished, across
@@ -1056,6 +1063,14 @@ export async function loadDashboardMetrics(
     })
     const documentTotal = Number(complianceData.documents?.total ?? 0)
     const documentCompleted = Number(complianceData.documents?.completed ?? 0)
+    // Corrective actions assigned to me ride along in the same widget as a
+    // separate block. Keyed by membership, so they render even when the user
+    // has no linked person record (and never count into the compliance %).
+    const myCorrectiveActions = await loadMyOpenCorrectiveActions(
+      tx,
+      ctx.membership?.id,
+      dateIsoInTimeZone(now, ctx.timezone),
+    )
     const myCompliance = {
       linked: myPersonId !== null,
       total: cTotal,
@@ -1070,6 +1085,7 @@ export async function loadDashboardMetrics(
         completed: documentCompleted,
         outstanding: Math.max(0, documentTotal - documentCompleted),
       },
+      correctiveActions: myCorrectiveActions,
     }
 
     // --- In-progress entries (current user's unfinished work) ------------
