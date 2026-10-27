@@ -1951,6 +1951,24 @@ function ActionInspector({
                   <option value="in_app">{'In-app notification'}</option>
                 </Select>
               </Field>
+              <GeneratedValue
+                value={
+                  (a.channel ?? 'email') === 'email' ? (
+                    <Field label={tGeneratedValue('Sender')}>
+                      <Select
+                        value={a.sender ?? 'beaconhs'}
+                        disabled={readOnly}
+                        onChange={(e) =>
+                          set({ ...a, sender: e.target.value as 'beaconhs' | 'submitter' })
+                        }
+                      >
+                        <option value="beaconhs">{'BeaconHS'}</option>
+                        <option value="submitter">{'Submitter (replies go to them)'}</option>
+                      </Select>
+                    </Field>
+                  ) : null
+                }
+              />
               <Field
                 label={tGeneratedValue(
                   (a.channel ?? 'email') === 'email'

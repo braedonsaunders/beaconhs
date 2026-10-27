@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/db/schema'
 import { getRegulatoryTerminology, type RequestContext } from '@beaconhs/tenant'
 import { formatDateTime } from '@/lib/datetime'
+import { actingUserEmailIdentity } from '@/lib/email-sender'
 import { recordAudit } from '@/lib/audit'
 
 export async function sendIncidentEmail(
@@ -221,6 +222,7 @@ export async function sendIncidentEmail(
     subject,
     html,
     text,
+    ...(await actingUserEmailIdentity(ctx)),
     meta: {
       tenantId: ctx.tenantId,
       category: 'incident_send',

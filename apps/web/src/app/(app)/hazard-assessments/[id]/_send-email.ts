@@ -21,6 +21,7 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { recordAudit } from '@/lib/audit'
+import { actingUserEmailIdentity } from '@/lib/email-sender'
 import { createHazidFlowAdapter } from '@/lib/flows/adapters/hazid'
 import { buildSubjectPdfJob } from '@/lib/flows/pdf-document'
 import { getModuleDefaultTemplate } from '@/lib/pdf-templates'
@@ -266,6 +267,7 @@ export async function sendHazidEmail(
     tenantId: ctx.tenantId,
     category: 'hazid_assessment_send',
     deliverAsSingleMessage: true,
+    ...(await actingUserEmailIdentity(ctx)),
   })
 
   await recordAudit(ctx, {

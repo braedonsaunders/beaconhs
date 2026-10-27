@@ -326,6 +326,8 @@ async function emailRenderedPdf(
     ],
     meta: { tenantId: email.tenantId, category: email.category },
     deliverAsSingleMessage: email.deliverAsSingleMessage,
+    senderName: email.senderName,
+    replyTo: email.replyTo,
   })
   // The transient render artifact has served its purpose once attached.
   try {

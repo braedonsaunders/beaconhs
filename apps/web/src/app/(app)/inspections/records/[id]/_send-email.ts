@@ -7,6 +7,7 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
+import { actingUserEmailIdentity } from '@/lib/email-sender'
 import { formatDateTime } from '@/lib/datetime'
 
 export async function sendInspectionEmail(
@@ -103,6 +104,7 @@ export async function sendInspectionEmail(
     subject,
     html,
     text,
+    ...(await actingUserEmailIdentity(ctx)),
     meta: { tenantId: ctx.tenantId, category: 'inspection_record_send', userId: ctx.userId },
   })
   await recordAudit(ctx, {

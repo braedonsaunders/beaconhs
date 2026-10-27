@@ -479,13 +479,32 @@ function providerOperationError(
  * explicit opt-out, for a message a caller has decided is a shared
  * conversation (identical body, everyone on the same To line).
  */
+/**
+ * The From / Reply-To a send will actually use. A per-send `senderName`
+ * keeps the configured From ADDRESS (verified domain, DMARC-aligned) and
+ * only changes the display name to "<name> via BeaconHS"; a per-send
+ * `replyTo` overrides the configured one. Exported so the worker can log
+ * the exact identity it sent with.
+ *
+ * A future "true From" opt-in for tenants on verified domains would swap
+ * the address here — and only here.
+ */
+export function resolveSendIdentity(
+  transport: EmailTransport,
+  input: Pick<SendEmailInput, 'senderName' | 'replyTo'>,
+): { from: string; replyTo?: string } {
+  const replyTo = input.replyTo ?? transport.replyTo
+  if (!input.senderName) return { from: transport.from, replyTo }
+  const { email } = parseAddress(transport.from)
+  return { from: `${input.senderName} via BeaconHS <${email}>`, replyTo }
+}
+
 export async function sendVia(
   transport: EmailTransport,
   input: SendEmailInput,
   options?: { allowMultipleRecipients?: boolean },
 ): Promise<{ id: string }> {
-  const from = transport.from
-  const replyTo = transport.replyTo
+  const { from, replyTo } = resolveSendIdentity(transport, input)
   const normalizedInput = normalizeEmailDeliveryInput(input, {
     requireSingleRecipient: !options?.allowMultipleRecipients,
   })

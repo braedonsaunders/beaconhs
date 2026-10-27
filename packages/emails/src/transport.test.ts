@@ -5,6 +5,7 @@ import { isEmailProvider } from './providers'
 import {
   resolveEffectiveTransport,
   resolveEmailTransport,
+  resolveSendIdentity,
   sendVia,
   validateStoredEmailConfig,
   type EmailTransport,
@@ -861,5 +862,30 @@ describe('sendVia (SMTP)', () => {
       sendVia({ ...local, username: 'user', password: 'password' } as EmailTransport, INPUT),
     ).rejects.toThrow('does not permit authentication')
     expect(nodemailerMock.createTransport).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolveSendIdentity', () => {
+  const transport: EmailTransport = {
+    provider: 'sendgrid',
+    apiKey: 'key',
+    from: 'BeaconHS <no-reply@example.com>',
+    replyTo: 'support@example.com',
+  }
+
+  it('keeps the configured identity by default', () => {
+    expect(resolveSendIdentity(transport, {})).toEqual({
+      from: 'BeaconHS <no-reply@example.com>',
+      replyTo: 'support@example.com',
+    })
+  })
+
+  it('shows "<name> via BeaconHS" on the configured address and replies to the person', () => {
+    expect(
+      resolveSendIdentity(transport, { senderName: 'Jane Foreman', replyTo: 'jane@example.com' }),
+    ).toEqual({
+      from: 'Jane Foreman via BeaconHS <no-reply@example.com>',
+      replyTo: 'jane@example.com',
+    })
   })
 })

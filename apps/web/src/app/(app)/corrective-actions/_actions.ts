@@ -33,6 +33,7 @@ import {
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { actingUserEmailIdentity } from '@/lib/email-sender'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
@@ -590,6 +591,7 @@ export async function sendCorrectiveActionEmail(args: {
     subject,
     html,
     text,
+    ...(await actingUserEmailIdentity(ctx)),
     meta: {
       tenantId: ctx.tenantId,
       category: 'corrective_action_send',

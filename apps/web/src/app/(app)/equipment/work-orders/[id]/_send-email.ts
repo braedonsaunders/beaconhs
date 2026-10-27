@@ -13,6 +13,7 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { formatDateTime } from '@/lib/datetime'
+import { actingUserEmailIdentity } from '@/lib/email-sender'
 import { recordAudit } from '@/lib/audit'
 
 export async function sendWorkOrderEmail(
@@ -147,6 +148,7 @@ export async function sendWorkOrderEmail(
     subject,
     html,
     text,
+    ...(await actingUserEmailIdentity(ctx)),
     meta: {
       tenantId: ctx.tenantId,
       category: 'equipment_work_order_send',
