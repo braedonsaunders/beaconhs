@@ -20,6 +20,8 @@ export interface IntegrationDelivery {
   lastAttemptAt: Date | null
   error: string | null
   refCount: number
+  /** Non-fatal destination notes from the latest delivery (e.g. skipped rows). */
+  warnings: string[]
 }
 
 interface DeliverySqlRow {
@@ -32,6 +34,21 @@ interface DeliverySqlRow {
   last_attempt_at: Date | string | null
   error: string | null
   ref_count: number | string
+  warnings: unknown
+}
+
+function parseDeliveryWarnings(raw: unknown): string[] {
+  const list = typeof raw === 'string' ? safeParseArray(raw) : raw
+  if (!Array.isArray(list)) return []
+  return list.filter((w): w is string => typeof w === 'string' && w.trim() !== '').slice(0, 50)
+}
+
+function safeParseArray(raw: string): unknown {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
 }
 
 function toDelivery(row: DeliverySqlRow): IntegrationDelivery {
@@ -44,6 +61,7 @@ function toDelivery(row: DeliverySqlRow): IntegrationDelivery {
     lastAttemptAt: row.last_attempt_at ? new Date(row.last_attempt_at) : null,
     error: row.delivered ? null : row.error,
     refCount: Number(row.ref_count),
+    warnings: parseDeliveryWarnings(row.warnings),
   }
 }
 
@@ -62,6 +80,8 @@ export async function deliveriesForAutomation(
           bool_and(status = 'pushed') AS delivered,
           max(created_at) AS last_attempt_at,
           (array_agg(detail ORDER BY created_at DESC))[1]->>'error' AS error,
+          (array_agg(detail ORDER BY created_at DESC)
+            FILTER (WHERE detail ? 'warnings'))[1]->'warnings' AS warnings,
           count(*) FILTER (WHERE external_ref IS NOT NULL) AS ref_count
         FROM integration_export_log
         WHERE tenant_id = ${ctx.tenantId} AND automation_id = ${automation.id}
@@ -92,7 +112,8 @@ export async function deliveriesForAutomation(
         true AS has_log,
         last_attempt_at,
         error,
-        ref_count
+        ref_count,
+        warnings
       FROM logs
       UNION ALL
       SELECT
@@ -104,7 +125,8 @@ export async function deliveriesForAutomation(
         false,
         last_attempt_at,
         NULL,
-        0
+        0,
+        NULL
       FROM pending
       ORDER BY last_attempt_at DESC NULLS LAST
     `)
@@ -127,6 +149,8 @@ export async function deliveriesForSubject(
           bool_and(status = 'pushed') AS delivered,
           max(created_at) AS last_attempt_at,
           (array_agg(detail ORDER BY created_at DESC))[1]->>'error' AS error,
+          (array_agg(detail ORDER BY created_at DESC)
+            FILTER (WHERE detail ? 'warnings'))[1]->'warnings' AS warnings,
           count(*) FILTER (WHERE external_ref IS NOT NULL) AS ref_count
         FROM integration_export_log
         WHERE tenant_id = ${ctx.tenantId}
@@ -152,7 +176,8 @@ export async function deliveriesForSubject(
         l.automation_id IS NOT NULL AS has_log,
         coalesce(l.last_attempt_at, p.at) AS last_attempt_at,
         coalesce(l.error, ti.last_error) AS error,
-        coalesce(l.ref_count, 0) AS ref_count
+        coalesce(l.ref_count, 0) AS ref_count,
+        l.warnings AS warnings
       FROM tenant_integrations ti
       CROSS JOIN published p
       LEFT JOIN logs l ON l.automation_id = ti.id

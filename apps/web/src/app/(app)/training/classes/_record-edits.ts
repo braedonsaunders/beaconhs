@@ -37,6 +37,7 @@ import {
   type RecordSaver,
 } from '@/lib/record-sync/edits'
 import { assertClassEmailConfigured, ClassEmailError } from '@/lib/training-class-email'
+import { syncTrainingClassSchedule } from '@/lib/training-class-schedule-sync'
 import {
   trackClassCustomerInTransaction,
   trainingClassTimeZone,
@@ -222,6 +223,15 @@ function trainingClassSpec(reminderEmailProblem: string | null) {
     },
     afterWrites: async (tx, ctx, row, changes) => {
       await auditFieldChanges(tx, ctx, { entityType: 'training_class', entityId: row.id }, changes)
+      // Schedule-shaping edits re-publish the desired-state snapshot for
+      // outbound automations (coalesced, so autosave bursts send once).
+      if (
+        changes.some((change) =>
+          ['schedule', 'courseId', 'lengthDays', 'hoursPerDay', 'title'].includes(change.op),
+        )
+      ) {
+        await syncTrainingClassSchedule(tx, ctx.tenantId, row.id, 'scheduled')
+      }
       const changedCourse = changes.find((change) => change.op === 'courseId')
       if (changedCourse || changes.some((change) => change.op === 'schedule')) {
         const courseIds = new Set([row.courseId])

@@ -190,6 +190,15 @@ export async function AutomationDeliveries({
                       >
                         <GeneratedValue value={d.error ?? ''} />
                       </span>
+                      {d.warnings.length > 0 ? (
+                        <span className="mt-1 block max-w-md text-xs text-amber-700 dark:text-amber-300">
+                          {d.warnings.map((w) => (
+                            <span key={w} className="block truncate" title={w}>
+                              <GeneratedValue value={w} />
+                            </span>
+                          ))}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="py-2">
                       {d.status !== 'delivered' ? (
@@ -380,8 +389,9 @@ export async function SubjectDeliveries({
 }
 
 /**
- * Compact warning for a single record (e.g. a training class): renders only
- * when an automation delivery for this record failed or never landed.
+ * Compact warning for a single record (e.g. a training class): renders when
+ * an automation delivery for this record failed or never landed, or when the
+ * destination accepted the delivery but reported warnings (rows it skipped).
  */
 export async function SubjectDeliveryWarnings({
   ctx,
@@ -398,7 +408,7 @@ export async function SubjectDeliveryWarnings({
 }) {
   const t = await getGeneratedValueTranslations()
   const deliveries = (await deliveriesForSubject(ctx, triggerKey, subjectId)).filter(
-    (d) => d.status !== 'delivered',
+    (d) => d.status !== 'delivered' || d.warnings.length > 0,
   )
   if (deliveries.length === 0) return null
   return (
@@ -406,32 +416,47 @@ export async function SubjectDeliveryWarnings({
       {deliveries.map((d) => (
         <div
           key={d.automationId}
-          className="flex flex-wrap items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/40"
+          className={
+            d.status === 'delivered'
+              ? 'rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40'
+              : 'rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/40'
+          }
         >
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1',
-              STATUS_PILL[d.status],
-            )}
-          >
-            <GeneratedValue value={statusLabel(t, d.status)} />
-          </span>
-          <span className="text-slate-800 dark:text-slate-200">
-            <GeneratedValue value={t('Export to')} />{' '}
-            <GeneratedValue value={d.automationName ?? t('an integration')} />
-            {d.error ? (
-              <>
-                {' — '}
-                <span className="text-red-700 dark:text-red-300">
-                  <GeneratedValue value={d.error} />
-                </span>
-              </>
-            ) : null}
-          </span>
-          {canResend ? (
-            <span className="ml-auto">
-              <ResendForm delivery={d} classId={classId} label={t('Re-send')} />
+          <div className="flex flex-wrap items-center gap-3">
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1',
+                STATUS_PILL[d.status],
+              )}
+            >
+              <GeneratedValue value={statusLabel(t, d.status)} />
             </span>
+            <span className="text-slate-800 dark:text-slate-200">
+              <GeneratedValue value={t('Export to')} />{' '}
+              <GeneratedValue value={d.automationName ?? t('an integration')} />
+              {d.error ? (
+                <>
+                  {' — '}
+                  <span className="text-red-700 dark:text-red-300">
+                    <GeneratedValue value={d.error} />
+                  </span>
+                </>
+              ) : null}
+            </span>
+            {canResend && d.status !== 'delivered' ? (
+              <span className="ml-auto">
+                <ResendForm delivery={d} classId={classId} label={t('Re-send')} />
+              </span>
+            ) : null}
+          </div>
+          {d.warnings.length > 0 ? (
+            <ul className="mt-1.5 list-inside list-disc text-xs text-amber-800 dark:text-amber-200">
+              {d.warnings.map((w) => (
+                <li key={w}>
+                  <GeneratedValue value={w} />
+                </li>
+              ))}
+            </ul>
           ) : null}
         </div>
       ))}

@@ -97,6 +97,87 @@ export function trainingClassCompletedEvent(
   return { type: 'training.class.completed', tenantId, subjectId: e.classId, items }
 }
 
+export type TrainingClassScheduleStatus = 'scheduled' | 'cancelled' | 'deleted'
+
+export interface TrainingClassScheduleAttendeeFact {
+  personId: string
+  externalEmployeeId: string | null
+  firstName: string
+  lastName: string
+  departmentName: string | null
+  status: string
+}
+
+/**
+ * The full desired-state schedule snapshot for one class: every active
+ * attendee (registered/attended — the instructor is never an item) repeated
+ * with the class facts, so a destination can replace its copy wholesale.
+ * An empty roster still emits one class-only item (person fields empty,
+ * attendeeCount 0) so cancelled/deleted/emptied classes reach destinations
+ * and can be removed there. `classDays` are the tenant-timezone weekday
+ * dates from the shared class-days helper, comma-joined for the flat item
+ * namespace.
+ */
+export function trainingClassScheduleChangedEvent(
+  tenantId: string,
+  e: {
+    classId: string
+    status: TrainingClassScheduleStatus
+    course: { code: string; name: string }
+    title: string
+    startsAt: string
+    endsAt: string
+    classDays: string[]
+    hoursPerDay: number
+    lengthDays: number
+    timeZone: string
+    attendees: TrainingClassScheduleAttendeeFact[]
+  },
+): IntegrationEvent {
+  const active = e.attendees.filter((a) => a.status === 'registered' || a.status === 'attended')
+  const classItem: Item = {
+    classId: e.classId,
+    status: e.status,
+    'course.code': s(e.course.code),
+    'course.name': s(e.course.name),
+    title: s(e.title),
+    startsAt: iso(e.startsAt),
+    endsAt: iso(e.endsAt),
+    classDays: e.classDays.join(','),
+    classDayCount: e.classDays.length,
+    hoursPerDay: e.hoursPerDay,
+    lengthDays: e.lengthDays,
+    timeZone: e.timeZone,
+    attendeeCount: active.length,
+    url: link(`/training/classes/${e.classId}`),
+  }
+  const items: Item[] =
+    active.length === 0
+      ? [
+          {
+            ...classItem,
+            personId: null,
+            externalEmployeeId: null,
+            firstName: null,
+            lastName: null,
+            fullName: null,
+            departmentName: null,
+            attendeeStatus: null,
+          },
+        ]
+      : active.map((a) => ({
+          ...classItem,
+          personId: a.personId,
+          externalEmployeeId: a.externalEmployeeId,
+          firstName: s(a.firstName),
+          lastName: s(a.lastName),
+          fullName: `${a.firstName} ${a.lastName}`.trim(),
+          departmentName: a.departmentName,
+          attendeeStatus: s(a.status),
+        }))
+  return { type: 'training.class.schedule_changed', tenantId, subjectId: e.classId, items }
+}
+
 // --- incidents -------------------------------------------------------------
 
 export function incidentCreatedEvent(

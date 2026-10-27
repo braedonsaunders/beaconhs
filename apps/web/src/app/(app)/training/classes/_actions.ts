@@ -28,6 +28,7 @@ import type { Database } from '@beaconhs/db'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
 import {
   DEFAULT_CREDITED_HOURS_PER_DAY,
+  loadTrainingClassScheduleEvent,
   resolveClassCredit,
   trainingClassCompletedEvent,
 } from '@beaconhs/integrations'
@@ -35,6 +36,10 @@ import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { trainingClassTimeZone } from '@/lib/training-class-settings'
+import {
+  recordTrainingClassScheduleSnapshot,
+  syncTrainingClassSchedule,
+} from '@/lib/training-class-schedule-sync'
 import { dateIsoInTimeZone } from '@/lib/datetime'
 import { assertClassEmailConfigured, ClassEmailError } from '@/lib/training-class-email'
 import { requireUuidInput } from '@/lib/mutation-input'
@@ -157,6 +162,7 @@ export async function startClass(): Promise<void> {
         hoursPerDay: String(DEFAULT_CREDITED_HOURS_PER_DAY),
       })
       .returning({ id: trainingClasses.id })
+    if (row?.id) await syncTrainingClassSchedule(tx, ctx.tenantId, row.id, 'scheduled')
     return row?.id ?? null
   })
 
@@ -233,6 +239,7 @@ export async function addClassAttendee(formData: FormData): Promise<void> {
       sourceModule: 'training',
       targetRef: { courseId: cls.courseId },
     })
+    await syncTrainingClassSchedule(tx, ctx.tenantId, classId, 'scheduled')
   })
 
   await recordAudit(ctx, {
@@ -280,6 +287,7 @@ export async function removeClassAttendee(formData: FormData): Promise<void> {
       sourceModule: 'training',
       targetRef: { courseId: cls.courseId },
     })
+    await syncTrainingClassSchedule(tx, ctx.tenantId, classId, 'scheduled')
   })
 
   await recordAudit(ctx, {
@@ -610,6 +618,7 @@ export async function cancelClass(id: string, _formData: FormData): Promise<void
       toStatus: 'cancelled',
       occurrenceKey: randomUUID(),
     })
+    await syncTrainingClassSchedule(tx, ctx.tenantId, id, 'cancelled')
   })
   await recordAudit(ctx, {
     entityType: 'training_class',
@@ -656,6 +665,7 @@ export async function reopenClass(id: string, _formData: FormData): Promise<void
       toStatus: 'scheduled',
       occurrenceKey: randomUUID(),
     })
+    await syncTrainingClassSchedule(tx, ctx.tenantId, id, 'scheduled')
   })
   await recordAudit(ctx, {
     entityType: 'training_class',
@@ -690,11 +700,15 @@ export async function deleteClass(id: string, _formData: FormData): Promise<void
     if (rec) {
       throw new Error('This class has issued training records — cancel it instead of deleting.')
     }
+    // Snapshot before the delete (the roster is about to cascade away);
+    // record it after, so destinations remove the class from their copy.
+    const deletedSnapshot = await loadTrainingClassScheduleEvent(tx, ctx.tenantId, id, 'deleted')
     const [deleted] = await tx
       .delete(trainingClasses)
       .where(eq(trainingClasses.id, id))
       .returning({ id: trainingClasses.id })
     if (!deleted) throw new Error('Class could not be deleted.')
+    await recordTrainingClassScheduleSnapshot(tx, ctx.tenantId, deletedSnapshot)
     await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
       sourceModule: 'training',
       targetRef: { courseId: cls.courseId },

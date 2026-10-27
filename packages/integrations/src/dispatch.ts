@@ -239,6 +239,17 @@ export async function dispatchOne(
     result = { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
 
+  // Destination warnings ride on the first ref's detail so delivery history
+  // and the source record can show what was skipped without a second ledger.
+  if (result.warnings && result.warnings.length > 0 && result.refs && result.refs.length > 0) {
+    result = {
+      ...result,
+      refs: result.refs.map((r, i) =>
+        i === 0 ? { ...r, detail: { ...r.detail, warnings: result.warnings } } : r,
+      ),
+    }
+  }
+
   // Persist an explicitly returned ref set, including an empty one that clears
   // stale refs. Partial results are marked failed: a retry receives those refs
   // as retryRefs, while oncePerRecord only suppresses a fully pushed delivery.

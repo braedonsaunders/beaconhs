@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { isDeepStrictEqual } from 'node:util'
 import type { Database } from '@beaconhs/db'
 import {
@@ -14,6 +14,8 @@ export type RecordDomainEventInput = {
   subjectId: string
   dedupKey: string
   payload: DomainEventPayload
+  /** Earliest publish time; defaults to now (the column default). */
+  availableAt?: Date
 }
 
 type ActorContext = {
@@ -99,9 +101,10 @@ export async function recordDomainEvent(
   input: RecordDomainEventInput,
 ): Promise<string> {
   assertDomainEventIdentity(input)
+  const { availableAt, ...rest } = input
   const [inserted] = await tx
     .insert(domainEventOutbox)
-    .values(input)
+    .values(availableAt ? { ...rest, availableAt } : rest)
     .onConflictDoNothing({
       target: [domainEventOutbox.tenantId, domainEventOutbox.dedupKey],
     })
@@ -132,4 +135,54 @@ export async function recordDomainEvent(
     throw new Error('Domain event deduplication key conflicts with another event')
   }
   return existing.id
+}
+
+/**
+ * Record a desired-state snapshot event (e.g. a training class schedule)
+ * coalesced per subject: while an earlier snapshot for the same
+ * (tenant, eventType, subject) is still pending, replace its payload and
+ * push its availability out by `delayMs`, so a burst of edits (autosave
+ * keystrokes, roster changes) publishes ONE delivery with the latest state
+ * instead of one per keystroke. Once the pending row has been claimed or
+ * published, the next snapshot is a fresh row under the caller's new
+ * occurrence dedup key. Callers hold the subject row lock in the same
+ * transaction (the class mutations do), which serializes the
+ * find-or-insert; a racing insert would only cost one extra delivery of a
+ * full-replace snapshot, never corrupt state.
+ */
+export async function recordCoalescibleDomainEvent(
+  tx: Database,
+  input: RecordDomainEventInput,
+  delayMs: number,
+): Promise<string> {
+  assertDomainEventIdentity(input)
+  const availableAt = new Date(Date.now() + Math.max(0, delayMs))
+  const [pending] = await tx
+    .select({ id: domainEventOutbox.id })
+    .from(domainEventOutbox)
+    .where(
+      and(
+        eq(domainEventOutbox.tenantId, input.tenantId),
+        eq(domainEventOutbox.eventType, input.eventType),
+        eq(domainEventOutbox.subjectId, input.subjectId),
+        eq(domainEventOutbox.status, 'pending'),
+      ),
+    )
+    .orderBy(desc(domainEventOutbox.createdAt))
+    .limit(1)
+    .for('update')
+  if (pending) {
+    await tx
+      .update(domainEventOutbox)
+      .set({ payload: input.payload, availableAt, lastError: null })
+      .where(eq(domainEventOutbox.id, pending.id))
+    return pending.id
+  }
+  const { availableAt: _ignored, ...rest } = input
+  const [inserted] = await tx
+    .insert(domainEventOutbox)
+    .values({ ...rest, availableAt })
+    .returning({ id: domainEventOutbox.id })
+  if (!inserted) throw new Error('Domain event could not be recorded')
+  return inserted.id
 }

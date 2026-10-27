@@ -64,6 +64,10 @@ export interface DeliverRef {
 
 export interface DeliverResult extends IntegrationResult {
   refs?: DeliverRef[]
+  // Non-fatal notes a destination reports about a successful delivery (e.g.
+  // rows it skipped and why). Persisted with the delivery so the source
+  // record can show them; never a substitute for `error` on failure.
+  warnings?: string[]
 }
 
 // Read-only context for a connectivity test (no items yet).
