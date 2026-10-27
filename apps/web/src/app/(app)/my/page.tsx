@@ -19,10 +19,9 @@ import {
   User,
   Wallet,
 } from 'lucide-react'
-import { and, count, eq, gte, isNull, lt, lte, or, type SQL } from 'drizzle-orm'
+import { and, count, eq, gte, isNull, lte } from 'drizzle-orm'
 import { Badge, cn, PageHeader } from '@beaconhs/ui'
 import {
-  correctiveActions,
   hazidAssessments,
   incidents,
   inspectionRecords,
@@ -33,6 +32,11 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { PageContainer } from '@/components/page-layout'
+import { dateIsoInTimeZone } from '@/lib/datetime'
+import {
+  EMPTY_MY_CORRECTIVE_ACTIONS,
+  loadMyOpenCorrectiveActions,
+} from '@/lib/my-corrective-actions'
 import { personCompliance } from '../compliance/_hub'
 import { loadInProgressEntries } from '../dashboard/_metrics'
 import { WorkspaceNoIdentity } from './_no-identity'
@@ -105,9 +109,13 @@ export default async function MyLandingPage() {
       .limit(1)
     const personId = person?.id ?? null
 
-    const today = new Date()
-    const ninetyDays = new Date()
-    ninetyDays.setDate(ninetyDays.getDate() + 90)
+    // Tenant-calendar dates — never the server's UTC date for date columns.
+    const todayIso = dateIsoInTimeZone(new Date(), ctx.timezone)
+    const ninetyDaysIso = (() => {
+      const base = new Date(`${todayIso}T00:00:00.000Z`)
+      base.setUTCDate(base.getUTCDate() + 90)
+      return base.toISOString().slice(0, 10)
+    })()
 
     // ---- incidents reported by me ----------------------------------------
     const incidentsPromise: Promise<number> = membershipId
@@ -134,42 +142,10 @@ export default async function MyLandingPage() {
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
 
-    // ---- open / overdue tasks assigned to me -----------------------------
-    const tasksWhere = membershipId
-      ? and(
-          eq(correctiveActions.ownerTenantUserId, membershipId),
-          isNull(correctiveActions.deletedAt),
-          // 'open' or 'in_progress' or 'pending_verification' — anything not
-          // closed/cancelled counts as still-on-my-plate.
-          or(
-            eq(correctiveActions.status, 'open'),
-            eq(correctiveActions.status, 'in_progress'),
-            eq(correctiveActions.status, 'pending_verification'),
-          ),
-        )
-      : undefined
-
-    const openTasksPromise: Promise<number> = membershipId
-      ? tx
-          .select({ c: count() })
-          .from(correctiveActions)
-          .where(tasksWhere as SQL<unknown>)
-          .then((r) => Number(r[0]?.c ?? 0))
-      : Promise.resolve(0)
-
-    const overdueTasksPromise: Promise<number> = membershipId
-      ? tx
-          .select({ c: count() })
-          .from(correctiveActions)
-          .where(
-            and(
-              tasksWhere as SQL<unknown>,
-              // Strictly before today — matches /my/tasks and /corrective-actions.
-              lt(correctiveActions.dueOn, today.toISOString().slice(0, 10)),
-            ) as SQL<unknown>,
-          )
-          .then((r) => Number(r[0]?.c ?? 0))
-      : Promise.resolve(0)
+    // ---- open / overdue corrective actions assigned to me ----------------
+    const myCorrectiveActions = membershipId
+      ? await loadMyOpenCorrectiveActions(tx, membershipId, todayIso)
+      : EMPTY_MY_CORRECTIVE_ACTIONS
 
     // ---- training records + upcoming expirations -------------------------
     const trainingRecordsPromise: Promise<number> = personId
@@ -188,8 +164,8 @@ export default async function MyLandingPage() {
             and(
               eq(trainingRecords.personId, personId),
               isNull(trainingRecords.deletedAt),
-              gte(trainingRecords.expiresOn, today.toISOString().slice(0, 10)),
-              lte(trainingRecords.expiresOn, ninetyDays.toISOString().slice(0, 10)),
+              gte(trainingRecords.expiresOn, todayIso),
+              lte(trainingRecords.expiresOn, ninetyDaysIso),
               // Retraining supersedes older records for the same course — only
               // the latest one can be "expiring".
               latestTrainingRecordOnly(),
@@ -231,8 +207,8 @@ export default async function MyLandingPage() {
       inProgress: await inProgressPromise,
       incidents: await incidentsPromise,
       hazardAssessments: await hazardAssessmentsPromise,
-      openTasks: await openTasksPromise,
-      overdueTasks: await overdueTasksPromise,
+      openTasks: myCorrectiveActions.total,
+      overdueTasks: myCorrectiveActions.overdue,
       trainingRecords: await trainingRecordsPromise,
       trainingExpiring: await trainingExpiringPromise,
       inspections: await inspectionsPromise,
@@ -307,7 +283,7 @@ export default async function MyLandingPage() {
     },
     {
       href: '/my/tasks',
-      label: 'Tasks',
+      label: 'Corrective actions',
       description: 'Open corrective actions assigned to you.',
       icon: ListChecks,
       tone: 'teal',

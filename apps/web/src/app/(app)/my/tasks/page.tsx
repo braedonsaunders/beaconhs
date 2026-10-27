@@ -32,10 +32,12 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { WorkspaceNoIdentity } from '../_no-identity'
+import { dateIsoInTimeZone } from '@/lib/datetime'
+import { myOpenCorrectiveActionsWhere, OPEN_CA_STATUSES } from '@/lib/my-corrective-actions'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
-  return { title: tGenerated('m_143f41f9fb0bed') }
+  return { title: tGenerated('m_1aa4d05fdb9565') }
 }
 export const dynamic = 'force-dynamic'
 
@@ -64,7 +66,7 @@ const SEVERITY_OPTIONS = [
 // schema package; pinning to `as any[]` would also work but the typed-tuple
 // form makes the intent explicit.
 type CAStatus = 'open' | 'in_progress' | 'pending_verification' | 'closed' | 'cancelled'
-const OPEN_STATUSES: CAStatus[] = ['open', 'in_progress', 'pending_verification']
+const OPEN_STATUSES: CAStatus[] = [...OPEN_CA_STATUSES]
 
 export default async function MyTasksPage({
   searchParams,
@@ -100,7 +102,7 @@ export default async function MyTasksPage({
         header={
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title={tGenerated('m_143f41f9fb0bed')}
+            title={tGenerated('m_1aa4d05fdb9565')}
             description={tGenerated('m_03fda3c0adc42a')}
             actions={
               <Link href="/corrective-actions">
@@ -112,12 +114,12 @@ export default async function MyTasksPage({
           />
         }
       >
-        <WorkspaceNoIdentity reason="no-membership" noun="tasks" />
+        <WorkspaceNoIdentity reason="no-membership" noun="corrective actions" />
       </ListPageLayout>
     )
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = dateIsoInTimeZone(new Date(), ctx.timezone)
 
   const { rows, total, statusCounts, sevCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [
@@ -134,7 +136,7 @@ export default async function MyTasksPage({
       if (cond) filters.push(cond)
     }
     if (rawStatus === 'all_open') {
-      filters.push(inArray(correctiveActions.status, OPEN_STATUSES))
+      filters.push(myOpenCorrectiveActionsWhere(membershipId))
     } else {
       filters.push(eq(correctiveActions.status, rawStatus as CAStatus))
     }
@@ -227,7 +229,7 @@ export default async function MyTasksPage({
         <>
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title={tGenerated('m_143f41f9fb0bed')}
+            title={tGenerated('m_1aa4d05fdb9565')}
             description={tGenerated('m_03fda3c0adc42a')}
             actions={
               <div className="flex items-center gap-2">
