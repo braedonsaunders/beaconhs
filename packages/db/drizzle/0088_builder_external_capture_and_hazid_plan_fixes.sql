@@ -1,0 +1,82 @@
+DO $$ BEGIN
+  CREATE TYPE form_response_capture_mode AS ENUM ('digital', 'external');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+ALTER TABLE form_responses
+  ADD COLUMN IF NOT EXISTS capture_mode form_response_capture_mode NOT NULL DEFAULT 'digital',
+  ADD COLUMN IF NOT EXISTS external_reference text,
+  ADD COLUMN IF NOT EXISTS external_issuer text,
+  ADD COLUMN IF NOT EXISTS external_notes text;
+--> statement-breakpoint
+-- Enable paper capture for seeded confined-space and fall-protection apps. The
+-- configuration is tenant data, so establish tenant RLS context for each pass.
+DO $migration$
+DECLARE tenant_row record;
+BEGIN
+  FOR tenant_row IN SELECT id FROM tenants LOOP
+    PERFORM set_config('app.tenant_id', tenant_row.id::text, true);
+    UPDATE form_templates
+       SET record_config = jsonb_set(
+         COALESCE(record_config, '{}'::jsonb),
+         '{externalCapture}',
+         '{"enabled":true,"referenceLabel":"Assessment number","requirePhoto":false}'::jsonb,
+         true
+       ), updated_at = now()
+     WHERE tenant_id = tenant_row.id AND deleted_at IS NULL
+       AND key IN ('hazid-confined-space-entry-plan', 'hazid-fall-protection-plan');
+
+    -- Publish the corrected Fall Protection schema as a new immutable version.
+    WITH latest AS (
+      SELECT DISTINCT ON (v.template_id) v.*
+        FROM form_template_versions v
+        JOIN form_templates t ON t.id = v.template_id AND t.tenant_id = v.tenant_id
+       WHERE v.tenant_id = tenant_row.id AND t.key = 'hazid-fall-protection-plan'
+         AND t.deleted_at IS NULL AND v.published_at IS NOT NULL
+       ORDER BY v.template_id, v.version DESC
+    ), moved AS (
+      SELECT l.*, (
+        SELECT jsonb_agg(
+          CASE WHEN section->>'id' = 'wah_access' THEN
+            jsonb_set(section, '{fields}',
+              COALESCE(section->'fields', '[]'::jsonb) ||
+              COALESCE((SELECT jsonb_agg(field ORDER BY ord)
+                  FROM jsonb_array_elements(l.schema->'sections') sec2
+                  CROSS JOIN LATERAL jsonb_array_elements(sec2->'fields') WITH ORDINALITY f(field, ord)
+                 WHERE sec2->>'id' = 'wah_protection'
+                   AND field->>'id' IN ('anchor_rated','equipment_inspected','hierarchy_applied')),
+                '[]'::jsonb), true)
+          WHEN section->>'id' = 'wah_protection' THEN
+            jsonb_set(jsonb_set(section, '{title,en}', '"Rescue"'::jsonb, true), '{fields}',
+              COALESCE((SELECT jsonb_agg(field ORDER BY ord)
+                  FROM jsonb_array_elements(section->'fields') WITH ORDINALITY f(field, ord)
+                 WHERE field->>'id' NOT IN ('anchor_rated','equipment_inspected','hierarchy_applied')),
+                '[]'::jsonb), true)
+          ELSE section END ORDER BY ord)
+          FROM jsonb_array_elements(l.schema->'sections') WITH ORDINALITY s(section, ord)
+      ) AS new_schema
+      FROM latest l
+    ), inserted AS (
+      INSERT INTO form_template_versions (tenant_id, template_id, version, schema, changelog, published_at, created_at, updated_at)
+      SELECT tenant_id, template_id, version + 1,
+             jsonb_set(new_schema, '{steps}',
+               (SELECT jsonb_agg(CASE WHEN step->>'key' = 'protection'
+                 THEN jsonb_set(step, '{title}', '"Rescue"'::jsonb, true) ELSE step END ORDER BY ord)
+                  FROM jsonb_array_elements(new_schema->'steps') WITH ORDINALITY x(step, ord)), true),
+             'Move anchorage checks into Access & communication; clarify Rescue section', now(), now(), now()
+        FROM moved
+       WHERE new_schema IS NOT NULL
+       RETURNING template_id
+    ) SELECT count(*) FROM inserted;
+
+    -- The erroneous key is only a type-app lookup key. Do not touch responses or
+    -- conditions; their references are checked by the app's stable type-app id.
+    UPDATE hazid_assessment_type_apps
+       SET key = 'confined_space_entry_plan', updated_at = now()
+     WHERE tenant_id = tenant_row.id AND key = 'embed_verify'
+       AND template_id IN (SELECT id FROM form_templates WHERE tenant_id = tenant_row.id
+                            AND key = 'hazid-confined-space-entry-plan');
+  END LOOP;
+  PERFORM set_config('app.tenant_id', '', true);
+END;
+$migration$;

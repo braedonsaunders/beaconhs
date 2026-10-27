@@ -229,10 +229,7 @@ export const formMonitorStatus = pgEnum('form_monitor_status', [
 // How a response was captured: filled in BeaconHS ('digital') or completed
 // on an external/paper form ('external'), where BeaconHS only records the
 // reference written on the paper copy, who issued it, and optional photos.
-export const formResponseCaptureMode = pgEnum('form_response_capture_mode', [
-  'digital',
-  'external',
-])
+export const formResponseCaptureMode = pgEnum('form_response_capture_mode', ['digital', 'external'])
 
 export const formResponseCheckinKind = pgEnum('form_response_checkin_kind', [
   'manual',
