@@ -1,31 +1,10 @@
-DO $$ BEGIN
-  CREATE TYPE form_response_capture_mode AS ENUM ('digital', 'external');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
---> statement-breakpoint
-ALTER TABLE form_responses
-  ADD COLUMN IF NOT EXISTS capture_mode form_response_capture_mode NOT NULL DEFAULT 'digital',
-  ADD COLUMN IF NOT EXISTS external_reference text,
-  ADD COLUMN IF NOT EXISTS external_issuer text,
-  ADD COLUMN IF NOT EXISTS external_notes text;
---> statement-breakpoint
--- Enable paper capture for seeded confined-space and fall-protection apps. The
--- configuration is tenant data, so establish tenant RLS context for each pass.
+-- This migration publishes the corrected Fall Protection template and repairs
+-- the known confined-space app key. Tenant data changes run under tenant RLS.
 DO $migration$
 DECLARE tenant_row record;
 BEGIN
   FOR tenant_row IN SELECT id FROM tenants LOOP
     PERFORM set_config('app.tenant_id', tenant_row.id::text, true);
-    UPDATE form_templates
-       SET record_config = jsonb_set(
-         COALESCE(record_config, '{}'::jsonb),
-         '{externalCapture}',
-         '{"enabled":true,"referenceLabel":"Assessment number","requirePhoto":false}'::jsonb,
-         true
-       ), updated_at = now()
-     WHERE tenant_id = tenant_row.id AND deleted_at IS NULL
-       AND key IN ('hazid-confined-space-entry-plan', 'hazid-fall-protection-plan');
-
     -- Publish the corrected Fall Protection schema as a new immutable version.
     WITH latest AS (
       SELECT DISTINCT ON (v.template_id) v.*

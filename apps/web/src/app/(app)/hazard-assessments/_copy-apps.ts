@@ -80,15 +80,6 @@ export async function copyAssessmentApps(
         tenantId: ctx.tenantId,
         templateId: app.response.templateId,
         templateVersionId: latest?.id ?? app.response.templateVersionId,
-        // External (paper) copies keep the capture mode and issuer/reference,
-        // but not the photos of the paper copy (attachments are not copied
-        // unless includePhotos copies payload files; the reference is reset
-        // to the new assessment by the caller flow when it stays external).
-        captureMode: app.response.captureMode,
-        externalReference:
-          app.response.captureMode === 'external' ? copy.reference : app.response.externalReference,
-        externalIssuer: app.response.externalIssuer,
-        externalNotes: app.response.externalNotes,
         status: 'draft',
         submittedBy: ctx.membership?.id ?? null,
         siteOrgUnitId: copy.siteOrgUnitId,
