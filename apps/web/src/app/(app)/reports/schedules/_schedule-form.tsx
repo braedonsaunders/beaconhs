@@ -17,12 +17,17 @@ export function BeaconScheduleForm({
   members,
   initial,
   defaultTimezone,
+  onSaved,
+  onCancel,
 }: {
   scheduleId: string | null
   definitions: ReportScheduleDefinitionOption[]
   members: ReportScheduleMemberOption[]
   initial?: Partial<ReportSchedule>
   defaultTimezone?: string
+  /** Drawer hosts close + refresh instead of navigating to the detail page. */
+  onSaved?: (id: string) => void
+  onCancel?: () => void
 }) {
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
@@ -45,12 +50,13 @@ export function BeaconScheduleForm({
         defaultTimezone={defaultTimezone}
         submitLabel={scheduleId ? tGenerated('m_094591d6c7ec4e') : tGenerated('m_1c516d834dca35')}
         busy={pending}
-        onCancel={() => router.push('/reports/schedules')}
+        onCancel={onCancel ?? (() => router.push('/reports/schedules'))}
         onSubmit={(value) => {
           setError(null)
           startTransition(async () => {
             const result = await saveSchedule(scheduleId, value)
             if (!result.ok) setError(result.error)
+            else if (onSaved) onSaved(result.id)
             else router.push(`/reports/schedules/${result.id}`)
           })
         }}
