@@ -13,6 +13,44 @@ function validInput(overrides: Partial<ObligationInput> = {}): ObligationInput {
 }
 
 describe('parseObligationInput', () => {
+  it('accepts rolling document reviews, edition reminders, and wrapped seasonal periods', () => {
+    expect(
+      parseObligationInput(
+        validInput({
+          recurrence: {
+            kind: 'frequency',
+            frequency: 'year',
+            evidenceWindow: 'rolling',
+            activeMonths: { from: 11, to: 3 },
+          },
+        }),
+      ).ok,
+    ).toBe(true)
+    expect(
+      parseObligationInput(
+        validInput({
+          recurrence: {
+            kind: 'frequency',
+            frequency: 'year',
+            reacknowledgeOnEdition: true,
+            newEditionDueDays: 30,
+          },
+        }),
+      ).ok,
+    ).toBe(true)
+    expect(
+      parseObligationInput(
+        validInput({
+          recurrence: {
+            kind: 'frequency',
+            frequency: 'year',
+            activeMonths: { from: 0, to: 13 },
+          },
+        }),
+      ).ok,
+    ).toBe(false)
+  })
+
   it('normalizes the everyone sentinel and duplicate audience rows', () => {
     const result = parseObligationInput(
       validInput({

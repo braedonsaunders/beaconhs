@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { JournalProgress, JournalPeriod } from '../_journal-progress'
+import { QuantityProgress, QuantityPeriod } from '../_quantity-progress'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHeader, TableRow } from '@beaconhs/ui'
@@ -21,7 +21,7 @@ import {
 } from '../_person-list'
 import { StatusBadge, SummaryStrip } from '../_shared'
 import { ComplianceSubNav } from '../_sub-nav'
-import { OBLIGATION_KINDS, type ObligationKind } from '../obligations/_meta'
+import { isCalendarQuantity, OBLIGATION_KINDS, type ObligationKind } from '../obligations/_meta'
 import { PersonPicker } from './_person-picker'
 
 export async function generateMetadata() {
@@ -207,15 +207,22 @@ export default async function ByPersonPage({
                           </TableCell>
                           <TableCell>
                             <StatusBadge status={r.status} />
-                            {r.kind === 'journal' ? (
+                            {isCalendarQuantity(r) ? (
                               <div className="mt-2 space-y-1">
-                                <JournalProgress
+                                <QuantityProgress
                                   count={r.count}
                                   expected={r.expected}
                                   met={r.status === 'completed'}
+                                  noun={
+                                    r.kind === 'inspection'
+                                      ? 'inspections'
+                                      : r.kind === 'hazard_assessment'
+                                        ? 'assessments'
+                                        : 'submitted'
+                                  }
                                 />
                                 {r.periodStart && r.periodEnd ? (
-                                  <JournalPeriod
+                                  <QuantityPeriod
                                     start={r.periodStart}
                                     end={r.periodEnd}
                                     locale={ctx.locale}

@@ -64,7 +64,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     subjectKind: 'per_person',
     audience: true,
     audienceTypes: PERSON_AUD,
-    recurrence: { recurring: true, quantity: true, threshold: true, dueOffset: true },
+    recurrence: { recurring: true, quantity: true, threshold: true, calendar: true },
     target: 'inspectionType',
     hint: 'These people each complete an inspection of this type, on this cadence.',
   },
@@ -73,7 +73,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     subjectKind: 'per_person',
     audience: true,
     audienceTypes: PERSON_AUD,
-    recurrence: { oneTime: true, recurring: true, remind: true, dueOffset: true },
+    recurrence: { oneTime: true, recurring: true, remind: true, rolling: true, dueOffset: true },
     target: 'document',
     hint: 'These people acknowledge the current published version once, or again on a cadence.',
   },
@@ -127,7 +127,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     subjectKind: 'per_person',
     audience: true,
     audienceTypes: PERSON_AUD,
-    recurrence: { recurring: true, quantity: true, threshold: true },
+    recurrence: { recurring: true, quantity: true, threshold: true, calendar: true },
     target: 'none',
     hint: 'These people must each produce or sign a hazard assessment on this cadence.',
   },
@@ -159,4 +159,23 @@ const SYSTEM_KIND_LABELS: Record<string, string> = {
 
 export function kindLabel(kind: string): string {
   return (KIND_META as Record<string, KindMeta>)[kind]?.label ?? SYSTEM_KIND_LABELS[kind] ?? kind
+}
+
+export function isCalendarQuantity(obligation: {
+  sourceModule?: string
+  kind?: string
+  recurrence?: { kind: string; deadline?: unknown }
+  periodStart?: string | null
+  periodEnd?: string | null
+}): boolean {
+  const sourceModule = obligation.sourceModule ?? obligation.kind
+  if (
+    sourceModule !== 'journal' &&
+    sourceModule !== 'inspection' &&
+    sourceModule !== 'hazard_assessment'
+  )
+    return false
+  if (obligation.recurrence)
+    return obligation.recurrence.kind === 'frequency' && Boolean(obligation.recurrence.deadline)
+  return Boolean(obligation.periodStart && obligation.periodEnd)
 }

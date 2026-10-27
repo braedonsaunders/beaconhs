@@ -36,6 +36,7 @@ import {
   type AudienceType,
 } from '@/components/audience-picker'
 import { RecurrencePicker } from '@/components/recurrence-picker'
+import { CALENDAR_MONTHS } from '@/components/recurrence'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
 import type { RecurrenceValue } from '@/components/recurrence'
 import type { PickerLookup } from '@/lib/picker-options'
@@ -68,7 +69,8 @@ function defaultRecurrence(kind: ObligationKind): RecurrenceValue {
   const f = KIND_META[kind].recurrence
   return {
     kind: kind === 'document' ? 'one_time' : f.recurring ? 'frequency' : 'one_time',
-    evidenceWindow: kind === 'training' ? 'rolling' : f.calendar ? 'calendar' : undefined,
+    evidenceWindow:
+      kind === 'training' || kind === 'document' ? 'rolling' : f.calendar ? 'calendar' : undefined,
     frequency: 'week',
     quantity: 1,
     compliantPercentage: 100,
@@ -432,6 +434,8 @@ export function ObligationForm({
                         })
                       }
                       placeholder={tGeneratedValue('Latest published edition')}
+                      clearable
+                      emptyLabel={tGeneratedValue('Latest published edition')}
                     />
                     <p className="text-xs text-slate-500">
                       <GeneratedValue value="Choose an edition to keep this campaign tied to that version. Leave empty to follow the latest published edition." />
@@ -550,6 +554,97 @@ export function ObligationForm({
           ) : null
         }
       />
+      {kind === 'document' && recurrence.kind === 'frequency' ? (
+        <Card>
+          <CardContent className="space-y-3 pt-5">
+            <Label htmlFor="document-edition-mode">
+              <GeneratedValue value="New edition reminders" />
+            </Label>
+            <Select
+              id="document-edition-mode"
+              value={recurrence.reacknowledgeOnEdition ? 'edition' : 'cadence'}
+              onChange={(event) =>
+                setRecurrence({
+                  ...recurrence,
+                  reacknowledgeOnEdition: event.target.value === 'edition',
+                  newEditionDueDays: recurrence.newEditionDueDays ?? 30,
+                })
+              }
+            >
+              <option value="cadence">{tGeneratedValue('Review on a recurring cadence')}</option>
+              <option value="edition">
+                {tGeneratedValue('Re-acknowledge when a new edition is published')}
+              </option>
+            </Select>
+            {recurrence.reacknowledgeOnEdition ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="edition-due-days">
+                  <GeneratedValue value="Due days after publication" />
+                </Label>
+                <Input
+                  id="edition-due-days"
+                  type="number"
+                  min={0}
+                  max={3650}
+                  value={recurrence.newEditionDueDays ?? 30}
+                  onChange={(event) =>
+                    setRecurrence({ ...recurrence, newEditionDueDays: Number(event.target.value) })
+                  }
+                />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+      {meta.recurrence.recurring && ['frequency', 'cron'].includes(recurrence.kind) ? (
+        <Card>
+          <CardContent className="space-y-3 pt-5">
+            <Label>
+              <GeneratedValue value="Active months" />
+            </Label>
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                aria-label={tGeneratedValue('From month')}
+                value={recurrence.activeMonths?.from ?? ''}
+                onChange={(event) => {
+                  const from = Number(event.target.value)
+                  setRecurrence({
+                    ...recurrence,
+                    activeMonths: from
+                      ? { from, to: recurrence.activeMonths?.to ?? from }
+                      : undefined,
+                  })
+                }}
+              >
+                <option value="">{tGeneratedValue('All year')}</option>
+                {CALENDAR_MONTHS.map((month, index) => (
+                  <option key={month} value={index + 1}>
+                    {tGeneratedValue(month)}
+                  </option>
+                ))}
+              </Select>
+              {recurrence.activeMonths ? (
+                <Select
+                  aria-label={tGeneratedValue('To month')}
+                  value={recurrence.activeMonths.to}
+                  onChange={(event) =>
+                    setRecurrence({
+                      ...recurrence,
+                      activeMonths: { ...recurrence.activeMonths!, to: Number(event.target.value) },
+                    })
+                  }
+                >
+                  {CALENDAR_MONTHS.map((month, index) => (
+                    <option key={month} value={index + 1}>
+                      {tGeneratedValue(month)}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <GeneratedValue
         value={

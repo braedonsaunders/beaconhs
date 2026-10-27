@@ -15,10 +15,13 @@ import {
   type AudienceItem,
   evaluateObligation,
   resolveComplianceClock,
+  resolveObligationAudience,
   resolveFrequencyWindow,
+  isInSeason,
 } from '@beaconhs/compliance'
 import type { ComplianceRecurrence } from '@beaconhs/db/schema'
 import type { ObligationKind } from './_meta'
+import { isCalendarQuantity } from './_meta'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -122,7 +125,39 @@ export async function listObligations(
         .from(complianceAudience)
         .where(inArray(complianceAudience.obligationId, ids))
         .groupBy(complianceAudience.obligationId)
-      for (const r of ac) counts.set(r.id, { n: r.n, everyone: r.everyone, excluded: r.excluded })
+      const audienceRows = await tx
+        .select({
+          id: complianceAudience.obligationId,
+          kind: complianceAudience.kind,
+          entityKey: complianceAudience.entityKey,
+          excluded: complianceAudience.excluded,
+        })
+        .from(complianceAudience)
+        .where(inArray(complianceAudience.obligationId, ids))
+      const byObligation = new Map<string, AudienceItem[]>()
+      for (const row of audienceRows) {
+        const items = byObligation.get(row.id) ?? []
+        items.push({
+          kind: row.kind as AudienceItem['kind'],
+          entityKey: row.entityKey,
+          excluded: row.excluded,
+        })
+        byObligation.set(row.id, items)
+      }
+      for (const r of ac) {
+        const obligation = obs.find((item) => item.id === r.id)
+        const activeMemberCount = obligation
+          ? (
+              await resolveObligationAudience(
+                tx,
+                ctx.tenantId,
+                byObligation.get(r.id) ?? [],
+                obligation.workerType,
+              )
+            ).length
+          : 0
+        counts.set(r.id, { n: activeMemberCount, everyone: r.everyone, excluded: r.excluded })
+      }
     }
 
     const rows = obs.map((o) => {
@@ -179,8 +214,8 @@ export async function obligationCompliance(ctx: Ctx, id: string) {
   if (!data) return null
   const evaluated = await ctx.db(async (tx) => {
     const clock = await resolveComplianceClock(tx, ctx.tenantId)
-    const journal = data.ob.sourceModule === 'journal' && Boolean(data.ob.recurrence.deadline)
-    const period = journal
+    const calendarQuantity = isCalendarQuantity(data.ob)
+    const period = calendarQuantity
       ? resolveFrequencyWindow(data.ob.recurrence, clock, data.ob.createdAt)
       : null
     const [snapshot] = await tx
@@ -192,6 +227,7 @@ export async function obligationCompliance(ctx: Ctx, id: string) {
       hasHistory: Boolean(snapshot),
       result: await evaluateObligation(tx, ctx.tenantId, data.ob, data.audience, clock),
       period,
+      seasonActive: isInSeason(data.ob.recurrence, clock),
     }
   })
   return { obligation: data.ob, audience: data.audience, ...evaluated }

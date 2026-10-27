@@ -231,7 +231,7 @@ export function RecurrencePicker({
                 />
                 <GeneratedValue
                   value={
-                    fields.dueOffset ? (
+                    fields.dueOffset && !calendar ? (
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label htmlFor="rec-off">
                           <GeneratedText id="m_11bc5b3e56eaa6" />

@@ -14,7 +14,8 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { StatusBadge } from '../../../_shared'
-import { JournalPeriod, JournalProgress } from '../../../_journal-progress'
+import { QuantityPeriod, QuantityProgress } from '../../../_quantity-progress'
+import { isCalendarQuantity } from '../../_meta'
 import { PersonPicker } from '../../../by-person/_person-picker'
 
 export async function generateMetadata() {
@@ -182,7 +183,7 @@ export default async function ComplianceHistoryPage({
                   {shown.map((row) => (
                     <TableRow key={`${row.key}:${row.periodKey}`}>
                       <TableCell className="min-w-48">
-                        <JournalPeriod
+                        <QuantityPeriod
                           start={row.periodStart}
                           end={row.periodEnd}
                           locale={ctx.locale}
@@ -215,11 +216,18 @@ export default async function ComplianceHistoryPage({
                       </TableCell>
                       <TableCell>
                         {row.expected != null ? (
-                          data.ob.sourceModule === 'journal' ? (
-                            <JournalProgress
+                          isCalendarQuantity(data.ob) ? (
+                            <QuantityProgress
                               count={row.count ?? 0}
                               expected={row.expected}
                               met={row.status === 'completed'}
+                              noun={
+                                data.ob.sourceModule === 'inspection'
+                                  ? 'inspections'
+                                  : data.ob.sourceModule === 'hazard_assessment'
+                                    ? 'assessments'
+                                    : 'submitted'
+                              }
                             />
                           ) : (
                             <span className="tabular-nums">
