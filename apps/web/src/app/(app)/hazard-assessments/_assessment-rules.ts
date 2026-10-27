@@ -145,9 +145,7 @@ export async function createAssessmentAppResponse(
       ),
     )
   for (const stale of staleLinks) {
-    await tx
-      .delete(hazidAssessmentAppResponses)
-      .where(eq(hazidAssessmentAppResponses.id, stale.id))
+    await tx.delete(hazidAssessmentAppResponses).where(eq(hazidAssessmentAppResponses.id, stale.id))
   }
 
   const [response] = await tx
