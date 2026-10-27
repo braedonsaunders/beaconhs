@@ -16,3 +16,9 @@ export {
   type ClassCredit,
   type ClassDaysInput,
 } from './class-days'
+export {
+  TRAINING_CLASS_SCHEDULE_CHANGED,
+  TRAINING_CLASS_SCHEDULE_SYNC_DELAY_MS,
+  loadTrainingClassScheduleEvent,
+  trainingClassTimeZoneFor,
+} from './class-schedule'
