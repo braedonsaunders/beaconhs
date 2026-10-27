@@ -10,6 +10,8 @@ import {
 
 export const MAX_TRAINING_CLASS_ATTENDEES = 1_000
 const MAX_TRAINING_CLASS_COMPLETION_PAGE_SIZE = 100
+/** One-line completion comment per attendee. */
+export const MAX_TRAINING_CLASS_COMPLETION_NOTE_LENGTH = 300
 const MAX_TRAINING_CLASS_TITLE_LENGTH = 200
 const MAX_TRAINING_CLASS_NOTES_LENGTH = 20_000
 
@@ -154,6 +156,7 @@ type TrainingClassCompletionDecision = {
   attended: boolean
   passed: boolean
   grade: number | null
+  notes: string | null
 }
 
 export function parseTrainingClassCompletionPage(
@@ -179,6 +182,11 @@ export function parseTrainingClassCompletionPage(
       min: 0,
       max: 100,
     })
-    return { attendeeId, attended, passed, grade }
+    const notes = optionalTextInput(
+      formData.get(`notes__${attendeeId}`),
+      'Comment',
+      MAX_TRAINING_CLASS_COMPLETION_NOTE_LENGTH,
+    )
+    return { attendeeId, attended, passed, grade, notes }
   })
 }

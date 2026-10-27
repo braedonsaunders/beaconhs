@@ -27,7 +27,9 @@ import {
   CardTitle,
   DetailHeader,
   EmptyState,
+  Input,
 } from '@beaconhs/ui'
+import { MAX_TRAINING_CLASS_COMPLETION_NOTE_LENGTH } from '@/lib/training-class-policy'
 import {
   orgUnits,
   people,
@@ -805,11 +807,14 @@ export default async function TrainingClassPage({
                                   >
                                     <input type="hidden" name="classId" value={id} />
                                     <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-                                      <table className="w-full min-w-[680px] text-sm">
+                                      <table className="w-full min-w-[860px] text-sm">
                                         <thead className="bg-slate-50 dark:bg-slate-800">
                                           <tr className="text-left text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
                                             <th className="px-3 py-2">
                                               <GeneratedText id="m_12e926c9216094" />
+                                            </th>
+                                            <th className="px-3 py-2">
+                                              <GeneratedValue value={tGeneratedValue('Comments')} />
                                             </th>
                                             <th className="w-24 px-3 py-2 text-center">
                                               <GeneratedText id="m_02497d0c780d25" />
@@ -860,6 +865,19 @@ export default async function TrainingClassPage({
                                                         <GeneratedText id="m_1b91e1a434803f" />
                                                       )}
                                                     </span>
+                                                  </td>
+                                                  <td className="px-3 py-2">
+                                                    <Input
+                                                      name={`notes__${row.att.id}`}
+                                                      defaultValue={row.att.notes ?? ''}
+                                                      maxLength={
+                                                        MAX_TRAINING_CLASS_COMPLETION_NOTE_LENGTH
+                                                      }
+                                                      placeholder={tGeneratedValue(
+                                                        'Add a comment…',
+                                                      )}
+                                                      aria-label={tGeneratedValue('Comment')}
+                                                    />
                                                   </td>
                                                   <CompletionDecisionFields
                                                     attendeeId={row.att.id}

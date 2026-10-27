@@ -352,6 +352,7 @@ export async function saveClassCompletionPage(formData: FormData): Promise<void>
           completionAttended: decision.attended,
           completionPassed: decision.passed,
           completionGrade: decision.grade,
+          notes: decision.notes,
           completionReviewedAt: reviewedAt,
           completionReviewedByTenantUserId: reviewerId,
         })

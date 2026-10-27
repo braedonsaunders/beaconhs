@@ -185,9 +185,22 @@ describe('training class mutation policy', () => {
     form.set(`attended__${ID}`, 'on')
     form.set(`passed__${ID}`, 'on')
     form.set(`grade__${ID}`, '87')
+    form.set(`notes__${ID}`, '  Left early for a site call  ')
     expect(parseTrainingClassCompletionPage(form)).toEqual([
-      { attendeeId: ID, attended: true, passed: true, grade: 87 },
+      {
+        attendeeId: ID,
+        attended: true,
+        passed: true,
+        grade: 87,
+        notes: 'Left early for a site call',
+      },
     ])
+
+    form.set(`notes__${ID}`, '')
+    expect(parseTrainingClassCompletionPage(form)[0]!.notes).toBeNull()
+    form.set(`notes__${ID}`, 'x'.repeat(301))
+    expect(() => parseTrainingClassCompletionPage(form)).toThrow(/too long/)
+    form.delete(`notes__${ID}`)
 
     form.set(`grade__${ID}`, '87points')
     expect(() => parseTrainingClassCompletionPage(form)).toThrow(/invalid/)

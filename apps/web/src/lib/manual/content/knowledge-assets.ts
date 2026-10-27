@@ -342,7 +342,7 @@ Presenting never changes anyone's records. When the class is done, issue records
    - **Starts** and **Ends** save together. Enter both times. If End is not after Start, the page explains what to fix and keeps your edits until the range is valid.
    - When an administrator turns on **Track the customer for each class** under **Admin → Settings**, choose the **Customer** the class was delivered for. Customer is optional and separate from the free-text class location.
 3. Open **Roster**. Search the existing roster or use **Add a person to the roster…** to search active workers by name, employee number, job title, or email. If the picker says more results exist, add more detail to the search. Select the worker and choose **Add**.
-4. Open **Completion** after the class. Search the roster and review attendance, grade, and pass state for every person on the current page.
+4. Open **Completion** after the class. Search the roster and review attendance, grade, and pass state for every person on the current page. Type an optional one-line note in **Comments** for anyone who needs it, such as arriving late.
 5. Choose **Save this page** before moving to another page. The reviewed count shows how many people remain.
 6. When everyone is reviewed, choose **Mark class complete**. BeaconHS locks the class and issues a training record for each person marked as passed.
 7. Open **Activity** any time to see who changed the class, every email sent about it, and whether exports to other systems arrived.
