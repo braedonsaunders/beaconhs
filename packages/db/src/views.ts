@@ -208,10 +208,13 @@ export const REPORT_VIEWS_SQL: string[] = [
        ','
      )                                 AS group_id_list,
      p.status                          AS person_status,
-     -- The next class this person is booked onto for this course. Raw
-     -- certificate coverage remains expired or missing until completion.
-     -- The missing-training report derives its booked scheduling status from
-     -- this date without changing qualification or compliance eligibility.
+     -- The class this person is booked onto for this course. A booking holds
+     -- from registration while the class is upcoming, in progress, or ended
+     -- within the last 7 days and not yet marked complete (completion is often
+     -- recorded a day or two later). Raw certificate coverage remains expired
+     -- or missing until completion; the missing-training report derives its
+     -- booked scheduling status from this date without changing qualification
+     -- or compliance eligibility.
      (SELECT MIN(cl.starts_at)
         FROM training_class_attendees ta
         JOIN training_classes cl
@@ -222,7 +225,7 @@ export const REPORT_VIEWS_SQL: string[] = [
          AND cl.course_id = c.id
          AND cl.cancelled_at IS NULL
          AND cl.completed_at IS NULL
-         AND cl.starts_at >= now()
+         AND cl.ends_at >= now() - interval '7 days'
      )                                 AS booked_starts_at
    FROM people p
    CROSS JOIN training_courses c

@@ -351,7 +351,7 @@ Use **Actions → Print / PDF** in the class header for a paper session sheet. T
 
 Once the details and roster are confirmed, choose **Actions → Email class** and confirm. Initial emails are always manual. You can opt into **Automatic reminder email** on **Details** after configuring a reminder flow. Class emails use the class times, location, and customer when present, and omit the course-description block containing qualified-instructor information. The default **Training class booking** email includes an **Attendees** table with each booked person’s name and email. Cancelled registrations are excluded. An administrator can edit the layout and table under **Admin → Email templates → Training class booking**. New workspaces receive this template and its manual email flow automatically.
 
-In **Reports → Training — Missing**, anyone booked into an upcoming class appears as **Booked**, even without an earlier certificate or compliance assignment. **Booked** takes priority over **Expiring**, **Expired**, and **Missing**. A booking is a plan to train; it does not count as a completed qualification. Cancelled or completed classes do not count as upcoming bookings.
+In **Reports → Training — Missing**, anyone booked into a class appears as **Booked** — while the class is upcoming, while it is running, and for up to 7 days after it ends until it is marked complete — even without an earlier certificate or compliance assignment. **Booked** takes priority over **Expiring**, **Expired**, and **Missing**. A booking is a plan to train; it does not count as a completed qualification. Cancelled or completed classes do not count as bookings.
 
 ## The class calendar
 
