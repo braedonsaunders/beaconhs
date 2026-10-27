@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./limits": "./src/limits.ts",
     "./docx-page-size": "./src/docx-page-size.ts",
-    "./external-images": "./src/external-images.ts"
+    "./external-images": "./src/external-images.ts",
+    "./docx-text": "./src/docx-text.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

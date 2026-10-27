@@ -28,6 +28,7 @@ const config: KnipConfig = {
         'src/storage-init.ts',
         'src/scripts/convert-documents-to-letter.ts',
         'src/scripts/embed-legacy-azure-images.ts',
+        'src/scripts/refresh-published-legacy-images.ts',
       ],
       // Bundled @beaconhs/forms-pdf keeps `qrcode` external; the worker image
       // must still resolve it at runtime.
