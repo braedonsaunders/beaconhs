@@ -7,11 +7,16 @@ vi.mock('@/lib/audit', () => ({ recordAuditInTransaction: vi.fn() }))
 import type { RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
 import { optionalDecimal, requiredText, columnOps } from './codecs'
+import { recordAuditInTransaction } from '@/lib/audit'
 import {
+  auditFieldChanges,
   defineRecordSaver,
+  readableFieldLabel,
+  readableFieldSummary,
   RecordEditRejection,
   recordLocked,
   recordOp,
+  withinFieldAuditCoalesceWindow,
   type RecordChange,
 } from './edits'
 
@@ -86,6 +91,100 @@ function harness(row: Row, options: { authorized?: boolean } = {}) {
 
 beforeEach(() => {
   revalidatePath.mockClear()
+  vi.mocked(recordAuditInTransaction).mockClear()
+})
+
+describe('readable field audit summaries', () => {
+  it('names reference fields by the thing, not the stored column', () => {
+    expect(readableFieldLabel('instructorTenantUserId')).toBe('instructor')
+    expect(readableFieldLabel('siteOrgUnitId')).toBe('site')
+    expect(readableFieldLabel('courseId')).toBe('course')
+    expect(readableFieldLabel('reminderHours')).toBe('reminder hours')
+    expect(readableFieldLabel('title')).toBe('title')
+  })
+
+  it('rewrites legacy raw summaries and leaves prose summaries alone', () => {
+    expect(readableFieldSummary('Updated instructorTenantUserId')).toBe('Updated instructor')
+    expect(readableFieldSummary('Updated siteOrgUnitId')).toBe('Updated site')
+    expect(readableFieldSummary('Queued class email')).toBe('Queued class email')
+    expect(readableFieldSummary(null)).toBeNull()
+  })
+})
+
+describe('field audit coalescing', () => {
+  const now = new Date('2026-10-27T12:00:00Z')
+
+  it('only treats rows inside the window as coalesce candidates', () => {
+    expect(withinFieldAuditCoalesceWindow(new Date(now.getTime() - 30_000), now)).toBe(true)
+    expect(withinFieldAuditCoalesceWindow(new Date(now.getTime() - 10 * 60_000), now)).toBe(false)
+  })
+
+  function coalesceTx(recent: unknown[]) {
+    const updates: Record<string, unknown>[] = []
+    const chain = {
+      from: () => chain,
+      where: () => chain,
+      orderBy: () => chain,
+      limit: () => chain,
+      for: async () => recent,
+    }
+    const tx = {
+      select: () => chain,
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          updates.push(values)
+          return { where: async () => [] }
+        },
+      }),
+    } as unknown as Database
+    const ctx = { tenantId: 'tenant-1', userId: 'user-1' } as unknown as RequestContext
+    return { tx, ctx, updates }
+  }
+
+  it('collapses a rapid repeat edit into the recent row, keeping the final value', async () => {
+    const { tx, ctx, updates } = coalesceTx([
+      { id: 'audit-1', occurredAt: new Date(now.getTime() - 5_000), metadata: {} },
+    ])
+    await auditFieldChanges(
+      tx,
+      ctx,
+      { entityType: 'training_class', entityId: RECORD_ID },
+      [{ op: 'title', before: 'Fall', after: 'Fall protection' }],
+      undefined,
+      now,
+    )
+    expect(updates).toEqual([
+      {
+        summary: 'Updated title',
+        after: { title: 'Fall protection' },
+        occurredAt: now,
+        metadata: { coalescedEdits: 1 },
+      },
+    ])
+    expect(recordAuditInTransaction).not.toHaveBeenCalled()
+  })
+
+  it('writes a fresh row when there is no recent edit to collapse into', async () => {
+    const { tx, ctx, updates } = coalesceTx([])
+    await auditFieldChanges(
+      tx,
+      ctx,
+      { entityType: 'training_class', entityId: RECORD_ID },
+      [{ op: 'instructorTenantUserId', before: null, after: 'tu-1' }],
+      undefined,
+      now,
+    )
+    expect(updates).toEqual([])
+    expect(recordAuditInTransaction).toHaveBeenCalledWith(
+      tx,
+      ctx,
+      expect.objectContaining({
+        entityType: 'training_class',
+        summary: 'Updated instructor',
+        after: { instructorTenantUserId: 'tu-1' },
+      }),
+    )
+  })
 })
 
 describe('record saver compare-and-set', () => {

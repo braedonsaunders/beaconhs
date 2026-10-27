@@ -112,6 +112,15 @@ Class automation starter templates use the manual **Email class** trigger. Start
 
 On the class, check the details and roster, then choose **Actions → Email class** and confirm. **Class email queued.** means the email is waiting for delivery; it is not a delivery receipt. Check **Admin → Email log** for delivery results.
 
+Class emails go to each person on their own, so attendees never see each other's email addresses. If your workspace edited its class email template to list attendee email addresses in the message itself, an admin can remove that column under **Admin → Email templates**.
+
+## See a class's activity, emails, and exports
+
+1. Open the class and tap **Activity**.
+2. **Activity** shows who changed what, and when. Search it or filter by **Action**.
+3. **Emails** lists every email sent about this class: the subject, who it went to, whether it was sent, and any error. Tap a subject to open it in **Admin → Email log**. Everyone who can open the class sees recipient names. Only people who manage classes, or who can open the email log, see the email addresses.
+4. **Integration deliveries** shows exports of this class to other systems. If one failed, read the error. An admin can fix the connection and tap **Re-send**.
+
 To send one reminder, choose **Automatic reminder email** on **Details**: **1 day before class**, **2 days before class**, or **1 week before class**. It starts **Off**. A reminder only runs after a manager queues the initial email, while the class is still upcoming and has an active roster. Cancelled and completed classes receive no reminder.
 
 ## Design certificates and wallet cards (managers)
@@ -333,6 +342,7 @@ Presenting never changes anyone's records. When the class is done, issue records
 4. Open **Completion** after the class. Search the roster and review attendance, grade, and pass state for every person on the current page.
 5. Choose **Save this page** before moving to another page. The reviewed count shows how many people remain.
 6. When everyone is reviewed, choose **Mark class complete**. BeaconHS locks the class and issues a training record for each person marked as passed.
+7. Open **Activity** any time to see who changed the class, every email sent about it, and whether exports to other systems arrived.
 
 A person marked as a no-show cannot pass. A cancelled class is read-only; choose **Reopen class** before changing details, the roster, or completion decisions. A completed class stays locked so its issued records cannot drift.
 

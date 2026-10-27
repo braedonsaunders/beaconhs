@@ -36,7 +36,7 @@ vi.mock('@beaconhs/events', () => ({
 vi.mock('@/lib/audit', () => ({ recordAuditInTransaction: mocks.recordAuditInTransaction }))
 
 import type { Database } from '@beaconhs/db'
-import { correctiveActions, orgUnits, tenantUsers } from '@beaconhs/db/schema'
+import { auditLog, correctiveActions, orgUnits, tenantUsers } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { dateIsoInTimeZone } from '@/lib/datetime'
 import { correctiveActionRecordSaver } from './_record-edits'
@@ -87,7 +87,7 @@ function caRow(overrides: Partial<Row> = {}): Row {
 /** A query builder whose every step is chainable and awaitable. */
 function query<T>(result: () => T) {
   const chain: Record<string, unknown> = {}
-  for (const step of ['from', 'where', 'limit', 'for', 'set']) chain[step] = () => chain
+  for (const step of ['from', 'where', 'orderBy', 'limit', 'for', 'set']) chain[step] = () => chain
   chain.then = (resolve: (value: T) => unknown, reject: (error: unknown) => unknown) =>
     Promise.resolve().then(result).then(resolve, reject)
   return chain
@@ -103,6 +103,7 @@ function harness(row: Row, options: { activeOwners?: string[]; sites?: string[] 
         if (table === correctiveActions) return [row]
         if (table === tenantUsers) return (options.activeOwners ?? []).map((id) => ({ id }))
         if (table === orgUnits) return (options.sites ?? []).map((id) => ({ id }))
+        if (table === auditLog) return []
         throw new Error('unexpected table')
       })
       return {
@@ -223,7 +224,7 @@ describe('corrective action record saver', () => {
       expect.objectContaining({
         entityType: 'corrective_action',
         entityId: CA_ID,
-        summary: 'Updated ownerTenantUserId',
+        summary: 'Updated owner',
       }),
     )
     expect(mocks.revalidatePath).toHaveBeenCalledWith(`/corrective-actions/${CA_ID}`)

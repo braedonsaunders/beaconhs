@@ -18,8 +18,9 @@
 // the module's `format` must produce exactly what its page passes to the field.
 
 import { revalidatePath } from 'next/cache'
-import { sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm'
 import { pgError, type Database } from '@beaconhs/db'
+import { auditLog } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { jsonEqual } from '@/lib/offline-drafts/model'
@@ -260,9 +261,70 @@ export function defineRecordSaver<L>(module: string, spec: RecordSaverSpec<L>): 
   }
 }
 
+/** Known raw field names whose readable label is not plain camelCase splitting. */
+const FIELD_LABEL_OVERRIDES: Record<string, string> = {
+  instructorTenantUserId: 'instructor',
+  siteOrgUnitId: 'site',
+  courseId: 'course',
+  schedule: 'schedule',
+}
+
+/**
+ * A stored field/op key as a person would name it: `instructorTenantUserId`
+ * reads "instructor", `reminderHours` reads "reminder hours". Trailing
+ * reference suffixes (`…TenantUserId`, `…UserId`, `…OrgUnitId`, `…Id`) name
+ * the storage, not the thing, so they are dropped.
+ */
+export function readableFieldLabel(field: string): string {
+  const override = FIELD_LABEL_OVERRIDES[field]
+  if (override) return override
+  const base = field
+    .replace(/TenantUserId$/, '')
+    .replace(/OrgUnitId$/, '')
+    .replace(/UserId$/, '')
+    .replace(/Id$/, '')
+  const words = (base || field)
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .trim()
+    .toLowerCase()
+  return words || field
+}
+
+/** Rewrite a stored "Updated <rawField>" summary with the readable label. */
+export function readableFieldSummary(summary: string | null): string | null {
+  if (!summary) return summary
+  const match = /^(Updated )([A-Za-z][A-Za-z0-9_]*)$/.exec(summary.trim())
+  if (!match) return summary
+  return `${match[1]}${readableFieldLabel(match[2]!)}`
+}
+
+/**
+ * Autosave writes a field as the person types, so one edit can land as
+ * several saves seconds apart. Field audits by the same actor for the same
+ * field inside this window collapse into the first row: its `before` (the
+ * value before the burst) is kept and its `after` becomes the final value.
+ */
+const FIELD_AUDIT_COALESCE_WINDOW_MS = 2 * 60_000
+
+export function withinFieldAuditCoalesceWindow(
+  occurredAt: Date | string,
+  now: Date,
+  windowMs: number = FIELD_AUDIT_COALESCE_WINDOW_MS,
+): boolean {
+  const at = occurredAt instanceof Date ? occurredAt.getTime() : new Date(occurredAt).getTime()
+  return Number.isFinite(at) && at >= now.getTime() - windowMs && at <= now.getTime()
+}
+
+function auditActorId(ctx: RequestContext): string | null {
+  // Mirrors recordAuditInTransaction: a synthetic API-key actor is stored null.
+  return ctx.apiKey && ctx.userId === `api_key:${ctx.apiKey.id}` ? null : ctx.userId
+}
+
 /**
  * The audit trail the inline editors have always written: one "Updated
- * <field>" entry per changed field, with the stored value.
+ * <field>" entry per changed field, with the stored value. Rapid repeat
+ * edits of the same field by the same actor coalesce (see above).
  */
 export async function auditFieldChanges(
   tx: Database,
@@ -270,12 +332,45 @@ export async function auditFieldChanges(
   entity: { entityType: string; entityId: string },
   changes: RecordChange[],
   describe: (change: RecordChange) => { summary: string; key?: string } = (change) => ({
-    summary: `Updated ${change.op}`,
+    summary: `Updated ${readableFieldLabel(change.op)}`,
   }),
+  now: Date = new Date(),
 ): Promise<void> {
   for (const change of changes) {
     const { summary, key } = describe(change)
     const field = key ?? change.op
+    const actorId = auditActorId(ctx)
+    const [recent] = await tx
+      .select({ id: auditLog.id, occurredAt: auditLog.occurredAt, metadata: auditLog.metadata })
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.tenantId, ctx.tenantId),
+          eq(auditLog.entityType, entity.entityType),
+          eq(auditLog.entityId, entity.entityId),
+          eq(auditLog.action, 'update'),
+          actorId ? eq(auditLog.actorUserId, actorId) : isNull(auditLog.actorUserId),
+          gte(auditLog.occurredAt, new Date(now.getTime() - FIELD_AUDIT_COALESCE_WINDOW_MS)),
+          sql`${auditLog.after} ? ${field}`,
+        ),
+      )
+      .orderBy(desc(auditLog.occurredAt), desc(auditLog.id))
+      .limit(1)
+      .for('update')
+    if (recent && withinFieldAuditCoalesceWindow(recent.occurredAt, now)) {
+      const prior =
+        typeof recent.metadata?.coalescedEdits === 'number' ? recent.metadata.coalescedEdits : 0
+      await tx
+        .update(auditLog)
+        .set({
+          summary,
+          after: { [field]: change.after },
+          occurredAt: now,
+          metadata: { ...(recent.metadata ?? {}), coalescedEdits: prior + 1 },
+        })
+        .where(eq(auditLog.id, recent.id))
+      continue
+    }
     await recordAuditInTransaction(tx, ctx, {
       ...entity,
       action: 'update',

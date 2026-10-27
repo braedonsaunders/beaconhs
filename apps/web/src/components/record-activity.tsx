@@ -7,7 +7,9 @@ import {
   orgUnits,
   inspectionRecordCriteria,
   attachments,
+  trainingCourses,
 } from '@beaconhs/db/schema'
+import { readableFieldLabel, readableFieldSummary } from '@/lib/record-sync/edits'
 import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 import type { RequestContext } from '@beaconhs/tenant'
 import { activityPageForEntity } from '@/lib/audit'
@@ -55,7 +57,7 @@ export async function RecordActivity({
   if (ids.size)
     await ctx.db(async (tx) => {
       const keys = [...ids]
-      const [persons, members, locations, findings] = await Promise.all([
+      const [persons, members, locations, findings, courses] = await Promise.all([
         tx
           .select({ id: people.id, first: people.firstName, last: people.lastName })
           .from(people)
@@ -81,16 +83,26 @@ export async function RecordActivity({
               inArray(inspectionRecordCriteria.id, keys),
             ),
           ),
+        tx
+          .select({ id: trainingCourses.id, name: trainingCourses.name })
+          .from(trainingCourses)
+          .where(inArray(trainingCourses.id, keys)),
       ])
       for (const person of persons) names.set(person.id, `${person.first} ${person.last}`.trim())
-      for (const row of [...members, ...locations, ...findings])
+      for (const row of [...members, ...locations, ...findings, ...courses])
         if (row.name) names.set(row.id, row.name)
     })
+  const KEEP_KEYS = new Set(['id', 'rowId', 'signatureAttachmentId'])
   function readable(value: unknown): unknown {
     if (typeof value === 'string') return names.get(value) ?? value
     if (Array.isArray(value)) return value.map(readable)
     if (value && typeof value === 'object')
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, readable(v)]))
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [
+          KEEP_KEYS.has(k) ? k : readableFieldLabel(k),
+          readable(v),
+        ]),
+      )
     return value
   }
   function signatureAttachment(row: (typeof data.rows)[number]): string | undefined {
@@ -122,7 +134,7 @@ export async function RecordActivity({
     summary:
       typeof row.after?.rowId === 'string' && names.has(row.after.rowId)
         ? `${row.summary ?? row.action} — ${names.get(row.after.rowId)}`
-        : row.summary,
+        : readableFieldSummary(row.summary),
     before: readable(row.before) as typeof row.before,
     after: readable(row.after) as typeof row.after,
   }))

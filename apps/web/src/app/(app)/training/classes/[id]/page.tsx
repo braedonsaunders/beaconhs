@@ -1,5 +1,7 @@
 import { RecordActionMenu } from '@/components/record-action-menu'
-import { SubjectDeliveryWarnings } from '@/components/integration-deliveries'
+import { SubjectDeliveries, SubjectDeliveryWarnings } from '@/components/integration-deliveries'
+import { RecordActivity } from '@/components/record-activity'
+import { RecordEmails } from '@/components/record-emails'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -70,7 +72,7 @@ import { EmailClassButton } from './_email-class-button'
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['details', 'roster', 'completion'] as const
+const TABS = ['details', 'roster', 'completion', 'activity'] as const
 type Tab = (typeof TABS)[number]
 const ROSTER_SORTS = ['person'] as const
 
@@ -429,6 +431,7 @@ export default async function TrainingClassPage({
               { key: 'details', label: 'Details' },
               { key: 'roster', label: 'Roster', count: attendeeCount },
               { key: 'completion', label: 'Completion' },
+              { key: 'activity', label: 'Activity' },
             ]}
           />
         }
@@ -851,6 +854,46 @@ export default async function TrainingClassPage({
                     />
                   </CardContent>
                 </Card>
+              ) : null
+            }
+          />
+
+          <GeneratedValue
+            value={
+              active === 'activity' ? (
+                <div className="space-y-5">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{tGeneratedValue('Activity')}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <RecordActivity
+                        ctx={ctx}
+                        entityType="training_class"
+                        entityId={id}
+                        basePath={basePath}
+                        searchParams={sp}
+                      />
+                    </CardContent>
+                  </Card>
+                  <RecordEmails
+                    ctx={ctx}
+                    subjectType="training_class"
+                    subjectId={id}
+                    basePath={basePath}
+                    searchParams={sp}
+                    canSeeAddresses={canManageClasses || can(ctx, 'admin.audit.read')}
+                  />
+                  <SubjectDeliveries
+                    ctx={ctx}
+                    triggerKeys={['training.class.completed']}
+                    subjectId={id}
+                    classId={id}
+                    canResend={ctx.isSuperAdmin || can(ctx, 'admin.integrations.manage')}
+                    basePath={basePath}
+                    searchParams={sp}
+                  />
+                </div>
               ) : null
             }
           />

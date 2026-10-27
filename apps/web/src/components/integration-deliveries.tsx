@@ -216,6 +216,170 @@ export async function AutomationDeliveries({
 }
 
 /**
+ * Full outbound delivery history for one record, across every trigger key
+ * the record can publish: delivered, failed (with the destination's error),
+ * and published-but-never-delivered, each incomplete one re-sendable.
+ */
+export async function SubjectDeliveries({
+  ctx,
+  triggerKeys,
+  subjectId,
+  classId,
+  canResend,
+  basePath,
+  searchParams,
+}: {
+  ctx: RequestContext
+  triggerKeys: string[]
+  subjectId: string
+  classId?: string
+  canResend: boolean
+  basePath: string
+  searchParams: Record<string, string | string[] | undefined>
+}) {
+  const t = await getGeneratedValueTranslations()
+  const all = (
+    await Promise.all(triggerKeys.map((key) => deliveriesForSubject(ctx, key, subjectId)))
+  ).flat()
+  const params = parseListParams(
+    { page: searchParams.deliveryPage, q: searchParams.deliveryQ },
+    { perPage: PER_PAGE, sort: 'date', allowedSorts: ['date'] },
+  )
+  const statusFilter = pickString(searchParams.deliveryStatus)
+  const q = (params.q ?? '').toLowerCase()
+  const filtered = all.filter((d) => {
+    if (statusFilter && d.status !== statusFilter) return false
+    if (
+      q &&
+      !(d.automationName ?? '').toLowerCase().includes(q) &&
+      !(d.error ?? '').toLowerCase().includes(q)
+    )
+      return false
+    return true
+  })
+  const pageRows = filtered.slice((params.page - 1) * PER_PAGE, params.page * PER_PAGE)
+  const counts = {
+    delivered: all.filter((d) => d.status === 'delivered').length,
+    failed: all.filter((d) => d.status === 'failed').length,
+    not_delivered: all.filter((d) => d.status === 'not_delivered').length,
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <GeneratedValue value={t('Integration deliveries')} />
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          <SearchInput
+            placeholder={t('Search by integration or error…')}
+            paramKey="deliveryQ"
+            pageParamKey="deliveryPage"
+          />
+          <FilterChips
+            basePath={basePath}
+            currentParams={searchParams}
+            paramKey="deliveryStatus"
+            pageParamKey="deliveryPage"
+            label={t('Status')}
+            options={[
+              { value: 'delivered', label: t('Delivered'), count: counts.delivered },
+              { value: 'failed', label: t('Failed'), count: counts.failed },
+              {
+                value: 'not_delivered',
+                label: t('Not delivered'),
+                count: counts.not_delivered,
+              },
+            ]}
+          />
+        </div>
+        {pageRows.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            <GeneratedValue value={t('No deliveries yet.')} />
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  <th className="py-2 pr-3 font-medium">
+                    <GeneratedValue value={t('Integration')} />
+                  </th>
+                  <th className="py-2 pr-3 font-medium">
+                    <GeneratedValue value={t('Status')} />
+                  </th>
+                  <th className="py-2 pr-3 font-medium">
+                    <GeneratedValue value={t('Last attempt')} />
+                  </th>
+                  <th className="py-2 pr-3 font-medium">
+                    <GeneratedValue value={t('Error')} />
+                  </th>
+                  <th className="py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((d) => (
+                  <tr
+                    key={`${d.automationId}:${d.triggerKey}`}
+                    className="border-b border-slate-100 align-top dark:border-slate-800"
+                  >
+                    <td className="py-2 pr-3 text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value={d.automationName ?? t('Integration')} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1',
+                          STATUS_PILL[d.status],
+                        )}
+                      >
+                        <GeneratedValue value={statusLabel(t, d.status)} />
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                      <GeneratedValue
+                        value={
+                          d.lastAttemptAt
+                            ? formatDateTime(d.lastAttemptAt, ctx.timezone, ctx.locale)
+                            : '—'
+                        }
+                      />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span
+                        className="block max-w-md truncate text-xs text-red-600 dark:text-red-400"
+                        title={d.error ?? undefined}
+                      >
+                        <GeneratedValue value={d.error ?? ''} />
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      {canResend && d.status !== 'delivered' ? (
+                        <ResendForm delivery={d} classId={classId} label={t('Re-send')} />
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Pagination
+          basePath={basePath}
+          currentParams={searchParams}
+          pageParamKey="deliveryPage"
+          page={params.page}
+          perPage={PER_PAGE}
+          total={filtered.length}
+        />
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
  * Compact warning for a single record (e.g. a training class): renders only
  * when an automation delivery for this record failed or never landed.
  */
