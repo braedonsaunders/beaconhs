@@ -43,7 +43,7 @@ BEGIN
           'Class emails now go to each recipient individually',
           jsonb_build_object('graph', flow.graph),
           jsonb_build_object('graph', jsonb_set(flow.graph, '{nodes}', nodes)),
-          '{"migration":"0100_email_subject_linkage_and_individual_class_emails"}'::jsonb
+          '{"migration":"0092_email_subject_linkage_and_individual_class_emails"}'::jsonb
         );
       END IF;
     END LOOP;
