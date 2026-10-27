@@ -1,4 +1,4 @@
-import { JournalProgress, JournalPeriod } from '../_journal-progress'
+import { QuantityProgress, QuantityPeriod } from '../_quantity-progress'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
@@ -40,7 +40,7 @@ import {
   loadMyOpenCorrectiveActions,
 } from '@/lib/my-corrective-actions'
 import { MyCorrectiveActionsBlock } from '@/components/my-corrective-actions-block'
-import { OBLIGATION_KINDS, type ObligationKind } from '../obligations/_meta'
+import { isCalendarQuantity, OBLIGATION_KINDS, type ObligationKind } from '../obligations/_meta'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -346,15 +346,22 @@ export default async function MyCompliancePage({
                                         <GeneratedValue value="Work-day data missing; weekdays used" />
                                       </p>
                                     ) : null}
-                                    {r.kind === 'journal' ? (
+                                    {isCalendarQuantity(r) ? (
                                       <div className="mt-2 space-y-1">
-                                        <JournalProgress
+                                        <QuantityProgress
                                           count={r.count}
                                           expected={r.expected}
                                           met={r.status === 'completed'}
+                                          noun={
+                                            r.kind === 'inspection'
+                                              ? 'inspections'
+                                              : r.kind === 'hazard_assessment'
+                                                ? 'assessments'
+                                                : 'submitted'
+                                          }
                                         />
                                         {r.periodStart && r.periodEnd ? (
-                                          <JournalPeriod
+                                          <QuantityPeriod
                                             start={r.periodStart}
                                             end={r.periodEnd}
                                             locale={ctx.locale}

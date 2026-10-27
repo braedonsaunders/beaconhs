@@ -4,7 +4,7 @@ import { GeneratedValue } from '@/i18n/generated'
 import { PercentBar } from './_shared'
 
 /** Average individual progress, so one person's extra journals cannot cover another. */
-export function journalProgressPercent(
+export function quantityProgressPercent(
   rows: readonly { count?: number; expected?: number }[],
 ): number {
   if (!rows.length) return 0
@@ -22,20 +22,22 @@ export function journalProgressPercent(
   )
 }
 
-export function JournalProgress({
+export function QuantityProgress({
   count,
   expected,
   met = false,
+  noun = 'submitted',
 }: {
   count: number
   expected: number
   met?: boolean
+  noun?: string
 }) {
   return (
     <div className="max-w-56 min-w-28 space-y-1">
       <div className="text-sm tabular-nums">
         <GeneratedValue value={count} /> / <GeneratedValue value={expected} />{' '}
-        <GeneratedValue value="submitted" />
+        <GeneratedValue value={noun} />
       </div>
       <PercentBar
         percent={expected === 0 ? 100 : Math.min(100, (count / Math.max(1, expected)) * 100)}
@@ -50,7 +52,7 @@ export function JournalProgress({
   )
 }
 
-export function JournalPeriod({
+export function QuantityPeriod({
   start,
   end,
   locale,

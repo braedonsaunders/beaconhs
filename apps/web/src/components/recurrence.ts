@@ -20,6 +20,9 @@ export type RecurrenceValue = {
   dueOn?: string
   remindBeforeDays?: number
   dueOffsetMinutes?: number
+  activeMonths?: { from: number; to: number }
+  newEditionDueDays?: number
+  reacknowledgeOnEdition?: boolean
 }
 
 export const FREQUENCIES: Array<{ value: Frequency; label: string; cron: string }> = [
@@ -71,7 +74,18 @@ export function recurrenceValueFromStored(rec: {
   dueOn?: string
   remindBeforeDays?: number
   dueOffsetMinutes?: number
+  activeMonths?: { from: number; to: number }
+  newEditionDueDays?: number
+  reacknowledgeOnEdition?: boolean
 }): RecurrenceValue {
+  if (rec.kind === 'event') {
+    return {
+      kind: 'frequency',
+      frequency: 'year',
+      reacknowledgeOnEdition: true,
+      newEditionDueDays: rec.newEditionDueDays ?? 30,
+    }
+  }
   if (rec.kind === 'one_time') {
     return { kind: 'one_time', dueOn: rec.dueOn, remindBeforeDays: rec.remindBeforeDays ?? 7 }
   }
@@ -90,6 +104,9 @@ export function recurrenceValueFromStored(rec: {
       compliantPercentage: rec.compliantPercentage ?? 100,
       remindBeforeDays: rec.remindBeforeDays ?? 7,
       dueOffsetMinutes: rec.dueOffsetMinutes,
+      activeMonths: rec.activeMonths,
+      newEditionDueDays: rec.newEditionDueDays,
+      reacknowledgeOnEdition: rec.reacknowledgeOnEdition,
     }
   }
   // expiry / event — the form shows no schedule knobs for these kinds.

@@ -47,7 +47,11 @@ export function resolveEvidenceEvaluationWindow(
   clock: ComplianceClock,
   activeFrom: Date,
 ): EvidenceEvaluationWindow {
-  if (recurrence.kind === 'one_time' || recurrence.kind === 'expiry') {
+  if (
+    recurrence.kind === 'one_time' ||
+    recurrence.kind === 'expiry' ||
+    recurrence.kind === 'event'
+  ) {
     const today = complianceDate(clock)
     const dueOn = recurrence.kind === 'one_time' ? (recurrence.dueOn ?? null) : null
     return {

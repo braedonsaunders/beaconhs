@@ -41,6 +41,12 @@ const recurrenceSchema = z
       .optional(),
     remindBeforeDays: z.number().int().min(0).max(3_650).optional(),
     dueOffsetMinutes: z.number().int().min(0).max(525_600).optional(),
+    activeMonths: z
+      .object({ from: z.number().int().min(1).max(12), to: z.number().int().min(1).max(12) })
+      .strict()
+      .optional(),
+    newEditionDueDays: z.number().int().min(0).max(3_650).optional(),
+    reacknowledgeOnEdition: z.boolean().optional(),
   })
   .strict()
 
@@ -124,6 +130,7 @@ export function parseObligationInput(raw: unknown): ObligationInputParseResult {
     if (!allowed.has(item.type)) {
       return { ok: false, error: `${item.type.replace('_', ' ')} is not valid for this obligation` }
     }
+
     const entityKey = item.type === 'everyone' ? '' : item.entityKey
     if (item.type !== 'everyone' && !entityKey) {
       return { ok: false, error: 'Every audience row must have a target' }
@@ -135,17 +142,29 @@ export function parseObligationInput(raw: unknown): ObligationInputParseResult {
   }
 
   if (
+    input.recurrence.activeMonths &&
+    (!meta.recurrence.recurring || !['frequency', 'cron'].includes(input.recurrence.kind))
+  )
+    return { ok: false, error: 'Active months require a recurring obligation' }
+  if (
+    input.recurrence.reacknowledgeOnEdition &&
+    (input.kind !== 'document' || input.recurrence.kind !== 'frequency')
+  )
+    return { ok: false, error: 'Edition reminders require a recurring document obligation' }
+
+  if (
     input.recurrence.evidenceWindow === 'rolling' &&
-    (input.kind !== 'training' || input.recurrence.kind !== 'frequency')
+    (!(input.kind === 'training' || input.kind === 'document') ||
+      input.recurrence.kind !== 'frequency')
   )
     return {
       ok: false,
-      error: 'Rolling completion windows are only available for recurring training',
+      error: 'Rolling completion windows require recurring training or document acknowledgement',
     }
 
   if (
     input.recurrence.deadline &&
-    (!(input.kind === 'training' || meta.recurrence.calendar) ||
+    (!(input.kind === 'training' || input.kind === 'document' || meta.recurrence.calendar) ||
       input.recurrence.kind !== 'frequency' ||
       input.recurrence.evidenceWindow !== 'calendar')
   )

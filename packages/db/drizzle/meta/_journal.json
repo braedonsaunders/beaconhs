@@ -617,6 +617,13 @@
       "when": 1793109600000,
       "tag": "0088_ca_assignment_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1793113200000,
+      "tag": "0089_compliance_obligation_cutover",
+      "breakpoints": true
     }
   ]
 }

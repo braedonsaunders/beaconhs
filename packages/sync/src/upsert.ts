@@ -7,6 +7,7 @@
 // show the decision the write path would make.
 
 import { createHash, randomBytes } from 'node:crypto'
+import { materializeIdentityAudienceObligations } from '@beaconhs/compliance'
 import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm'
 import {
   normalizeCatalogDisplayName,
@@ -295,8 +296,21 @@ export async function upsertRecord(
   rec: CanonicalRecord,
 ): Promise<UpsertResult> {
   switch (rec.entity) {
-    case 'people':
-      return upsertPerson(tx, ctx, rec.externalId, rec.data)
+    case 'people': {
+      const result = await upsertPerson(tx, ctx, rec.externalId, rec.data)
+      const beforeStatus = result.before?.status
+      const afterStatus = result.after?.status
+      if (
+        !ctx.dryRun &&
+        result.canonicalId &&
+        result.action === 'updated' &&
+        beforeStatus !== afterStatus &&
+        (beforeStatus === 'active' || afterStatus === 'active')
+      ) {
+        await materializeIdentityAudienceObligations(tx, ctx.tenantId, [result.canonicalId])
+      }
+      return result
+    }
     case 'org_unit':
       return upsertOrgUnit(tx, ctx, rec.externalId, rec.data)
     case 'equipment':

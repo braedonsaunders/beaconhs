@@ -1027,6 +1027,9 @@ importers:
 
   packages/sync:
     dependencies:
+      '@beaconhs/compliance':
+        specifier: workspace:*
+        version: link:../compliance
       '@beaconhs/crypto':
         specifier: workspace:*
         version: link:../crypto

@@ -1,4 +1,4 @@
-import { JournalPeriod } from './_journal-progress'
+import { QuantityPeriod } from './_quantity-progress'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
@@ -23,7 +23,7 @@ import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { Pagination } from '@/components/pagination'
 import { obligationOverview, kindLabel } from './_hub'
-import { OBLIGATION_KINDS, type ObligationKind } from './obligations/_meta'
+import { isCalendarQuantity, OBLIGATION_KINDS, type ObligationKind } from './obligations/_meta'
 import { PercentBar } from './_shared'
 import { ComplianceSubNav } from './_sub-nav'
 
@@ -178,9 +178,9 @@ export default async function ComplianceOverviewPage({
                             >
                               <GeneratedValue value={r.title} />
                             </Link>
-                            {r.kind === 'journal' && r.periodStart && r.periodEnd ? (
+                            {isCalendarQuantity(r) && r.periodStart && r.periodEnd ? (
                               <div>
-                                <JournalPeriod
+                                <QuantityPeriod
                                   start={r.periodStart}
                                   end={r.periodEnd}
                                   locale={ctx.locale}
@@ -211,20 +211,28 @@ export default async function ComplianceOverviewPage({
                             <div className="flex items-center gap-2">
                               <div className="max-w-xs flex-1">
                                 <PercentBar
-                                  percent={r.kind === 'journal' ? r.progressPercent : r.percent}
-                                  progress={r.kind === 'journal'}
+                                  percent={isCalendarQuantity(r) ? r.progressPercent : r.percent}
+                                  progress={isCalendarQuantity(r)}
                                 />
                               </div>
                               <span className="min-w-[3rem] text-right text-xs text-slate-600 tabular-nums dark:text-slate-400">
                                 <GeneratedValue
-                                  value={r.kind === 'journal' ? r.progressPercent : r.percent}
+                                  value={isCalendarQuantity(r) ? r.progressPercent : r.percent}
                                 />
                                 %
                               </span>
                             </div>
-                            {r.kind === 'journal' ? (
+                            {isCalendarQuantity(r) ? (
                               <div className="mt-1 text-xs text-slate-500">
-                                <GeneratedValue value="Submission progress" />
+                                <GeneratedValue
+                                  value={
+                                    r.kind === 'inspection'
+                                      ? 'Inspection progress'
+                                      : r.kind === 'hazard_assessment'
+                                        ? 'Assessment progress'
+                                        : 'Submission progress'
+                                  }
+                                />
                               </div>
                             ) : null}
                           </TableCell>

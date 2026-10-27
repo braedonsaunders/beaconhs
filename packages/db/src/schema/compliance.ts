@@ -134,6 +134,12 @@ export type ComplianceRecurrence = {
   compliantPercentage?: number
   journalDays?: 'weekdays' | 'calendar' | 'worked_days'
   reminderBuckets?: number[]
+  /** Seasonal window (1-12, may wrap year end, e.g. Nov–Mar). Recurring only. */
+  activeMonths?: { from: number; to: number }
+  /** Document kind='event': days after a new edition is published to re-acknowledge. */
+  newEditionDueDays?: number
+  /** Acknowledgement trigger: on every published edition instead of a cadence. */
+  reacknowledgeOnEdition?: boolean
 }
 
 export const complianceObligations = pgTable(

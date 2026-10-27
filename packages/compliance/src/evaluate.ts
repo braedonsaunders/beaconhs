@@ -59,8 +59,12 @@ import {
   complianceDate,
   type ComplianceClock,
   frequencyProgress,
+  isInSeason,
+  nextSeasonStartAt,
   resolveCronWindow,
   resolveFrequencyWindow,
+  seasonAdjustedNextDueAt,
+  shiftCompletionDate,
 } from './schedule'
 import {
   resolveEvidenceEvaluationWindow,
@@ -148,8 +152,28 @@ export async function evaluateObligation(
   resolvedAudience?: ResolvedMember[],
 ): Promise<EvalResult> {
   const today = complianceDate(clock)
-  const aud = () =>
-    resolvedAudience ?? resolveObligationAudience(tx, tenantId, audience, ob.workerType)
+  // Seasonal obligations produce no subjects (and no alerts) out of season;
+  // materialisation clears stale rows and parks nextDueAt at the season start.
+  if (ob.recurrence.activeMonths && !isInSeason(ob.recurrence, clock)) {
+    return { ...empty(), nextDueAt: nextSeasonStartAt(ob.recurrence, clock) }
+  }
+  const aud = async () =>
+    resolvedAudience ?? (await resolveObligationAudience(tx, tenantId, audience, ob.workerType))
+  const result = await evaluateObligationInner(tx, tenantId, ob, aud, clock, today)
+  if (result.nextDueAt && ob.recurrence.activeMonths) {
+    return { ...result, nextDueAt: seasonAdjustedNextDueAt(ob.recurrence, clock, result.nextDueAt) }
+  }
+  return result
+}
+
+async function evaluateObligationInner(
+  tx: Tx,
+  tenantId: string,
+  ob: Ob,
+  aud: () => Promise<ResolvedMember[]>,
+  clock: ComplianceClock,
+  today: string,
+): Promise<EvalResult> {
   switch (ob.sourceModule) {
     case 'training':
     case 'cert_requirement':
@@ -495,8 +519,17 @@ async function evalDocument(
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
   const window = resolveEvidenceEvaluationWindow(ob.recurrence, clock, ob.createdAt)
+  const isNewEdition = ob.recurrence.kind === 'event'
+  const isRolling =
+    ob.recurrence.kind === 'frequency' &&
+    ob.recurrence.evidenceWindow === 'rolling' &&
+    Boolean(ob.recurrence.frequency)
   const [current] = await tx
-    .select({ id: documentVersions.id })
+    .select({
+      id: documentVersions.id,
+      version: documentVersions.version,
+      publishedAt: documentVersions.publishedAt,
+    })
     .from(documentVersions)
     .where(
       and(
@@ -525,7 +558,7 @@ async function evalDocument(
             eq(documentAcknowledgments.versionId, current.id),
             inArray(documentAcknowledgments.personId, ids),
             lte(documentAcknowledgments.acknowledgedAt, clock.now),
-            window.evidenceStartAt
+            !isRolling && window.evidenceStartAt
               ? gte(documentAcknowledgments.acknowledgedAt, window.evidenceStartAt)
               : undefined,
             window.evidenceEndAt
@@ -542,23 +575,71 @@ async function evalDocument(
     )
       ackedAt.set(ack.personId, ack.at)
   }
+  const newEditionDueOn =
+    isNewEdition && current?.publishedAt
+      ? shiftCompletionDate(
+          complianceDate({ now: current.publishedAt, timezone: clock.timezone }),
+          'day',
+          Math.max(0, ob.recurrence.newEditionDueDays ?? ob.recurrence.dueOffsetDays ?? 30),
+        )
+      : null
+  const newEditionPassed = Boolean(newEditionDueOn && newEditionDueOn < complianceDate(clock))
   const result = tally(
     ids.map((pid) => {
       const ack = ackedAt.get(pid)
-      return personRow(
-        pid,
-        names.get(pid) ?? '(unnamed)',
-        ack ? 'completed' : window.deadlinePassed ? 'overdue' : 'pending',
-        {
-          dueOn: window.dueOn,
-          completedOn: ack ? complianceDate({ now: ack, timezone: clock.timezone }) : null,
-          periodStart: window.periodStart,
-          periodEnd: window.periodEnd,
-        },
-      )
+      const ackOn = ack ? complianceDate({ now: ack, timezone: clock.timezone }) : null
+      const dueOn = isNewEdition
+        ? newEditionDueOn
+        : isRolling
+          ? ackOn
+            ? shiftCompletionDate(ackOn, ob.recurrence.frequency!, 1)
+            : shiftCompletionDate(
+                complianceDate({ now: ob.createdAt, timezone: clock.timezone }),
+                ob.recurrence.frequency!,
+                1,
+              )
+          : window.dueOn
+      const rollingCompleted = Boolean(ack && dueOn && dueOn >= complianceDate(clock))
+      const passed = isNewEdition
+        ? newEditionPassed
+        : isRolling
+          ? Boolean(dueOn && dueOn < complianceDate(clock))
+          : window.deadlinePassed
+      const status = isRolling
+        ? rollingCompleted
+          ? 'completed'
+          : passed
+            ? 'overdue'
+            : 'pending'
+        : ack
+          ? 'completed'
+          : passed
+            ? 'overdue'
+            : 'pending'
+      return personRow(pid, names.get(pid) ?? '(unnamed)', status, {
+        dueOn,
+        completedOn: ackOn,
+        periodStart: window.periodStart,
+        periodEnd: window.periodEnd,
+        subjectRef: current
+          ? {
+              documentVersionId: current.id,
+              documentVersion: String(current.version),
+              ...(ob.targetRef.documentVersionId ? {} : { documentEdition: 'latest' }),
+            }
+          : null,
+      })
     }),
   )
-  return { ...result, nextDueAt: window.nextDueAt }
+  const nextDueAt =
+    isNewEdition && current?.publishedAt
+      ? new Date(
+          current.publishedAt.getTime() +
+            Math.max(0, ob.recurrence.newEditionDueDays ?? ob.recurrence.dueOffsetDays ?? 30) *
+              86_400_000,
+        )
+      : window.nextDueAt
+  return { ...result, nextDueAt: nextDueAt && nextDueAt > clock.now ? nextDueAt : window.nextDueAt }
 }
 
 async function evalJournal(
@@ -790,6 +871,7 @@ async function evalInspection(
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
   const window = resolveFrequencyWindow(ob.recurrence, clock, ob.createdAt)
+  if (window.periodEndAt <= ob.createdAt) return empty()
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
   const threshold = ob.recurrence?.compliantPercentage ?? 100
 
@@ -844,6 +926,7 @@ async function evalInspection(
         percent: progress.percent,
         dueOn: window.dueOn,
         completedOn: progress.status === 'completed' ? (evidence?.completedOn ?? null) : null,
+        subjectRef: evidence?.completedOn ? { lastActivityOn: evidence.completedOn } : null,
         periodStart: window.periodStart,
         periodEnd: window.periodEnd,
       })
@@ -872,13 +955,24 @@ async function evalHazardAssessment(
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
   const window = resolveFrequencyWindow(ob.recurrence, clock, ob.createdAt)
+  if (window.periodEndAt <= ob.createdAt) return empty()
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
   const threshold = ob.recurrence?.compliantPercentage ?? 100
 
   // (a) Signatures BY the person in the period (dated via the parent assessment).
   const sigByPerson = new Map<string, number>()
+  const lastByPerson = new Map<string, string>()
+  const rememberLast = (pid: string, on: string | null) => {
+    if (on && (!lastByPerson.has(pid) || on > lastByPerson.get(pid)!)) lastByPerson.set(pid, on)
+  }
   const sigRows = await tx
-    .select({ personId: hazidAssessmentSignatures.personId, c: sql<number>`count(*)::int` })
+    .select({
+      personId: hazidAssessmentSignatures.personId,
+      c: sql<number>`count(*)::int`,
+      lastOn: sql<
+        string | null
+      >`(max(${hazidAssessments.occurredAt}) at time zone ${clock.timezone})::date::text`,
+    })
     .from(hazidAssessmentSignatures)
     .innerJoin(hazidAssessments, eq(hazidAssessments.id, hazidAssessmentSignatures.assessmentId))
     .where(
@@ -894,7 +988,11 @@ async function evalHazardAssessment(
       ),
     )
     .groupBy(hazidAssessmentSignatures.personId)
-  for (const r of sigRows) if (r.personId) sigByPerson.set(r.personId, Number(r.c))
+  for (const r of sigRows)
+    if (r.personId) {
+      sigByPerson.set(r.personId, Number(r.c))
+      rememberLast(r.personId, r.lastOn)
+    }
 
   // (b) Assessments CREATED by the person in the period — bridge person→user→member.
   const userIds = members.map((m) => m.userId).filter((u): u is string => Boolean(u))
@@ -915,7 +1013,13 @@ async function evalHazardAssessment(
   const tuIds = Array.from(personByTu.keys())
   if (tuIds.length > 0) {
     const aRows = await tx
-      .select({ tu: hazidAssessments.reportedByTenantUserId, c: sql<number>`count(*)::int` })
+      .select({
+        tu: hazidAssessments.reportedByTenantUserId,
+        c: sql<number>`count(*)::int`,
+        lastOn: sql<
+          string | null
+        >`(max(${hazidAssessments.occurredAt}) at time zone ${clock.timezone})::date::text`,
+      })
       .from(hazidAssessments)
       .where(
         and(
@@ -930,7 +1034,10 @@ async function evalHazardAssessment(
       .groupBy(hazidAssessments.reportedByTenantUserId)
     for (const r of aRows) {
       const pid = r.tu ? personByTu.get(r.tu) : undefined
-      if (pid) createdByPerson.set(pid, Number(r.c))
+      if (pid) {
+        createdByPerson.set(pid, Number(r.c))
+        rememberLast(pid, r.lastOn)
+      }
     }
   }
 
@@ -938,11 +1045,14 @@ async function evalHazardAssessment(
     ids.map((pid) => {
       const n = (sigByPerson.get(pid) ?? 0) + (createdByPerson.get(pid) ?? 0)
       const progress = frequencyProgress(n, expected, threshold, window.dueAt, clock.now)
+      const lastOn = lastByPerson.get(pid) ?? null
       return personRow(pid, names.get(pid) ?? '(unnamed)', progress.status, {
         count: n,
         expected,
         percent: progress.percent,
         dueOn: window.dueOn,
+        completedOn: progress.status === 'completed' ? lastOn : null,
+        subjectRef: lastOn ? { lastActivityOn: lastOn } : null,
         periodStart: window.periodStart,
         periodEnd: window.periodEnd,
       })

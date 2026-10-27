@@ -3,7 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { formatDate } from '@/lib/datetime'
-import { JournalProgress, JournalPeriod, journalProgressPercent } from '../../_journal-progress'
+import { QuantityProgress, QuantityPeriod, quantityProgressPercent } from '../../_quantity-progress'
 import { notFound } from 'next/navigation'
 import {
   Badge,
@@ -28,7 +28,8 @@ import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-param
 import { EVERYONE_KEY, type AudienceItem } from '@/components/audience-picker'
 import { recurrenceValueFromStored } from '@/components/recurrence'
 import { StatusBadge, SummaryStrip } from '../../_shared'
-import { KIND_META, kindLabel, type ObligationKind } from '../_meta'
+import { KIND_META, isCalendarQuantity, kindLabel, type ObligationKind } from '../_meta'
+import { CALENDAR_MONTHS } from '@/components/recurrence'
 import { cadenceLabel, obligationCompliance } from '../_data'
 import { loadObligationFormOptions } from '../_form-options'
 import { ObligationDetailActions } from './_detail-actions'
@@ -67,8 +68,20 @@ export default async function ObligationDetailPage({
   assertCan(ctx, 'compliance.read')
   const data = await obligationCompliance(ctx, id)
   if (!data) notFound()
-  const { obligation: ob, audience, result, period } = data
-  const journal = ob.sourceModule === 'journal'
+  const { obligation: ob, audience, result, period, seasonActive } = data
+  const calendarQuantity = isCalendarQuantity(ob)
+  const quantityLabel =
+    ob.sourceModule === 'inspection'
+      ? 'Inspection progress'
+      : ob.sourceModule === 'hazard_assessment'
+        ? 'Assessment progress'
+        : 'Submission progress'
+  const lastActivityLabel =
+    ob.sourceModule === 'inspection'
+      ? 'Last inspection'
+      : ob.sourceModule === 'hazard_assessment'
+        ? 'Last assessment'
+        : 'Last journal'
   const quantity = Math.max(1, ob.recurrence.quantity ?? 1)
   const minimum = Math.ceil((quantity * (ob.recurrence.compliantPercentage ?? 100)) / 100)
   const hasCounts = result.rows.some((r) => r.expected != null)
@@ -118,7 +131,7 @@ export default async function ObligationDetailPage({
       row.label,
       row.status,
       row.dueOn ?? '',
-      (journal ? row.subjectRef?.lastActivityOn : row.completedOn) ?? '',
+      (calendarQuantity ? row.subjectRef?.lastActivityOn : row.completedOn) ?? '',
     ]
       .join(' ')
       .toLowerCase()
@@ -143,9 +156,9 @@ export default async function ObligationDetailPage({
           ? (a.dueOn ?? '9999-12-31').localeCompare(b.dueOn ?? '9999-12-31')
           : listParams.sort === 'completed'
             ? (
-                (journal ? a.subjectRef?.lastActivityOn : a.completedOn) ?? '9999-12-31'
+                (calendarQuantity ? a.subjectRef?.lastActivityOn : a.completedOn) ?? '9999-12-31'
               ).localeCompare(
-                (journal ? b.subjectRef?.lastActivityOn : b.completedOn) ?? '9999-12-31',
+                (calendarQuantity ? b.subjectRef?.lastActivityOn : b.completedOn) ?? '9999-12-31',
               )
             : listParams.sort === 'count'
               ? (a.count ?? 0) - (b.count ?? 0)
@@ -222,6 +235,19 @@ export default async function ObligationDetailPage({
           <Badge variant="secondary">
             <GeneratedValue value={kindLabel(ob.sourceModule)} />
           </Badge>
+          {ob.sourceModule === 'document' ? (
+            <Badge variant="outline">
+              <GeneratedValue
+                value={
+                  ob.targetRef.documentVersionId
+                    ? result.rows[0]?.subjectRef?.documentVersion
+                      ? `v${result.rows[0].subjectRef.documentVersion}`
+                      : 'Pinned edition'
+                    : 'Latest'
+                }
+              />
+            </Badge>
+          ) : null}
           <Badge variant={ob.status === 'active' ? 'success' : 'secondary'}>
             <GeneratedValue
               value={
@@ -236,6 +262,20 @@ export default async function ObligationDetailPage({
             />
           </Badge>
         </div>
+        {ob.recurrence.activeMonths ? (
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            <GeneratedValue
+              value={tGenerated(seasonActive ? 'm_1dc36b49e67db7' : 'm_0c9ae43764e0a9', {
+                value0: tGeneratedValue(
+                  CALENDAR_MONTHS[ob.recurrence.activeMonths.from - 1] ?? 'January',
+                ),
+                value1: tGeneratedValue(
+                  CALENDAR_MONTHS[ob.recurrence.activeMonths.to - 1] ?? 'January',
+                ),
+              })}
+            />
+          </p>
+        ) : null}
 
         <GeneratedValue
           value={
@@ -256,14 +296,14 @@ export default async function ObligationDetailPage({
           </Link>
         ) : null}
 
-        {journal && period ? (
+        {calendarQuantity && period ? (
           <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="space-y-1">
                 <p className="text-sm font-medium">
                   <GeneratedValue value="Current period" />
                 </p>
-                <JournalPeriod
+                <QuantityPeriod
                   start={period.periodStart}
                   end={period.periodEnd}
                   locale={ctx.locale}
@@ -289,15 +329,23 @@ export default async function ObligationDetailPage({
               </p>
             ) : null}
             <p className="text-xs text-slate-500">
-              <GeneratedValue value="Submitted journals count, including archived entries. Drafts do not count." />
+              <GeneratedValue
+                value={
+                  ob.sourceModule === 'inspection'
+                    ? 'Completed inspections count within this period.'
+                    : ob.sourceModule === 'hazard_assessment'
+                      ? 'Created or signed assessments count within this period.'
+                      : 'Submitted journals count, including archived entries. Drafts do not count.'
+                }
+              />
             </p>
           </div>
         ) : null}
         <SummaryStrip
-          percent={journal ? journalProgressPercent(result.rows) : result.percent}
-          progress={journal}
+          percent={calendarQuantity ? quantityProgressPercent(result.rows) : result.percent}
+          progress={calendarQuantity}
           totals={result.totals}
-          title={journal ? tGeneratedValue('Submission progress') : tGenerated('m_096d47f60747b3')}
+          title={calendarQuantity ? tGeneratedValue(quantityLabel) : tGenerated('m_096d47f60747b3')}
         />
 
         <TableToolbar>
@@ -323,7 +371,7 @@ export default async function ObligationDetailPage({
                 <GeneratedValue
                   value={
                     result.rows.length === 0 &&
-                    journal &&
+                    calendarQuantity &&
                     period &&
                     ob.createdAt >= period.periodEndAt ? (
                       <GeneratedValue value="This requirement was not active in this period." />
@@ -374,7 +422,7 @@ export default async function ObligationDetailPage({
                       column="completed"
                       active={listParams.sort === 'completed'}
                     >
-                      <GeneratedValue value={journal ? 'Last journal' : 'Completed'} />
+                      <GeneratedValue value={calendarQuantity ? lastActivityLabel : 'Completed'} />
                     </SortableTh>
                     <GeneratedValue
                       value={
@@ -387,9 +435,9 @@ export default async function ObligationDetailPage({
                               column="count"
                               active={listParams.sort === 'count'}
                             >
-                              <GeneratedValue value={journal ? 'Submission progress' : 'Count'} />
+                              <GeneratedValue value={calendarQuantity ? quantityLabel : 'Count'} />
                             </SortableTh>
-                            {!journal ? (
+                            {!calendarQuantity ? (
                               <TableHead>
                                 <GeneratedText id="m_177b0d9a8ef383" />
                               </TableHead>
@@ -436,7 +484,7 @@ export default async function ObligationDetailPage({
                         <TableCell className="text-slate-700 dark:text-slate-300">
                           <GeneratedValue
                             value={
-                              journal && r.subjectRef?.lastActivityOn
+                              calendarQuantity && r.subjectRef?.lastActivityOn
                                 ? formatDate(
                                     new Date(`${r.subjectRef.lastActivityOn}T00:00:00Z`),
                                     'UTC',
@@ -451,17 +499,24 @@ export default async function ObligationDetailPage({
                             hasCounts ? (
                               <>
                                 <TableCell className="text-slate-700 dark:text-slate-300">
-                                  {journal ? (
-                                    <JournalProgress
+                                  {calendarQuantity ? (
+                                    <QuantityProgress
                                       count={r.count ?? 0}
                                       expected={r.expected ?? quantity}
                                       met={r.status === 'completed'}
+                                      noun={
+                                        ob.sourceModule === 'inspection'
+                                          ? 'inspections'
+                                          : ob.sourceModule === 'hazard_assessment'
+                                            ? 'assessments'
+                                            : 'submitted'
+                                      }
                                     />
                                   ) : (
                                     <GeneratedValue value={r.count ?? '—'} />
                                   )}
                                 </TableCell>
-                                {!journal ? (
+                                {!calendarQuantity ? (
                                   <TableCell className="text-slate-700 dark:text-slate-300">
                                     <GeneratedValue value={r.expected ?? '—'} />
                                   </TableCell>
