@@ -2,7 +2,14 @@ import { recordStatusWhere } from '@/lib/active-record-query'
 import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, isNull, type SQL } from 'drizzle-orm'
-import { correctiveActionSeverity, correctiveActions, orgUnits } from '@beaconhs/db/schema'
+import { alias } from 'drizzle-orm/pg-core'
+import {
+  correctiveActionSeverity,
+  correctiveActions,
+  orgUnits,
+  tenantUsers,
+  users as user,
+} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -88,10 +95,23 @@ export async function GET(req: NextRequest) {
                     ? [dirFn(orgUnits.name)]
                     : [dirFn(correctiveActions.createdAt)]
 
+    const assignedByUser = alias(tenantUsers, 'ca_export_assigned_by')
+    const assignedByAccount = alias(user, 'ca_export_assigned_by_user')
     return tx
-      .select({ ca: correctiveActions, site: orgUnits })
+      .select({
+        ca: correctiveActions,
+        site: orgUnits,
+        owner: tenantUsers,
+        ownerAccount: user,
+        assignedBy: assignedByUser,
+        assignedByAccount,
+      })
       .from(correctiveActions)
       .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .leftJoin(assignedByUser, eq(assignedByUser.id, correctiveActions.assignedByTenantUserId))
+      .leftJoin(assignedByAccount, eq(assignedByAccount.id, assignedByUser.userId))
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(CSV_EXPORT_QUERY_LIMIT)
@@ -115,6 +135,8 @@ export async function GET(req: NextRequest) {
     'Title',
     'Severity',
     'Status',
+    'Assigned to',
+    'Assigned by',
     'Assigned on',
     'Due on',
     'Closed on',
@@ -126,12 +148,14 @@ export async function GET(req: NextRequest) {
   return csvResponse({
     filename: csvFilename('corrective-actions'),
     headers: selection.headers,
-    rows: rows.map(({ ca, site }) =>
+    rows: rows.map(({ ca, site, owner, ownerAccount, assignedBy, assignedByAccount }) =>
       selection.project([
         ca.reference,
         ca.title,
         ca.severity,
         ca.status,
+        ownerAccount?.name ?? owner?.displayName ?? '',
+        assignedByAccount?.name ?? assignedBy?.displayName ?? '',
         ca.assignedOn ?? '',
         ca.dueOn ?? '',
         ca.closedAt ? new Date(ca.closedAt).toISOString() : '',

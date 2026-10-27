@@ -119,6 +119,9 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   z.object({ trigger: z.literal('on_lock') }),
   z.object({ trigger: z.literal('on_unlock') }),
   z.object({ trigger: z.literal('on_delete') }),
+  // The record's assignee (owner) changed — corrective actions dispatch this
+  // on every reassignment so the "assigned" email can fire again.
+  z.object({ trigger: z.literal('on_owner_change') }),
   // A user-clickable button rendered on a record that runs THIS flow on demand
   // (vs. firing automatically on a lifecycle event). Multiple manual triggers
   // can coexist on one graph — each is a distinct button keyed by `buttonId`,

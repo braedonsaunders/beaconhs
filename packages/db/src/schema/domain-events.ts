@@ -63,6 +63,7 @@ export type DomainWebCommand =
         | 'on_lock'
         | 'on_unlock'
         | 'on_delete'
+        | 'on_owner_change'
         | 'class_confirmed'
         | 'class_reminder'
       toStatus?: string

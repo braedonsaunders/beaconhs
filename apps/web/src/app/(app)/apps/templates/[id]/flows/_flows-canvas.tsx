@@ -184,6 +184,8 @@ function triggerSummary(t: TriggerData): string {
       return 'On unlock / reopen'
     case 'on_delete':
       return 'On delete'
+    case 'on_owner_change':
+      return 'On reassignment'
     case 'manual':
       return `Button: ${t.label || 'Run flow'}`
   }
@@ -218,6 +220,7 @@ const TRIGGER_LABEL: Record<TriggerData['trigger'], string> = {
   on_lock: 'A record is locked / closed',
   on_unlock: 'A record is unlocked / reopened',
   on_delete: 'A record is deleted',
+  on_owner_change: 'A record is reassigned',
   manual: 'A user clicks a button',
 }
 

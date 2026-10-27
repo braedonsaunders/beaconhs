@@ -18,7 +18,8 @@ import {
   tenantUsers,
 } from '@beaconhs/db/schema'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
-import { recordDomainEvent } from '@beaconhs/events'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import { can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import {
@@ -51,7 +52,7 @@ const CORRECTIVE_ACTION_CODECS: {
   severity: choice(correctiveActionSeverity.enumValues, { label: 'Severity' }),
   source: choice(correctiveActionSource.enumValues, { label: 'Source', nullable: true }),
   siteOrgUnitId: optionalRef({ label: 'Site' }),
-  ownerTenantUserId: optionalRef({ label: 'Owner' }),
+  ownerTenantUserId: optionalRef({ label: 'Assigned to' }),
   assignedOn: optionalDate({ label: 'Assigned on' }),
   dueOn: optionalDate({ label: 'Due on' }),
   // numeric(12, 2), the same non-negative cents rule the Close drawer applies.
@@ -96,7 +97,7 @@ async function assertReferences(
       )
       .limit(1)
       .for('update')
-    if (!owner) throw new RecordEditRejection('Choose an active owner.')
+    if (!owner) throw new RecordEditRejection('Choose an active assignee.')
   }
 }
 
@@ -142,14 +143,44 @@ export const correctiveActionRecordSaver = defineRecordSaver<CorrectiveActionRow
       const entity = { entityType: 'corrective_action', entityId: row.id }
       await auditFieldChanges(tx, ctx, entity, changes)
       const reassigned = changes.some((change) => change.op === 'ownerTenantUserId')
-      // A reassigned action notifies its new owner, as a bulk reassignment does.
-      if (reassigned && row.ownerTenantUserId) {
+      // A reassignment overwrites who assigned it: the acting member becomes
+      // "Assigned by" and today (tenant calendar) becomes the assigned date.
+      // Clearing the assignee clears both — nobody is assigned any more.
+      if (reassigned) {
+        const actorId =
+          ctx.membership?.id && ctx.membership.id !== 'super-admin' ? ctx.membership.id : null
+        const stamp = row.ownerTenantUserId
+          ? {
+              assignedByTenantUserId: actorId,
+              assignedOn: dateIsoInTimeZone(new Date(), ctx.timezone),
+            }
+          : { assignedByTenantUserId: null, assignedOn: null }
+        await tx
+          .update(correctiveActions)
+          .set(stamp)
+          .where(
+            and(eq(correctiveActions.id, row.id), eq(correctiveActions.tenantId, ctx.tenantId)),
+          )
+        row.assignedByTenantUserId = stamp.assignedByTenantUserId
+        row.assignedOn = stamp.assignedOn
+        // A reassigned action notifies its new owner, as a bulk reassignment
+        // does, and fires the on_owner_change flow trigger so the "assigned"
+        // email can run again.
         await recordDomainEvent(tx, {
           tenantId: ctx.tenantId,
           eventType: 'corrective_action.assigned',
           subjectId: row.id,
           dedupKey: `corrective_action.assigned:${row.id}:${randomUUID()}`,
-          payload: { notification: { kind: 'corrective_action_assigned', caId: row.id } },
+          payload: {
+            ...(row.ownerTenantUserId
+              ? { notification: { kind: 'corrective_action_assigned' as const, caId: row.id } }
+              : {}),
+            web: moduleFlowCommand(ctx, {
+              subjectId: row.id,
+              moduleKey: 'corrective-actions',
+              event: 'on_owner_change',
+            }),
+          },
         })
       }
       if (changes.some((change) => change.op === 'dueOn' || change.op === 'ownerTenantUserId')) {

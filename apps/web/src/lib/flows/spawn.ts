@@ -12,6 +12,7 @@ import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 
 type CaSource = 'inspection' | 'incident' | 'near_miss' | 'observation' | 'audit' | 'jsha' | 'other'
 
@@ -32,7 +33,7 @@ export async function spawnCorrectiveActionForSubject(
   if (!ctx.tenantId) return { ok: false }
   const title = input.title?.trim()
   if (!title) return { ok: false }
-  const assignedOn = new Date().toISOString().slice(0, 10)
+  const assignedOn = dateIsoInTimeZone(new Date(), ctx.timezone)
 
   const row = await ctx.db(async (tx) => {
     if (input.flowExecutionKey) {

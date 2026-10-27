@@ -52,6 +52,7 @@ import {
 import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import {
   documentKeyFromTitle,
   isDocumentKeyConflict,
@@ -534,7 +535,7 @@ async function createCorrectiveAction(ctx: RequestContext, raw: unknown): Promis
   const parsed = correctiveActionCreate.safeParse(raw)
   if (!parsed.success) throw validationError(parsed.error)
   const b = parsed.data
-  const assignedOn = b.assignedOn ?? new Date().toISOString().slice(0, 10)
+  const assignedOn = b.assignedOn ?? dateIsoInTimeZone(new Date(), ctx.timezone)
 
   const row = await ctx.db(async (tx) => {
     await ensureSite(tx, b.siteOrgUnitId)
@@ -710,6 +711,16 @@ async function updateCorrectiveAction(
     if (hasOwn(b, 'assignedOn')) patch.assignedOn = optionalDate(b.assignedOn)
     if (hasOwn(b, 'dueOn')) patch.dueOn = optionalDate(b.dueOn)
     if (hasOwn(b, 'ownerTenantUserId')) patch.ownerTenantUserId = b.ownerTenantUserId ?? null
+    // A reassignment overwrites who assigned it (acting member + today on the
+    // tenant calendar); clearing the assignee clears the stamp.
+    const ownerChanged =
+      hasOwn(b, 'ownerTenantUserId') && (b.ownerTenantUserId ?? null) !== before.ownerTenantUserId
+    if (ownerChanged) {
+      patch.assignedByTenantUserId = patch.ownerTenantUserId ? safeTenantUserId(ctx) : null
+      patch.assignedOn = patch.ownerTenantUserId
+        ? dateIsoInTimeZone(new Date(), ctx.timezone)
+        : null
+    }
     if (hasOwn(b, 'verificationRequired')) patch.verificationRequired = b.verificationRequired
     if (hasOwn(b, 'rootCause')) patch.rootCause = stripEmpty(b.rootCause)
     if (hasOwn(b, 'actionTaken')) patch.actionTaken = stripEmpty(b.actionTaken)
@@ -728,6 +739,24 @@ async function updateCorrectiveAction(
         event: 'status_change',
         toStatus: updated.status,
         occurrenceKey: randomUUID(),
+      })
+    }
+    if (updated && ownerChanged) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.assigned',
+        subjectId: id,
+        dedupKey: `corrective_action.assigned:${id}:${randomUUID()}`,
+        payload: {
+          ...(updated.ownerTenantUserId
+            ? { notification: { kind: 'corrective_action_assigned' as const, caId: id } }
+            : {}),
+          web: moduleFlowCommand(ctx, {
+            subjectId: id,
+            moduleKey: 'corrective-actions',
+            event: 'on_owner_change',
+          }),
+        },
       })
     }
     if (updated) {

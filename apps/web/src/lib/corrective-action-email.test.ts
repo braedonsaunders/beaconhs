@@ -8,7 +8,8 @@ describe('corrective-action summary email', () => {
       title: 'Guard repair',
       severity: 'high',
       status: 'in_progress',
-      owner: 'Alex',
+      assignedTo: 'Alex',
+      assignedBy: 'Sam',
       location: 'Plant 1',
       assignedOn: '2026-08-01',
       dueOn: '2026-08-20',
@@ -23,6 +24,8 @@ describe('corrective-action summary email', () => {
     expect(rendered.html).not.toContain('&lt;p&gt;')
     expect(rendered.html).not.toContain('<script')
     expect(rendered.html).toContain('Location')
+    expect(rendered.text).toContain('Assigned to: Alex')
+    expect(rendered.text).toContain('Assigned by: Sam')
     expect(rendered.text).toContain('Replace damaged guard')
     expect(rendered.text).not.toContain('<p>')
   })

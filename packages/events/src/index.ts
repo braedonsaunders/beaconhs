@@ -125,6 +125,22 @@ async function tenantUserToUserId(
   })
 }
 
+async function tenantUserDisplayName(
+  ctx: EventCtx,
+  tenantId: string,
+  tenantUserId: string,
+): Promise<string | null> {
+  return ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ displayName: tenantUsers.displayName, name: users.name })
+      .from(tenantUsers)
+      .leftJoin(users, eq(users.id, tenantUsers.userId))
+      .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.id, tenantUserId)))
+      .limit(1)
+    return row?.name ?? row?.displayName ?? null
+  })
+}
+
 async function emailsForUserIds(
   ctx: EventCtx,
   tenantId: string,
@@ -317,6 +333,18 @@ export async function deliverDomainNotification(
       }
       const audience = [...new Set([assigneeUserId, assignerUserId].filter(Boolean))] as string[]
       if (audience.length === 0) return
+      const assigneeName = ca.ownerTenantUserId
+        ? await tenantUserDisplayName(ctx, tenantId, ca.ownerTenantUserId)
+        : null
+      const assignerName = ca.assignedByTenantUserId
+        ? await tenantUserDisplayName(ctx, tenantId, ca.assignedByTenantUserId)
+        : null
+      const assignment =
+        assigneeName && assignerName
+          ? `Assigned to ${assigneeName} by ${assignerName}. `
+          : assigneeName
+            ? `Assigned to ${assigneeName}. `
+            : ''
       const linkPath = `/corrective-actions/${ca.id}`
       await enqueueNotification(
         {
@@ -325,7 +353,7 @@ export async function deliverDomainNotification(
           category: 'ca',
           type: 'ca.assigned',
           title: `Corrective action assigned: ${ca.reference}`,
-          body: `${ca.title}${ca.dueOn ? ` (due ${ca.dueOn})` : ''}`,
+          body: `${assignment}${ca.title}${ca.dueOn ? ` (due ${ca.dueOn})` : ''}`,
           linkPath,
           data: { caId: ca.id, dueOn: ca.dueOn, severity: ca.severity },
           isCritical: ca.severity === 'critical',

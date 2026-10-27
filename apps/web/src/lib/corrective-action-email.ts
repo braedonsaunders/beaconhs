@@ -5,7 +5,8 @@ type CorrectiveActionSummaryEmailInput = {
   title: string
   severity: string
   status: string
-  owner: string | null
+  assignedTo: string | null
+  assignedBy: string | null
   location: string | null
   assignedOn: string | null
   dueOn: string | null
@@ -33,7 +34,8 @@ export function renderCorrectiveActionSummaryEmail(input: CorrectiveActionSummar
     '',
     `Severity: ${input.severity}`,
     `Status: ${input.status.replace(/_/g, ' ')}`,
-    `Owner: ${input.owner ?? '—'}`,
+    `Assigned to: ${input.assignedTo ?? '—'}`,
+    `Assigned by: ${input.assignedBy ?? '—'}`,
     `Location: ${input.location ?? '—'}`,
     `Assigned on: ${input.assignedOn ?? '—'}`,
     `Due on: ${input.dueOn ?? '—'}`,
@@ -63,8 +65,10 @@ export function renderCorrectiveActionSummaryEmail(input: CorrectiveActionSummar
           : ''
       }
       <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Owner</td>
-            <td style="padding:4px 0;">${escapeHtml(input.owner ?? '—')}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Assigned to</td>
+            <td style="padding:4px 0;">${escapeHtml(input.assignedTo ?? '—')}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Assigned by</td>
+            <td style="padding:4px 0;">${escapeHtml(input.assignedBy ?? '—')}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Location</td>
             <td style="padding:4px 0;">${escapeHtml(input.location ?? '—')}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Assigned on</td>

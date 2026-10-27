@@ -12,16 +12,38 @@ vi.mock('@beaconhs/tenant/visibility', () => ({ canSeeRecord: mocks.canSeeRecord
 vi.mock('@beaconhs/compliance', () => ({
   materializeEvidenceTargetObligations: mocks.materialize,
 }))
-vi.mock('@beaconhs/events', () => ({ recordDomainEvent: mocks.recordDomainEvent }))
+vi.mock('@beaconhs/events', () => ({
+  recordDomainEvent: mocks.recordDomainEvent,
+  moduleFlowCommand: (
+    ctx: {
+      userId: string
+      membership?: { id: string } | null
+      personId: string | null
+      timezone: string
+    },
+    args: Record<string, unknown>,
+  ) => ({
+    kind: 'module_flow',
+    ...args,
+    actor: {
+      userId: ctx.userId,
+      membershipId: ctx.membership?.id ?? null,
+      personId: ctx.personId,
+      timezone: ctx.timezone,
+    },
+  }),
+}))
 vi.mock('@/lib/audit', () => ({ recordAuditInTransaction: mocks.recordAuditInTransaction }))
 
 import type { Database } from '@beaconhs/db'
 import { correctiveActions, orgUnits, tenantUsers } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import { correctiveActionRecordSaver } from './_record-edits'
 
 const CA_ID = '5b0f3c3e-2f7a-4d6e-9a51-0c6f4c1b2d3e'
 const OWNER_ID = '0d4e8a1f-6c2b-4b7a-8f3e-9a1c2d3e4f50'
+const ACTOR_ID = '9c1b2d3e-4f50-4a6e-b8c0-2f4e6a8c0b1d'
 const SITE_ID = '7e2a9c4b-1d3f-4a6e-b8c0-2f4e6a8c0b1d'
 
 type Row = typeof correctiveActions.$inferSelect
@@ -101,6 +123,9 @@ function harness(row: Row, options: { activeOwners?: string[]; sites?: string[] 
   } as unknown as Database
   const ctx = {
     tenantId: 'tenant-1',
+    userId: 'user-1',
+    personId: null,
+    membership: { id: ACTOR_ID },
     timezone: 'America/Toronto',
     isSuperAdmin: false,
     permissions: new Set(['ca.update']),
@@ -160,7 +185,7 @@ describe('corrective action record saver', () => {
       ]),
     ).toMatchObject({
       applied: [],
-      rejected: [{ fieldId: 'ownerTenantUserId', error: 'Choose an active owner.' }],
+      rejected: [{ fieldId: 'ownerTenantUserId', error: 'Choose an active assignee.' }],
     })
     expect(mocks.materialize).not.toHaveBeenCalled()
 
@@ -169,13 +194,24 @@ describe('corrective action record saver', () => {
       { fieldId: 'ownerTenantUserId', value: OWNER_ID, base: '' },
     ])
     expect(result).toMatchObject({ applied: [{ fieldId: 'ownerTenantUserId', stored: OWNER_ID }] })
-    expect(writes).toEqual([{ ownerTenantUserId: OWNER_ID }])
+    // The reassignment also overwrites Assigned by (acting member) and the
+    // assigned date (today on the tenant calendar).
+    expect(writes).toEqual([
+      { ownerTenantUserId: OWNER_ID },
+      {
+        assignedByTenantUserId: ACTOR_ID,
+        assignedOn: dateIsoInTimeZone(new Date(), 'America/Toronto'),
+      },
+    ])
     expect(mocks.recordDomainEvent).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         eventType: 'corrective_action.assigned',
         subjectId: CA_ID,
-        payload: { notification: { kind: 'corrective_action_assigned', caId: CA_ID } },
+        payload: expect.objectContaining({
+          notification: { kind: 'corrective_action_assigned', caId: CA_ID },
+          web: expect.objectContaining({ kind: 'module_flow', event: 'on_owner_change' }),
+        }),
       }),
     )
     expect(mocks.materialize).toHaveBeenCalledWith(expect.anything(), 'tenant-1', {
@@ -193,6 +229,25 @@ describe('corrective action record saver', () => {
     )
     expect(mocks.revalidatePath).toHaveBeenCalledWith(`/corrective-actions/${CA_ID}`)
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/corrective-actions')
+  })
+
+  it('clears the assigned-by stamp when the assignee is removed', async () => {
+    const { ctx, writes } = harness(caRow({ ownerTenantUserId: OWNER_ID }))
+    const result = await correctiveActionRecordSaver(ctx, CA_ID, [
+      { fieldId: 'ownerTenantUserId', value: '', base: OWNER_ID },
+    ])
+    expect(result).toMatchObject({ applied: [{ fieldId: 'ownerTenantUserId', stored: '' }] })
+    expect(writes).toEqual([
+      { ownerTenantUserId: null },
+      { assignedByTenantUserId: null, assignedOn: null },
+    ])
+    // Nobody to notify, but the owner-change flow trigger still fires.
+    expect(mocks.recordDomainEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        payload: expect.not.objectContaining({ notification: expect.anything() }),
+      }),
+    )
   })
 
   it('re-materializes on a due-date change but not on other fields', async () => {

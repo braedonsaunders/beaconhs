@@ -42,6 +42,7 @@ import { parsePhotoEdits } from '@/lib/photo-edits'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 import { isUuid } from '@/lib/list-params'
 import { renderCorrectiveActionSummaryEmail } from '@/lib/corrective-action-email'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -555,9 +556,18 @@ export async function sendCorrectiveActionEmail(args: {
           .where(eq(tenantUsers.id, ca.ownerTenantUserId))
           .limit(1)
       : []
+    const [assignedByRow] = ca.assignedByTenantUserId
+      ? await tx
+          .select({ displayName: tenantUsers.displayName, name: user.name })
+          .from(tenantUsers)
+          .leftJoin(user, eq(user.id, tenantUsers.userId))
+          .where(eq(tenantUsers.id, ca.assignedByTenantUserId))
+          .limit(1)
+      : []
     return {
       site: siteRow?.name ?? null,
       owner: ownerRow?.name ?? ownerRow?.displayName ?? null,
+      assignedBy: assignedByRow?.name ?? assignedByRow?.displayName ?? null,
     }
   })
 
@@ -571,7 +581,8 @@ export async function sendCorrectiveActionEmail(args: {
     title: ca.title,
     severity: ca.severity,
     status: ca.status,
-    owner: names.owner,
+    assignedTo: names.owner,
+    assignedBy: names.assignedBy,
     location: names.site,
     assignedOn: ca.assignedOn,
     dueOn: ca.dueOn,
@@ -632,7 +643,7 @@ export async function bulkReassignCorrectiveActions(args: {
   try {
     if (!args || typeof args !== 'object') throw new Error('Bulk reassignment is invalid.')
     ids = requireUuidArrayInput(args.caIds, 'Selected actions', { max: 500 })
-    newOwnerTenantUserId = requireUuidInput(args.newOwnerTenantUserId, 'Owner')
+    newOwnerTenantUserId = requireUuidInput(args.newOwnerTenantUserId, 'Assigned to')
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Invalid request.' }
   }
@@ -679,9 +690,18 @@ export async function bulkReassignCorrectiveActions(args: {
       return { kind: 'updated' as const, ids: [] as string[], skipped: ids.length }
     }
 
+    // A reassignment overwrites who assigned it — but only on rows whose
+    // assignee actually changes; rows already with the new owner keep their
+    // original "Assigned by" stamp.
+    const actorId = safeTenantUserId(ctx)
+    const today = dateIsoInTimeZone(new Date(), ctx.timezone)
     const changed = await tx
       .update(correctiveActions)
-      .set({ ownerTenantUserId: newOwnerTenantUserId })
+      .set({
+        ownerTenantUserId: newOwnerTenantUserId,
+        assignedByTenantUserId: sql`case when ${correctiveActions.ownerTenantUserId} is distinct from ${newOwnerTenantUserId} then ${actorId} else ${correctiveActions.assignedByTenantUserId} end`,
+        assignedOn: sql`case when ${correctiveActions.ownerTenantUserId} is distinct from ${newOwnerTenantUserId} then ${today}::date else ${correctiveActions.assignedOn} end`,
+      })
       .where(and(inArray(correctiveActions.id, editable), eq(correctiveActions.locked, false)))
       .returning({ id: correctiveActions.id })
     for (const { id } of changed) {
@@ -692,6 +712,11 @@ export async function bulkReassignCorrectiveActions(args: {
         dedupKey: `corrective_action.assigned:${id}:${reassignmentEventId}`,
         payload: {
           notification: { kind: 'corrective_action_assigned', caId: id },
+          web: moduleFlowCommand(ctx, {
+            subjectId: id,
+            moduleKey: 'corrective-actions',
+            event: 'on_owner_change',
+          }),
         },
       })
       await recordAuditInTransaction(tx, ctx, {
@@ -724,7 +749,7 @@ export async function bulkReassignCorrectiveActions(args: {
     }
   })
   if (result.kind === 'invalid-owner') {
-    return { ok: false, error: 'Owner is not an active member of this tenant.' }
+    return { ok: false, error: 'Assigned-to person is not an active member of this tenant.' }
   }
 
   revalidatePath('/corrective-actions')

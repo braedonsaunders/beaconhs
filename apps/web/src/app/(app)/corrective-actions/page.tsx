@@ -6,6 +6,8 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { ListChecks } from 'lucide-react'
 import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
   correctiveActionSeverity,
@@ -41,6 +43,7 @@ const SORTS = [
   'assigned_on',
   'created_at',
   'owner',
+  'assigned_by',
   'site',
 ] as const
 
@@ -105,6 +108,8 @@ export default async function CorrectiveActionsPage({
     if (sevFilter) filters.push(eq(correctiveActions.severity, sevFilter))
     const whereClause = and(...filters)
 
+    const assignedByUser = alias(tenantUsers, 'ca_assigned_by')
+    const assignedByAccount = alias(user, 'ca_assigned_by_user')
     const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'reference'
@@ -121,9 +126,15 @@ export default async function CorrectiveActionsPage({
                   ? [dirFn(correctiveActions.assignedOn)]
                   : params.sort === 'owner'
                     ? [dirFn(sql`coalesce(${user.name}, ${tenantUsers.displayName})`)]
-                    : params.sort === 'site'
-                      ? [dirFn(orgUnits.name)]
-                      : [dirFn(correctiveActions.createdAt)]
+                    : params.sort === 'assigned_by'
+                      ? [
+                          dirFn(
+                            sql`coalesce(${assignedByAccount.name}, ${assignedByUser.displayName})`,
+                          ),
+                        ]
+                      : params.sort === 'site'
+                        ? [dirFn(orgUnits.name)]
+                        : [dirFn(correctiveActions.createdAt)]
 
     const [tot] = await tx.select({ c: count() }).from(correctiveActions).where(whereClause)
     const data = await tx
@@ -132,11 +143,15 @@ export default async function CorrectiveActionsPage({
         site: orgUnits,
         owner: tenantUsers,
         ownerAccount: user,
+        assignedBy: assignedByUser,
+        assignedByAccount,
       })
       .from(correctiveActions)
       .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .leftJoin(assignedByUser, eq(assignedByUser.id, correctiveActions.assignedByTenantUserId))
+      .leftJoin(assignedByAccount, eq(assignedByAccount.id, assignedByUser.userId))
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(params.perPage)
@@ -161,20 +176,24 @@ export default async function CorrectiveActionsPage({
     }
   })
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = dateIsoInTimeZone(new Date(), ctx.timezone)
 
-  const tableRows: RecordsTableRow[] = rows.map(({ ca, site, owner, ownerAccount }) => ({
-    id: ca.id,
-    reference: ca.reference,
-    title: ca.title,
-    severity: ca.severity,
-    status: ca.status,
-    dueOn: ca.dueOn,
-    createdAt: new Date(ca.createdAt).toISOString().slice(0, 10),
-    siteName: site?.name ?? null,
-    ownerName: ownerAccount?.name ?? owner?.displayName ?? null,
-    locked: ca.locked,
-  }))
+  const tableRows: RecordsTableRow[] = rows.map(
+    ({ ca, site, owner, ownerAccount, assignedBy, assignedByAccount }) => ({
+      id: ca.id,
+      reference: ca.reference,
+      title: ca.title,
+      severity: ca.severity,
+      status: ca.status,
+      dueOn: ca.dueOn,
+      createdAt: new Date(ca.createdAt).toISOString().slice(0, 10),
+      siteName: site?.name ?? null,
+      ownerName: ownerAccount?.name ?? owner?.displayName ?? null,
+      assignedByName: assignedByAccount?.name ?? assignedBy?.displayName ?? null,
+      assignedOn: ca.assignedOn,
+      locked: ca.locked,
+    }),
+  )
 
   return (
     <ListPageLayout
