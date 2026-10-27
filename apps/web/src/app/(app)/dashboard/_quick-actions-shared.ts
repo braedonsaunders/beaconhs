@@ -182,7 +182,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   {
     id: 'd-ca',
     label: 'Corrective action',
-    href: '/corrective-actions/new',
+    href: '/corrective-actions?drawer=new',
     iconKey: 'list-checks',
     tone: 'teal',
     hint: 'Create',

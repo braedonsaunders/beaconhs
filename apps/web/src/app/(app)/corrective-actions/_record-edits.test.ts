@@ -58,7 +58,6 @@ function caRow(overrides: Partial<Row> = {}): Row {
     description: null,
     severity: 'medium',
     status: 'open',
-    isDraft: false,
     assignedByTenantUserId: null,
     ownerTenantUserId: null,
     siteOrgUnitId: null,

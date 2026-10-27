@@ -8,7 +8,7 @@ import { ListChecks } from 'lucide-react'
 import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { dateIsoInTimeZone } from '@/lib/datetime'
-import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { Button, EmptyState, PageHeader, UrlDrawer } from '@beaconhs/ui'
 import {
   correctiveActionSeverity,
   correctiveActions,
@@ -28,6 +28,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
 import { RecordsTable, type RecordsTableRow } from './_records-table'
+import { NewCorrectiveActionDrawer } from './_new-drawer'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -83,6 +84,9 @@ export default async function CorrectiveActionsPage({
   const sevFilter = correctiveActionSeverity.enumValues.find(
     (value) => value === pickString(sp.severity),
   )
+  const drawerKey = pickString(sp.drawer)
+  const presetSourceType = pickString(sp.sourceEntityType)
+  const presetSourceId = pickString(sp.sourceEntityId)
   const ctx = await requireRequestContext()
   // The export route accepts any read tier — mirror that here so read.all /
   // read.site-only roles still see the button.
@@ -196,102 +200,121 @@ export default async function CorrectiveActionsPage({
   )
 
   return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader
-            title={tGenerated('m_1eca9264eb7c3a')}
-            description={tGenerated('m_1fd2750d15b2ba')}
-            actions={
-              <div className="flex items-center gap-2">
-                <GeneratedValue
-                  value={
-                    canExport ? (
-                      <DownloadLink
-                        href={buildExportHref('/corrective-actions/export.csv', {
-                          ...sp,
-                          status: statusRaw,
-                        })}
-                      >
-                        <Button variant="outline">
-                          <GeneratedText id="m_14c6440eca1edc" />
-                        </Button>
-                      </DownloadLink>
-                    ) : null
-                  }
-                />
-                <Link href="/corrective-actions/new">
-                  <Button>
-                    <GeneratedText id="m_1c4ac986e95578" />
-                  </Button>
-                </Link>
-              </div>
-            }
-          />
-          <CorrectiveActionsSubNav active="records" />
-          <TableToolbar>
-            <SearchInput placeholder={tGenerated('m_1ae990361ad66e')} />
-            <FilterChips
-              basePath="/corrective-actions"
-              currentParams={sp}
-              paramKey="status"
-              label={tGenerated('m_0b9da892d6faf0')}
-              allLabel="All statuses"
-              defaultValue="open"
-              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-            />
-            <FilterChips
-              basePath="/corrective-actions"
-              currentParams={sp}
-              paramKey="severity"
-              label={tGenerated('m_168b365cc671bf')}
-              options={SEVERITY_OPTIONS.map((o) => ({ ...o, count: sevCounts[o.value] }))}
-            />
-          </TableToolbar>
-        </>
-      }
-    >
-      <GeneratedValue
-        value={
-          tableRows.length === 0 ? (
-            <EmptyState
-              icon={<ListChecks size={32} />}
-              title={tGeneratedValue(
-                params.q || statusFilter || sevFilter
-                  ? tGenerated('m_003b25bf1c2c70')
-                  : tGenerated('m_065564e61d1905'),
-              )}
-              description={tGenerated('m_0eb933f79ad4ca')}
-              action={
-                <Link href="/corrective-actions/new">
-                  <Button>
-                    <GeneratedText id="m_16b0371ad9cc2c" />
-                  </Button>
-                </Link>
+    <>
+      <ListPageLayout
+        header={
+          <>
+            <PageHeader
+              title={tGenerated('m_1eca9264eb7c3a')}
+              description={tGenerated('m_1fd2750d15b2ba')}
+              actions={
+                <div className="flex items-center gap-2">
+                  <GeneratedValue
+                    value={
+                      canExport ? (
+                        <DownloadLink
+                          href={buildExportHref('/corrective-actions/export.csv', {
+                            ...sp,
+                            status: statusRaw,
+                          })}
+                        >
+                          <Button variant="outline">
+                            <GeneratedText id="m_14c6440eca1edc" />
+                          </Button>
+                        </DownloadLink>
+                      ) : null
+                    }
+                  />
+                  <Link href="/corrective-actions?drawer=new" scroll={false}>
+                    <Button>
+                      <GeneratedText id="m_1c4ac986e95578" />
+                    </Button>
+                  </Link>
+                </div>
               }
             />
-          ) : (
-            <>
-              <RecordsTable
-                rows={tableRows}
-                today={today}
-                canUpdate={canUpdate}
+            <CorrectiveActionsSubNav active="records" />
+            <TableToolbar>
+              <SearchInput placeholder={tGenerated('m_1ae990361ad66e')} />
+              <FilterChips
                 basePath="/corrective-actions"
                 currentParams={sp}
-                sort={params.sort}
-                dir={params.dir}
+                paramKey="status"
+                label={tGenerated('m_0b9da892d6faf0')}
+                allLabel="All statuses"
+                defaultValue="open"
+                options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
               />
-              <Pagination
+              <FilterChips
                 basePath="/corrective-actions"
                 currentParams={sp}
-                total={total}
-                page={params.page}
-                perPage={params.perPage}
+                paramKey="severity"
+                label={tGenerated('m_168b365cc671bf')}
+                options={SEVERITY_OPTIONS.map((o) => ({ ...o, count: sevCounts[o.value] }))}
               />
-            </>
-          )
+            </TableToolbar>
+          </>
         }
-      />
-    </ListPageLayout>
+      >
+        <GeneratedValue
+          value={
+            tableRows.length === 0 ? (
+              <EmptyState
+                icon={<ListChecks size={32} />}
+                title={tGeneratedValue(
+                  params.q || statusFilter || sevFilter
+                    ? tGenerated('m_003b25bf1c2c70')
+                    : tGenerated('m_065564e61d1905'),
+                )}
+                description={tGenerated('m_0eb933f79ad4ca')}
+                action={
+                  <Link href="/corrective-actions?drawer=new" scroll={false}>
+                    <Button>
+                      <GeneratedText id="m_16b0371ad9cc2c" />
+                    </Button>
+                  </Link>
+                }
+              />
+            ) : (
+              <>
+                <RecordsTable
+                  rows={tableRows}
+                  today={today}
+                  canUpdate={canUpdate}
+                  basePath="/corrective-actions"
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                />
+                <Pagination
+                  basePath="/corrective-actions"
+                  currentParams={sp}
+                  total={total}
+                  page={params.page}
+                  perPage={params.perPage}
+                />
+              </>
+            )
+          }
+        />
+      </ListPageLayout>
+      <UrlDrawer
+        open={drawerKey === 'new'}
+        closeHref="/corrective-actions"
+        title={tGenerated('m_16b0371ad9cc2c')}
+        size="md"
+      >
+        <GeneratedValue
+          value={
+            drawerKey === 'new' ? (
+              <NewCorrectiveActionDrawer
+                presetSourceType={presetSourceType}
+                presetSourceId={presetSourceId}
+              />
+            ) : null
+          }
+        />
+      </UrlDrawer>
+    </>
   )
 }

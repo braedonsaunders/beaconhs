@@ -14,18 +14,25 @@ import { activeTenantUsersWhere } from '@beaconhs/db'
 //   client surfaces "this action is locked".
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
   caCompleteSteps,
   caPhotos,
+  correctiveActionSeverity,
+  correctiveActionSource,
   correctiveActions,
   attachments,
+  formResponses,
+  incidents,
   orgUnits,
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
+import { nextReference } from '@/lib/reference'
 import {
   resolveCorrectiveActionInTx,
   resumeCorrectiveActionInTx,
@@ -77,6 +84,178 @@ function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>
   const id = ctx.membership?.id
   if (!id || id === 'super-admin') return null
   return id
+}
+
+// ---------- Create -------------------------------------------------------
+
+/**
+ * Create a corrective action from the list-page drawer form. The acting
+ * member is stamped as "Assigned by" with today's date on the tenant
+ * calendar; "Assigned to" defaults to them but can be picked in the form.
+ * A source preset (e.g. from an incident page) must point at a real,
+ * in-scope record — a stale or forged id is refused, never stored.
+ */
+export async function createCorrectiveAction(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.create')
+  const title = String(formData.get('title') ?? '').trim()
+  if (!title) throw new Error('Title is required')
+  const description = String(formData.get('description') ?? '').trim() || null
+  const severity =
+    correctiveActionSeverity.enumValues.find((s) => s === formData.get('severity')) ?? 'medium'
+  const source =
+    correctiveActionSource.enumValues.find((s) => s === formData.get('source')) ?? 'observation'
+  const rawSourceEntityId = String(formData.get('sourceEntityId') ?? '').trim()
+  const rawSourceEntityType = String(formData.get('sourceEntityType') ?? '').trim()
+  const sourceEntityId = rawSourceEntityId || null
+  const sourceEntityType = rawSourceEntityType || null
+  if (sourceEntityId && !isUuid(sourceEntityId)) {
+    throw new Error('The linked source record could not be found.')
+  }
+  const rawSiteId = String(formData.get('siteOrgUnitId') ?? '').trim()
+  const siteOrgUnitId = rawSiteId && isUuid(rawSiteId) ? rawSiteId : null
+  if (rawSiteId && !siteOrgUnitId) throw new Error('Site is invalid.')
+  const rawDueOn = String(formData.get('dueOn') ?? '').trim()
+  const dueOn = /^\d{4}-\d{2}-\d{2}$/.test(rawDueOn) ? rawDueOn : null
+  const rawOwnerId = String(formData.get('ownerTenantUserId') ?? '').trim()
+  const ownerTenantUserId = rawOwnerId && isUuid(rawOwnerId) ? rawOwnerId : safeTenantUserId(ctx)
+  if (rawOwnerId && !isUuid(rawOwnerId)) throw new Error('Choose an active assignee.')
+  // Today on the tenant's calendar, not the server's (UTC) one.
+  const assignedOn = dateIsoInTimeZone(new Date(), ctx.timezone)
+
+  const row = await ctx.db(async (tx) => {
+    if (siteOrgUnitId) {
+      const [site] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(
+          and(
+            eq(orgUnits.id, siteOrgUnitId),
+            eq(orgUnits.tenantId, ctx.tenantId),
+            isNull(orgUnits.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!site) throw new Error('Site is invalid.')
+    }
+    if (ownerTenantUserId && ownerTenantUserId !== safeTenantUserId(ctx)) {
+      const [owner] = await tx
+        .select({ id: tenantUsers.id })
+        .from(tenantUsers)
+        .where(
+          and(
+            eq(tenantUsers.id, ownerTenantUserId),
+            eq(tenantUsers.tenantId, ctx.tenantId),
+            activeTenantUsersWhere(),
+          ),
+        )
+        .limit(1)
+      if (!owner) throw new Error('Choose an active assignee.')
+    }
+    if (sourceEntityId) {
+      if (sourceEntityType === 'incident') {
+        const [incident] = await tx
+          .select({
+            id: incidents.id,
+            reportedByTenantUserId: incidents.reportedByTenantUserId,
+            assignedInvestigatorTenantUserId: incidents.assignedInvestigatorTenantUserId,
+            siteOrgUnitId: incidents.siteOrgUnitId,
+          })
+          .from(incidents)
+          .where(and(eq(incidents.id, sourceEntityId), isNull(incidents.deletedAt)))
+          .limit(1)
+        const visible =
+          incident &&
+          (await canSeeRecord(ctx, tx, {
+            prefix: 'incidents',
+            ownerIds: [incident.reportedByTenantUserId, incident.assignedInvestigatorTenantUserId],
+            siteId: incident.siteOrgUnitId,
+          }))
+        if (!visible) throw new Error('The linked source record could not be found.')
+      } else if (sourceEntityType === 'form_response') {
+        const [response] = await tx
+          .select({ id: formResponses.id })
+          .from(formResponses)
+          .where(eq(formResponses.id, sourceEntityId))
+          .limit(1)
+        if (!response) throw new Error('The linked source record could not be found.')
+      } else {
+        throw new Error('The linked source record could not be found.')
+      }
+    }
+    const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
+    const created = await tx
+      .insert(correctiveActions)
+      .values({
+        tenantId: ctx.tenantId,
+        reference,
+        title,
+        description,
+        severity,
+        status: 'open',
+        source,
+        sourceEntityType: sourceEntityId ? sourceEntityType : null,
+        sourceEntityId,
+        sourceFormResponseId: sourceEntityType === 'form_response' ? sourceEntityId : null,
+        siteOrgUnitId,
+        assignedOn,
+        dueOn,
+        assignedByTenantUserId: safeTenantUserId(ctx),
+        ownerTenantUserId,
+      })
+      .returning()
+    const correctiveAction = created[0]
+    if (correctiveAction) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.created',
+        subjectId: correctiveAction.id,
+        dedupKey: `corrective_action.created:${correctiveAction.id}`,
+        payload: {
+          notification: { kind: 'corrective_action_assigned', caId: correctiveAction.id },
+          integration: correctiveActionCreatedEvent(ctx.tenantId, {
+            id: correctiveAction.id,
+            reference: correctiveAction.reference,
+            title,
+            status: 'open',
+            severity,
+            source,
+            dueOn,
+            assignedOn,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: correctiveAction.id,
+            moduleKey: 'corrective-actions',
+            event: 'on_create',
+          }),
+        },
+      })
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'corrective_action',
+        entityId: correctiveAction.id,
+        action: 'create',
+        summary: `Created ${correctiveAction.reference}: ${title}`,
+        after: {
+          reference: correctiveAction.reference,
+          severity,
+          source,
+          dueOn,
+          siteOrgUnitId,
+          ownerTenantUserId,
+        },
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'corrective_action',
+        targetRef: {},
+      })
+    }
+    return correctiveAction ?? null
+  })
+  revalidatePath('/corrective-actions')
+  if (row) {
+    redirect(`/corrective-actions/${row.id}`)
+  }
+  redirect('/corrective-actions')
 }
 
 // ---------- Photos -------------------------------------------------------

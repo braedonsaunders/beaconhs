@@ -23,7 +23,13 @@ const resolution = source('./corrective-action-resolution.ts')
 const detail = source('../app/(app)/corrective-actions/[id]/page.tsx')
 const recordEdits = source('../app/(app)/corrective-actions/_record-edits.ts')
 const recordSync = source('./record-sync/edits.ts')
-const createPage = source('../app/(app)/corrective-actions/new/page.tsx')
+// The create form is a drawer on the list page now; its server action lives
+// in _actions.ts next to the other CA mutations.
+const createAction = between(
+  actions,
+  'export async function createCorrectiveAction',
+  '// ---------- Photos',
+)
 const api = source('./api/write.ts')
 const nativeFlow = source('./flows/spawn.ts')
 const formFlow = source('../app/(app)/apps/_lib/spawn-core.ts')
@@ -33,7 +39,7 @@ const inspection = source('../app/(app)/inspections/_lib.ts')
 
 describe('corrective-action compliance evidence lifecycle', () => {
   it('materializes every interactive and automated create path in the insert transaction', () => {
-    for (const value of [createPage, nativeFlow, formFlow, assistant, ppe, inspection]) {
+    for (const value of [createAction, nativeFlow, formFlow, assistant, ppe, inspection]) {
       expectCorrectiveMaterialization(value)
     }
 
