@@ -667,8 +667,9 @@ Every Builder response uses **Location** from the shared Locations catalogue. Wo
 2. Choose one app structure or ready-made starting point, enter the **App name**, then click **Create app**. There is one creation action for every starting point.
 3. In the designer, open the **Build** tab. Under **Add an element**, drag a field onto the exact section where it belongs. The section highlights before you drop. You can also select a section and click the field to add it there.
 4. Click a field to set its label, whether it is required, and any logic.
-5. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them. On **Access**, leave the role list open for everyone or choose the exact roles that may find and use the app.
-6. When it is ready, click **Publish v1**. Until you publish, only builders can preview, edit, or inspect its records. A draft cannot accept live entries.
+5. Drag a field by its grip to reorder it or move it to another section. You can also choose **Move to section…** in the field properties. Fields cannot move into or out of a repeating section because repeating answers are stored differently.
+6. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them. On **Access**, leave the role list open for everyone or choose the exact roles that may find and use the app.
+7. When it is ready, click **Publish v1**. Until you publish, only builders can preview, edit, or inspect its records. A draft cannot accept live entries.
 
 The language picker in the designer toolbar controls which translation you are editing. Add field labels, help text, section titles, option labels, and workflow step titles for each enabled workspace language. The canvas and preview show the selected language. Workers see their own language when a translation exists, then the workspace default when it does not.
 

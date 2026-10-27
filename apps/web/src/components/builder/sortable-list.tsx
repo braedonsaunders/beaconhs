@@ -6,13 +6,26 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 
-// Straight vertical drag-to-reorder list, built on framer-motion's Reorder —
-// the same pattern the app/form designer uses for fields. Drag via the grip
-// handle only (so clicking a row selects it); up/down arrows remain as a
-// keyboard-accessible fallback.
+// Shared vertical dnd-kit sorting for Builder lists and the form designer.
 
 import * as React from 'react'
-import { Reorder, useDragControls } from 'framer-motion'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { ArrowDown, ArrowUp, GripVertical, Trash2 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 
@@ -27,16 +40,25 @@ export function SortableList<T>({
   children: React.ReactNode
   className?: string
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+  const ids = items.map((item) => String((item as { id?: string }).id))
+  const finish = (event: DragEndEvent) => {
+    if (!event.over || event.active.id === event.over.id) return
+    const from = ids.indexOf(String(event.active.id))
+    const to = ids.indexOf(String(event.over.id))
+    if (from >= 0 && to >= 0) onReorder(arrayMove(items, from, to))
+  }
   return (
-    <Reorder.Group
-      axis="y"
-      values={items}
-      onReorder={onReorder}
-      as="ul"
-      className={cn('divide-y divide-slate-100 dark:divide-slate-800', className)}
-    >
-      <GeneratedValue value={children} />
-    </Reorder.Group>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={finish}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <ul className={cn('divide-y divide-slate-100 dark:divide-slate-800', className)}>
+          <GeneratedValue value={children} />
+        </ul>
+      </SortableContext>
+    </DndContext>
   )
 }
 
@@ -62,13 +84,13 @@ export function SortableRow<T>({
   children: React.ReactNode
 }) {
   const tGenerated = useGeneratedTranslations()
-  const controls = useDragControls()
+  const id = String((value as { id?: string }).id)
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id })
   return (
-    <Reorder.Item
-      value={value}
-      dragListener={false}
-      dragControls={controls}
-      as="li"
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...attributes}
       className={cn(
         'flex items-center justify-between gap-2 rounded px-1 py-2 transition-colors',
         selected
@@ -79,7 +101,7 @@ export function SortableRow<T>({
       <button
         type="button"
         aria-label={tGenerated('m_0b04b904ce4f9a')}
-        onPointerDown={(e) => controls.start(e)}
+        {...listeners}
         className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
       >
         <GripVertical size={14} />
@@ -128,7 +150,7 @@ export function SortableRow<T>({
           }
         />
       </div>
-    </Reorder.Item>
+    </li>
   )
 }
 

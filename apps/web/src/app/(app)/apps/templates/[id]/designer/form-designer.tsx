@@ -65,7 +65,24 @@ import {
   Users,
   Video,
 } from 'lucide-react'
-import { Reorder, useDragControls } from 'framer-motion'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   Alert,
   AlertDescription,
@@ -92,6 +109,7 @@ import {
   type FieldType,
   MAX_SKETCH_SYMBOLS,
   sketchConfigSchema,
+  validateFormSchema,
   type FormField,
   type FormSchemaV1,
   type SketchSymbol,
@@ -138,6 +156,7 @@ import {
 } from 'lucide-react'
 import { listDataSources, type DataSourceSummary } from '../../../_lib/data-sources'
 import { formFlowProfile } from '@/lib/flows/form-flow-validation'
+import { moveFieldToSection } from '@/components/builder/move-field'
 
 // --- Palette ---------------------------------------------------------------
 
@@ -339,6 +358,10 @@ export function FormDesigner({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
   const router = useRouter()
   const languages = useTranslations('Languages')
   const [schema, setSchema] = useState<FormSchemaV1>(initialSchema)
@@ -544,14 +567,51 @@ export function FormDesigner({
     })
   }
 
-  // Drag-to-reorder fields within a section (framer-motion Reorder). Replaces
-  // the schema's field order with the dragged order; the up/down arrows remain
-  // as a keyboard-accessible fallback.
-  function reorderFields(sectionId: string, fields: FormField[]) {
-    setSchema((s) => ({
-      ...s,
-      sections: s.sections.map((sec) => (sec.id === sectionId ? { ...sec, fields } : sec)),
-    }))
+  function commitFieldMove(
+    fieldId: string,
+    fromSectionId: string,
+    toSectionId: string,
+    index: number,
+  ) {
+    const result = moveFieldToSection(schema, fieldId, fromSectionId, toSectionId, index)
+    if (result.blocked) {
+      toast.error(
+        tGeneratedValue(
+          'This field cannot move into or out of a repeating section because repeating answers are stored differently.',
+        ),
+      )
+      return
+    }
+    if (!result.moved) return
+    try {
+      validateFormSchema(result.schema)
+    } catch {
+      toast.error(
+        tGeneratedValue(
+          'This move would leave invalid field references. Fix those references before moving the field.',
+        ),
+      )
+      return
+    }
+    setSchema(result.schema)
+    if (selection.kind === 'field' && selection.fieldId === fieldId)
+      setSelection({ kind: 'field', sectionId: toSectionId, fieldId })
+  }
+
+  function handleFieldDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const [fromSectionId, fieldId] = String(active.id).split(':')
+    const overId = String(over.id)
+    const toSectionId = overId.startsWith('section:') ? overId.slice(8) : overId.split(':')[0]
+    if (!fromSectionId || !fieldId || !toSectionId) return
+    const target = schema.sections.find((section) => section.id === toSectionId)
+    if (!target) return
+    const targetField = target.fields.findIndex((field) => field.id === overId.split(':')[1])
+    const source = schema.sections.find((section) => section.id === fromSectionId)
+    if (!source) return
+    const index = targetField < 0 ? target.fields.length : targetField
+    commitFieldMove(fieldId, fromSectionId, toSectionId, index)
   }
 
   function moveSection(sectionId: string, delta: -1 | 1) {
@@ -1042,193 +1102,200 @@ export function FormDesigner({
                         </button>
                       </div>
 
-                      <GeneratedValue
-                        value={visibleSections.map((sec, i) => {
-                          const active =
-                            selection.kind === 'section' && selection.sectionId === sec.id
-                          return (
-                            <Card
-                              key={sec.id}
-                              onDragEnter={
-                                sec.canvas
-                                  ? undefined
-                                  : (event) => {
-                                      if (!dragElementRef.current) return
-                                      event.preventDefault()
-                                      setDropSectionId(sec.id)
-                                    }
-                              }
-                              onDragOver={
-                                sec.canvas
-                                  ? undefined
-                                  : (event) => {
-                                      if (!dragElementRef.current) return
-                                      event.preventDefault()
-                                      event.dataTransfer.dropEffect = 'copy'
-                                    }
-                              }
-                              onDrop={
-                                sec.canvas
-                                  ? undefined
-                                  : (event) => {
-                                      event.preventDefault()
-                                      event.stopPropagation()
-                                      const type = dragElementRef.current
-                                      dragElementRef.current = null
-                                      setDropSectionId(null)
-                                      if (type) addField(sec.id, type)
-                                    }
-                              }
-                              className={`border transition-colors ${
-                                dropSectionId === sec.id
-                                  ? 'border-teal-500 bg-teal-50/70 ring-2 ring-teal-500/40 dark:bg-teal-950/30'
-                                  : active
-                                    ? 'border-teal-500 ring-1 ring-teal-500'
-                                    : 'border-slate-200 dark:border-slate-800'
-                              }`}
-                            >
-                              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                                <button
-                                  type="button"
-                                  onClick={() => selectSection(sec.id)}
-                                  className="flex-1 text-left"
-                                >
-                                  <CardTitle className="text-base">
-                                    <GeneratedValue
-                                      value={localizeText(
-                                        sec.title,
-                                        contentLocale,
-                                        'Untitled section',
-                                        defaultLocale,
-                                      )}
-                                    />
-                                    <GeneratedValue value={' '} />
-                                    <GeneratedValue
-                                      value={
-                                        sec.repeating ? (
-                                          <Badge variant="secondary">
-                                            <GeneratedText id="m_06e1ca227aca9b" />
-                                          </Badge>
-                                        ) : null
-                                      }
-                                    />
-                                    <GeneratedValue
-                                      value={
-                                        sec.showIf ? (
-                                          <Badge variant="outline" className="text-[10px]">
-                                            <GeneratedText id="m_02529c1532db7a" />
-                                          </Badge>
-                                        ) : null
-                                      }
-                                    />
-                                    <GeneratedValue
-                                      value={
-                                        sec.step ? (
-                                          <Badge variant="outline" className="text-[10px]">
-                                            <GeneratedText id="m_11933adf482cac" />{' '}
-                                            <GeneratedValue
-                                              value={stepLabel(
-                                                schema,
-                                                sec.step,
-                                                contentLocale,
-                                                defaultLocale,
-                                              )}
-                                            />
-                                          </Badge>
-                                        ) : null
-                                      }
-                                    />
-                                  </CardTitle>
-                                </button>
-                                <div className="flex items-center gap-1">
-                                  <IconButton
-                                    title={tGenerated('m_1ec1460770eaa0')}
-                                    onClick={() => moveSection(sec.id, -1)}
-                                    disabled={i === 0}
-                                  >
-                                    <ArrowUp size={14} />
-                                  </IconButton>
-                                  <IconButton
-                                    title={tGenerated('m_14ab8cefda3cf9')}
-                                    onClick={() => moveSection(sec.id, 1)}
-                                    disabled={i === visibleSections.length - 1}
-                                  >
-                                    <ArrowDown size={14} />
-                                  </IconButton>
-                                  <IconButton
-                                    title={tGenerated('m_1e97527af4024b')}
-                                    onClick={() => deleteSection(sec.id)}
-                                  >
-                                    <Trash2 size={14} className="text-red-500" />
-                                  </IconButton>
-                                </div>
-                              </CardHeader>
-                              <CardContent className="pt-0">
-                                <GeneratedValue
-                                  value={
-                                    sec.canvas ? (
-                                      <CanvasEditor
-                                        section={sec}
-                                        locale={contentLocale}
-                                        defaultLocale={defaultLocale}
-                                        selectedFieldId={
-                                          selection.kind === 'field' &&
-                                          selection.sectionId === sec.id
-                                            ? selection.fieldId
-                                            : null
+                      <DndContext
+                        sensors={dragSensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleFieldDragEnd}
+                      >
+                        <GeneratedValue
+                          value={visibleSections.map((sec, i) => {
+                            const active =
+                              selection.kind === 'section' && selection.sectionId === sec.id
+                            return (
+                              <SectionDropTarget key={sec.id} id={`section:${sec.id}`}>
+                                <Card
+                                  onDragEnter={
+                                    sec.canvas
+                                      ? undefined
+                                      : (event) => {
+                                          if (!dragElementRef.current) return
+                                          event.preventDefault()
+                                          setDropSectionId(sec.id)
                                         }
-                                        dragTypeRef={dragElementRef}
-                                        onLayout={(items) => setCanvasItems(sec.id, items)}
-                                        onAddWidget={(type, box) =>
-                                          addWidgetToCanvas(sec.id, type, box)
-                                        }
-                                        onSelect={(fieldId) => selectField(sec.id, fieldId)}
-                                        onDelete={(fieldId) => deleteField(sec.id, fieldId)}
-                                      />
-                                    ) : sec.fields.length === 0 ? (
-                                      <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                                        <GeneratedText id="m_0d6735f83b77a3" />
-                                      </div>
-                                    ) : (
-                                      <Reorder.Group
-                                        axis="y"
-                                        values={sec.fields}
-                                        onReorder={(fields) =>
-                                          reorderFields(sec.id, fields as FormField[])
-                                        }
-                                        as="ul"
-                                        className="divide-y divide-slate-100 dark:divide-slate-800"
-                                      >
-                                        <GeneratedValue
-                                          value={sec.fields.map((f, j) => (
-                                            <FieldRow
-                                              key={f.id}
-                                              field={f}
-                                              locale={contentLocale}
-                                              defaultLocale={defaultLocale}
-                                              isSelected={
-                                                selection.kind === 'field' &&
-                                                selection.fieldId === f.id
-                                              }
-                                              typeLabel={FIELD_TYPES[f.type]?.label ?? f.type}
-                                              onSelect={() => selectField(sec.id, f.id)}
-                                              onMoveUp={() => moveField(sec.id, f.id, -1)}
-                                              onMoveDown={() => moveField(sec.id, f.id, 1)}
-                                              onDelete={() => deleteField(sec.id, f.id)}
-                                              canUp={j > 0}
-                                              canDown={j < sec.fields.length - 1}
-                                            />
-                                          ))}
-                                        />
-                                      </Reorder.Group>
-                                    )
                                   }
-                                />
-                              </CardContent>
-                            </Card>
-                          )
-                        })}
-                      />
+                                  onDragOver={
+                                    sec.canvas
+                                      ? undefined
+                                      : (event) => {
+                                          if (!dragElementRef.current) return
+                                          event.preventDefault()
+                                          event.dataTransfer.dropEffect = 'copy'
+                                        }
+                                  }
+                                  onDrop={
+                                    sec.canvas
+                                      ? undefined
+                                      : (event) => {
+                                          event.preventDefault()
+                                          event.stopPropagation()
+                                          const type = dragElementRef.current
+                                          dragElementRef.current = null
+                                          setDropSectionId(null)
+                                          if (type) addField(sec.id, type)
+                                        }
+                                  }
+                                  className={`border transition-colors ${
+                                    dropSectionId === sec.id
+                                      ? 'border-teal-500 bg-teal-50/70 ring-2 ring-teal-500/40 dark:bg-teal-950/30'
+                                      : active
+                                        ? 'border-teal-500 ring-1 ring-teal-500'
+                                        : 'border-slate-200 dark:border-slate-800'
+                                  }`}
+                                >
+                                  <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => selectSection(sec.id)}
+                                      className="flex-1 text-left"
+                                    >
+                                      <CardTitle className="text-base">
+                                        <GeneratedValue
+                                          value={localizeText(
+                                            sec.title,
+                                            contentLocale,
+                                            'Untitled section',
+                                            defaultLocale,
+                                          )}
+                                        />
+                                        <GeneratedValue value={' '} />
+                                        <GeneratedValue
+                                          value={
+                                            sec.repeating ? (
+                                              <Badge variant="secondary">
+                                                <GeneratedText id="m_06e1ca227aca9b" />
+                                              </Badge>
+                                            ) : null
+                                          }
+                                        />
+                                        <GeneratedValue
+                                          value={
+                                            sec.showIf ? (
+                                              <Badge variant="outline" className="text-[10px]">
+                                                <GeneratedText id="m_02529c1532db7a" />
+                                              </Badge>
+                                            ) : null
+                                          }
+                                        />
+                                        <GeneratedValue
+                                          value={
+                                            sec.step ? (
+                                              <Badge variant="outline" className="text-[10px]">
+                                                <GeneratedText id="m_11933adf482cac" />{' '}
+                                                <GeneratedValue
+                                                  value={stepLabel(
+                                                    schema,
+                                                    sec.step,
+                                                    contentLocale,
+                                                    defaultLocale,
+                                                  )}
+                                                />
+                                              </Badge>
+                                            ) : null
+                                          }
+                                        />
+                                      </CardTitle>
+                                    </button>
+                                    <div className="flex items-center gap-1">
+                                      <IconButton
+                                        title={tGenerated('m_1ec1460770eaa0')}
+                                        onClick={() => moveSection(sec.id, -1)}
+                                        disabled={i === 0}
+                                      >
+                                        <ArrowUp size={14} />
+                                      </IconButton>
+                                      <IconButton
+                                        title={tGenerated('m_14ab8cefda3cf9')}
+                                        onClick={() => moveSection(sec.id, 1)}
+                                        disabled={i === visibleSections.length - 1}
+                                      >
+                                        <ArrowDown size={14} />
+                                      </IconButton>
+                                      <IconButton
+                                        title={tGenerated('m_1e97527af4024b')}
+                                        onClick={() => deleteSection(sec.id)}
+                                      >
+                                        <Trash2 size={14} className="text-red-500" />
+                                      </IconButton>
+                                    </div>
+                                  </CardHeader>
+                                  <CardContent className="pt-0">
+                                    <GeneratedValue
+                                      value={
+                                        sec.canvas ? (
+                                          <CanvasEditor
+                                            section={sec}
+                                            locale={contentLocale}
+                                            defaultLocale={defaultLocale}
+                                            selectedFieldId={
+                                              selection.kind === 'field' &&
+                                              selection.sectionId === sec.id
+                                                ? selection.fieldId
+                                                : null
+                                            }
+                                            dragTypeRef={dragElementRef}
+                                            onLayout={(items) => setCanvasItems(sec.id, items)}
+                                            onAddWidget={(type, box) =>
+                                              addWidgetToCanvas(sec.id, type, box)
+                                            }
+                                            onSelect={(fieldId) => selectField(sec.id, fieldId)}
+                                            onDelete={(fieldId) => deleteField(sec.id, fieldId)}
+                                          />
+                                        ) : sec.fields.length === 0 ? (
+                                          <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                                            <GeneratedText id="m_0d6735f83b77a3" />
+                                          </div>
+                                        ) : (
+                                          <SortableContext
+                                            items={sec.fields.map(
+                                              (field) => `${sec.id}:${field.id}`,
+                                            )}
+                                            strategy={verticalListSortingStrategy}
+                                          >
+                                            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                                              <GeneratedValue
+                                                value={sec.fields.map((f, j) => (
+                                                  <FieldRow
+                                                    key={f.id}
+                                                    field={f}
+                                                    id={`${sec.id}:${f.id}`}
+                                                    locale={contentLocale}
+                                                    defaultLocale={defaultLocale}
+                                                    isSelected={
+                                                      selection.kind === 'field' &&
+                                                      selection.fieldId === f.id
+                                                    }
+                                                    typeLabel={FIELD_TYPES[f.type]?.label ?? f.type}
+                                                    onSelect={() => selectField(sec.id, f.id)}
+                                                    onMoveUp={() => moveField(sec.id, f.id, -1)}
+                                                    onMoveDown={() => moveField(sec.id, f.id, 1)}
+                                                    onDelete={() => deleteField(sec.id, f.id)}
+                                                    canUp={j > 0}
+                                                    canDown={j < sec.fields.length - 1}
+                                                  />
+                                                ))}
+                                              />
+                                            </ul>
+                                          </SortableContext>
+                                        )
+                                      }
+                                    />
+                                  </CardContent>
+                                </Card>
+                              </SectionDropTarget>
+                            )
+                          })}
+                        />
+                      </DndContext>
                       <Button variant="outline" onClick={addSection} className="w-full">
                         <Plus size={14} />
                         <GeneratedText id="m_0cfd5e4e441158" />
@@ -1263,6 +1330,15 @@ export function FormDesigner({
                 schema={schema}
                 locale={contentLocale}
                 defaultLocale={defaultLocale}
+                onMoveToSection={(toSectionId) =>
+                  commitFieldMove(
+                    selectedField.field.id,
+                    selectedField.section.id,
+                    toSectionId,
+                    schema.sections.find((section) => section.id === toSectionId)?.fields.length ??
+                      0,
+                  )
+                }
                 onChange={(patch) =>
                   updateField(selectedField.section.id, selectedField.field.id, patch)
                 }
@@ -1447,6 +1523,15 @@ function FieldPaletteGroup({
   )
 }
 
+function SectionDropTarget({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return (
+    <div ref={setNodeRef} className={isOver ? 'rounded-lg ring-2 ring-teal-500/60' : ''}>
+      {children}
+    </div>
+  )
+}
+
 function IconButton({
   title,
   onClick,
@@ -1472,10 +1557,10 @@ function IconButton({
   )
 }
 
-// One draggable field row in the designer canvas. Drag is handle-only (via
-// framer-motion dragControls) so clicking the row still selects the field; the
-// up/down arrows remain as a keyboard-accessible fallback.
+// One draggable field row in the designer canvas. Drag is handle-only so
+// clicking the row still selects the field.
 function FieldRow({
+  id,
   field,
   locale,
   defaultLocale,
@@ -1488,6 +1573,7 @@ function FieldRow({
   canUp,
   canDown,
 }: {
+  id: string
   field: FormField
   locale: AppLocale
   defaultLocale: AppLocale
@@ -1501,22 +1587,23 @@ function FieldRow({
   canDown: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
-  const controls = useDragControls()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  })
   const Icon = FIELD_ICONS[field.type] ?? Type
   return (
-    <Reorder.Item
-      value={field}
-      dragListener={false}
-      dragControls={controls}
-      as="li"
-      className={`flex items-center justify-between gap-2 rounded px-1 py-2 ${
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...attributes}
+      className={`flex items-center justify-between gap-2 rounded px-1 py-2 ${isDragging ? 'z-10 opacity-60' : ''} ${
         isSelected ? 'bg-teal-50 dark:bg-teal-950/40' : 'bg-white dark:bg-slate-900'
       }`}
     >
       <button
         type="button"
         aria-label={tGenerated('m_0b04b904ce4f9a')}
-        onPointerDown={(e) => controls.start(e)}
+        {...listeners}
         className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
       >
         <GripVertical size={14} />
@@ -1566,7 +1653,7 @@ function FieldRow({
           <Trash2 size={12} className="text-red-500" />
         </IconButton>
       </div>
-    </Reorder.Item>
+    </li>
   )
 }
 
@@ -1779,6 +1866,7 @@ function FieldProperties({
   schema,
   locale,
   defaultLocale,
+  onMoveToSection,
   onChange,
 }: {
   sectionId: string
@@ -1786,6 +1874,7 @@ function FieldProperties({
   schema: FormSchemaV1
   locale: AppLocale
   defaultLocale: AppLocale
+  onMoveToSection: (sectionId: string) => void
   onChange: (patch: Partial<FormField>) => void
 }) {
   const [tab, setTab] = useState<FieldPropTab>('basic')
@@ -1845,6 +1934,20 @@ function FieldProperties({
         <GeneratedText id="m_0bff3b64e15427" />{' '}
         <GeneratedValue value={FIELD_TYPES[field.type]?.label ?? field.type} />
       </h3>
+      <div className="space-y-1">
+        <Label className="text-xs">
+          <GeneratedValue value="Move to section…" />
+        </Label>
+        <Select value={sectionId} onChange={(event) => onMoveToSection(event.target.value)}>
+          {schema.sections
+            .filter((section) => section.id !== sectionId)
+            .map((section) => (
+              <option key={section.id} value={section.id}>
+                {localizeText(section.title, locale, section.id, defaultLocale)}
+              </option>
+            ))}
+        </Select>
+      </div>
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
         <GeneratedValue
           value={tabs
