@@ -410,6 +410,16 @@ async function ensureTemplate(
       status: 'published' as const,
       kind: 'wizard' as const,
       iconKey: args.key.includes('arc') ? 'zap' : 'badge-alert',
+      recordConfig:
+        args.key === HAZID_CONFINED_SPACE_APP_KEY || args.key === HAZID_FALL_PROTECTION_APP_KEY
+          ? {
+              externalCapture: {
+                enabled: true,
+                referenceLabel: 'Assessment number',
+                requirePhoto: false,
+              },
+            }
+          : null,
       createdBy: null,
     })
     .onConflictDoNothing({ target: [formTemplates.tenantId, formTemplates.key] })
@@ -497,11 +507,17 @@ const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
           required: true,
           validation: { options: optsFrom(WAH_COMMUNICATION_OPTIONS) },
         },
+        yesNo('anchor_rated', 'Anchor points rated and adequate for the load?'),
+        yesNo('equipment_inspected', 'Harnesses, lanyards, and SRLs inspected before use?'),
+        yesNo(
+          'hierarchy_applied',
+          'Guardrails / travel restraint used before fall arrest where practical?',
+        ),
       ],
     },
     {
       id: 'wah_protection',
-      title: { en: 'Fall protection' },
+      title: { en: 'Rescue' },
       step: 'protection',
       fields: [
         {
@@ -511,12 +527,6 @@ const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
           required: true,
           validation: { options: optsFrom(WAH_EQUIPMENT_OPTIONS) },
         },
-        yesNo('anchor_rated', 'Anchor points rated and adequate for the load?'),
-        yesNo('equipment_inspected', 'Harnesses, lanyards, and SRLs inspected before use?'),
-        yesNo(
-          'hierarchy_applied',
-          'Guardrails / travel restraint used before fall arrest where practical?',
-        ),
         {
           id: 'rescue_plan',
           type: 'long_text',

@@ -166,6 +166,7 @@ export const PERMISSION_CATALOGUE = [
   'forms.response.create',
   'forms.response.update.own',
   'forms.response.delete',
+  'forms.response.delete.own',
   // Incidents
   'incidents.read.all',
   'incidents.read.site',
@@ -314,6 +315,7 @@ export const BUILTIN_ROLES: Record<
       'forms.response.read.self',
       'forms.response.create',
       'forms.response.update.own',
+      'forms.response.delete.own',
       'incidents.read.self',
       'incidents.delete.own',
       'incidents.create',

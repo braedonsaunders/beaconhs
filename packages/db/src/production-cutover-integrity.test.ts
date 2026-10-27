@@ -139,6 +139,8 @@ describe('production cutover migration integrity', () => {
       '0087_clear_legacy_azure_provenance.sql',
       '0088_ca_assignment_cutover.sql',
       '0089_compliance_obligation_cutover.sql',
+      '0090_hazid_plan_template_fixes.sql',
+      '0091_builder_external_capture_and_delete_own.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -234,6 +236,8 @@ describe('production cutover migration integrity', () => {
       { idx: 86, tag: '0087_clear_legacy_azure_provenance' },
       { idx: 87, tag: '0088_ca_assignment_cutover' },
       { idx: 88, tag: '0089_compliance_obligation_cutover' },
+      { idx: 89, tag: '0090_hazid_plan_template_fixes' },
+      { idx: 90, tag: '0091_builder_external_capture_and_delete_own' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)

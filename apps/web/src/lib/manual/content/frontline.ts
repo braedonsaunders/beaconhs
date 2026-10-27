@@ -8,6 +8,23 @@ import { CSV_EXPORT_LIMIT_GUIDANCE } from './_shared'
 
 export const FRONTLINE_ARTICLES: ManualArticle[] = [
   {
+    slug: 'external-builder-capture',
+    title: 'Paper Builder forms on hazard assessments',
+    group: 'Everyday tasks',
+    iconKey: 'clipboard-check',
+    summary: 'Record a customer or paper form against a JSHA / FLHA.',
+    keywords: ['paper form', 'external form', 'capture', 'confined space', 'fall protection'],
+    body: `Some attached assessment apps can be completed on a customer or paper form.
+
+1. On the assessment app card, choose **Use external form**. Copy the displayed JSA reference onto the paper form.
+2. Enter **Issued by**. Add notes or photos of the completed paper form if needed.
+3. Choose **Complete external capture**. The app is marked complete, and the assessment and its PDF show the reference, issuer, and photo count.
+
+Choose **Fill in BeaconHS** when you are completing the app digitally. A copied assessment keeps the external capture mode and issuer, uses the new JSA reference, and does not copy paper-form photos.
+
+New Fall Protection Plans group anchorage, equipment inspection, and hierarchy checks under **Access & communication**. The **Rescue** section covers rescue equipment and the rescue plan.`,
+  },
+  {
     slug: 'journals',
     title: 'Daily journals',
     group: 'Everyday tasks',

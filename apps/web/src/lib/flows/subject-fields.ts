@@ -100,6 +100,9 @@ export async function loadSubjectFields(
     }
     out.push({ key: 'compliance_score', label: 'Compliance score' })
     out.push({ key: 'compliance_status', label: 'Compliance status' })
+    out.push({ key: 'capture_mode', label: 'Capture mode' })
+    out.push({ key: 'external_reference', label: 'External reference' })
+    out.push({ key: 'external_issuer', label: 'External issuer' })
     return out
   }
   return []

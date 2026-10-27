@@ -41,6 +41,11 @@ import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
 import { recordAudit } from '@/lib/audit'
 import { submitFormResponseLifecycle } from '@/lib/forms/form-response-lifecycle'
 import { materializeFormResponseEvidenceChange } from '@/lib/forms/form-response-evidence'
+import {
+  archiveFormResponseInTransaction,
+  FormResponseLockedError,
+} from '@/lib/forms/archive-form-response'
+import { domainEventActor, recordDomainEvent } from '@beaconhs/events'
 import { ApiError } from './errors'
 import { isUuid } from './records'
 
@@ -762,22 +767,21 @@ export async function deleteBuilderAppResponse(
   id: string,
 ): Promise<{ id: string; template_key: string; deleted: true; deleted_at: string }> {
   if (!isUuid(id)) throw ApiError.invalid('Response id must be a uuid')
-  const result = await ctx.db(async (tx) => {
-    const before = await lockApiResponseForMutation(tx, ctx, id)
-    if (!before || before.templateId !== app.id) {
-      throw ApiError.notFound(`No response with id ${id}`)
+  let result: Awaited<ReturnType<typeof archiveFormResponseInTransaction>>
+  try {
+    result = await ctx.db(async (tx) => {
+      const archived = await archiveFormResponseInTransaction(tx, ctx, id, app.id)
+      if (!archived) throw ApiError.notFound(`No response with id ${id}`)
+      return archived
+    })
+  } catch (error) {
+    if (isFormResponseParentLockedError(error)) throw ApiError.invalid(error.message)
+    if (error instanceof FormResponseLockedError) {
+      throw ApiError.invalid('Response is locked and cannot be archived')
     }
-    if (before.locked) throw ApiError.invalid('Response is locked and cannot be archived')
-    const deletedAt = new Date()
-    const [archived] = await tx
-      .update(formResponses)
-      .set({ deletedAt })
-      .where(eq(formResponses.id, id))
-      .returning()
-    if (!archived) throw new ApiError(500, 'internal', 'Failed to archive response')
-    await materializeFormResponseEvidenceChange(tx, ctx.tenantId, before, archived)
-    return { before, deletedAt: archived.deletedAt ?? deletedAt }
-  })
+    throw error
+  }
+  if (!result) throw ApiError.notFound(`No response with id ${id}`)
 
   await recordAudit(ctx, {
     entityType: 'form_response',
@@ -791,6 +795,28 @@ export async function deleteBuilderAppResponse(
     },
     after: { deletedAt: result.deletedAt },
   })
+  await ctx.db((tx) =>
+    recordDomainEvent(tx, {
+      tenantId: ctx.tenantId!,
+      eventType: 'form.deleted',
+      subjectId: id,
+      dedupKey: `form.deleted:${id}:${result.deletedAt.toISOString()}`,
+      payload: {
+        web: {
+          kind: 'form_deleted',
+          subjectId: id,
+          templateId: result.before.templateId,
+          data: {
+            ...((result.before.data ?? {}) as Record<string, unknown>),
+            capture_mode: result.before.captureMode,
+            external_reference: result.before.externalReference,
+            external_issuer: result.before.externalIssuer,
+          },
+          actor: domainEventActor(ctx),
+        },
+      },
+    }),
+  )
   revalidatePath('/apps/responses')
   revalidatePath(`/apps/responses/${id}`)
   return {

@@ -27,6 +27,7 @@ const hazardOwner = source('../../app/(app)/hazard-assessments/_actions.ts')
 const hazardAppResponses = source('../../app/(app)/hazard-assessments/_assessment-rules.ts')
 const hazardSaver = source('../../app/(app)/hazard-assessments/_record-edits.ts')
 const api = source('../api/builder-apps.ts')
+const archiveResponse = source('./archive-form-response.ts')
 const pdfWorker = source('../../../../worker/src/workers/pdf.ts')
 const scheduledWorker = source('../../../../worker/src/workers/scheduled.ts')
 
@@ -67,6 +68,7 @@ describe('generic form-response parent-lock contract', () => {
       'app/(app)/apps/responses/[id]/_monitor-actions.ts',
       'app/(app)/hazard-assessments/_record-edits.ts',
       'lib/api/builder-apps.ts',
+      'lib/forms/archive-form-response.ts',
       'lib/forms/form-response-lifecycle.ts',
       'lib/hazid-signing.ts',
     ])
@@ -78,6 +80,7 @@ describe('generic form-response parent-lock contract', () => {
     expect(runtimeResponseWriters(new URL('../../', import.meta.url), 'insert')).toEqual([
       'app/(app)/apps/_lib/draft-persistence.ts',
       'app/(app)/apps/_lib/form-flow-adapter.ts',
+      'app/(app)/hazard-assessments/_actions.ts',
       'app/(app)/hazard-assessments/_assessment-rules.ts',
       'app/(app)/hazard-assessments/_copy-apps.ts',
       'lib/forms/form-response-lifecycle.ts',
@@ -101,7 +104,9 @@ describe('generic form-response parent-lock contract', () => {
     expect(hazardAppResponses).toContain("status: 'draft'")
     const copiedApps = source('../../app/(app)/hazard-assessments/_copy-apps.ts')
     expect(copiedApps.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
-    expect(copiedApps).toContain("status: 'draft'")
+    expect(copiedApps).toContain(
+      "status: app.response.captureMode === 'external' ? 'submitted' : 'draft'",
+    )
     const copyOwner = source('../../app/(app)/hazard-assessments/_copy-assessment.ts')
     expect(copyOwner.indexOf('await lockVisibleAssessment(')).toBeLessThan(
       copyOwner.indexOf('await copyAssessmentApps('),
@@ -137,8 +142,8 @@ describe('generic form-response parent-lock contract', () => {
     expect(hazardSaver).toContain('await lockVisibleAssessmentRow(ctx, tx, assessmentId)')
     expect(hazardSaver).toContain('eq(formResponses.tenantId, ctx.tenantId)')
     expect(hazardSaver).toContain('isNull(formResponses.deletedAt)')
-    expect(api.match(/\.update\(formResponses\)/gu)).toHaveLength(2)
-    expect(api.match(/await lockApiResponseForMutation\(/gu)).toHaveLength(2)
+    expect(api.match(/\.update\(formResponses\)/gu)).toHaveLength(1)
+    expect(api.match(/await lockApiResponseForMutation\(/gu)).toHaveLength(1)
     expect(api).toContain('return await lockFormResponseForMutation(tx, ctx.tenantId, responseId)')
   })
 
@@ -248,7 +253,8 @@ describe('generic form-response parent-lock contract', () => {
     )
     expect(workflowActions.match(/await materializeFormResponseEvidenceChange\(/gu)).toHaveLength(2)
     expect(formFlow.match(/await materializeFormResponseEvidenceChange\(/gu)).toHaveLength(1)
-    expect(api.match(/await materializeFormResponseEvidenceChange\(/gu)).toHaveLength(2)
+    expect(api.match(/await materializeFormResponseEvidenceChange\(/gu)).toHaveLength(1)
+    expect(archiveResponse.match(/await materializeFormResponseEvidenceChange\(/gu)).toHaveLength(1)
   })
 
   it('does not rematerialize compliance for draft payload or monitor-only writes', () => {

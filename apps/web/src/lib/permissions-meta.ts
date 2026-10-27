@@ -43,6 +43,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'forms.response.create': 'Submit responses',
   'forms.response.update.own': 'Edit own responses',
   'forms.response.delete': 'Delete responses',
+  'forms.response.delete.own': 'Delete own unlocked responses',
 
   'incidents.read.all': 'View all incidents',
   'incidents.read.site': 'View site incidents',

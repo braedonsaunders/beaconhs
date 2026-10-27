@@ -135,6 +135,9 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             responseStatus: formResponses.status,
             score: formResponses.complianceScore,
             status: formResponses.complianceStatus,
+            captureMode: formResponses.captureMode,
+            externalReference: formResponses.externalReference,
+            externalIssuer: formResponses.externalIssuer,
             schema: formTemplateVersions.schema,
           })
           .from(formResponses)
@@ -181,6 +184,9 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
         ...resolvedData,
         compliance_score: resp?.score != null ? Number(resp.score) : null,
         compliance_status: resp?.status ?? null,
+        capture_mode: resp?.captureMode ?? 'digital',
+        external_reference: resp?.externalReference ?? null,
+        external_issuer: resp?.externalIssuer ?? null,
       }
       if (!resp) return out
       if (!schema) return out

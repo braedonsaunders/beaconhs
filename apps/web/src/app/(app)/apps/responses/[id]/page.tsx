@@ -1,4 +1,7 @@
 import { RecordActionMenu } from '@/components/record-action-menu'
+import { ConfirmedSubmitButton } from '@/components/record-header-actions'
+import { deleteFormResponse } from './_delete-action'
+import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -18,6 +21,7 @@ import {
   Plus,
   Send,
   ShieldAlert,
+  Trash2,
   Undo2,
 } from 'lucide-react'
 import {
@@ -580,6 +584,11 @@ export default async function FormResponsePage({
   const canManageRecord =
     canOperateApp &&
     (ctx.isSuperAdmin || ctx.permissions.has('*') || can(ctx, 'forms.response.read.all') || isOwner)
+  const canDeleteResponse =
+    !locked &&
+    canOperateApp &&
+    (can(ctx, 'forms.response.delete') ||
+      canDeleteOwnRecord(ctx, 'forms.response.delete.own', response.submittedBy))
   const lockRoles = recordConfig?.locking?.lockRoles
   const unlockRoles = recordConfig?.locking?.unlockRoles
   const canLockRecord =
@@ -793,6 +802,20 @@ export default async function FormResponsePage({
           }
           actions={
             <RecordActionMenu>
+              {canDeleteResponse ? (
+                <form action={deleteFormResponse}>
+                  <input type="hidden" name="id" value={id} />
+                  <ConfirmedSubmitButton
+                    title={tGeneratedValue('Delete response?')}
+                    message={tGeneratedValue(
+                      'This will archive the response and remove it from its linked assessment. You cannot undo this action.',
+                    )}
+                    confirmLabel={tGeneratedValue('Delete response')}
+                  >
+                    <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
+                  </ConfirmedSubmitButton>
+                </form>
+              ) : null}
               <GeneratedValue
                 value={
                   canCreateCorrectiveAction ? (
@@ -1134,6 +1157,58 @@ export default async function FormResponsePage({
                       if (sec.repeating && Array.isArray(rows)) {
                         initialRows[sec.id] = rows as Array<Record<string, unknown>>
                       }
+                    }
+                    if (response.captureMode === 'external') {
+                      const photoIds = Array.isArray(recordValues.__externalPhotoIds)
+                        ? (recordValues.__externalPhotoIds as string[])
+                        : []
+                      return (
+                        <Section title={tGeneratedValue('External form')} defaultOpen>
+                          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                            <div>
+                              <dt className="text-slate-500">
+                                <GeneratedValue value="Reference" />
+                              </dt>
+                              <dd>{response.externalReference || '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-slate-500">
+                                <GeneratedValue value="Issued by" />
+                              </dt>
+                              <dd>{response.externalIssuer || '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-slate-500">
+                                <GeneratedValue value="Photos" />
+                              </dt>
+                              <dd>{photoIds.length}</dd>
+                            </div>
+                            {response.externalNotes ? (
+                              <div className="sm:col-span-2">
+                                <dt className="text-slate-500">
+                                  <GeneratedValue value="Notes" />
+                                </dt>
+                                <dd>{response.externalNotes}</dd>
+                              </div>
+                            ) : null}
+                          </dl>
+                          {photoIds.length ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {photoIds.map((photoId) => (
+                                <a
+                                  key={photoId}
+                                  href={attachmentUrl(photoId)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="underline"
+                                >
+                                  <GeneratedValue value="View photo" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+                        </Section>
+                      )
                     }
                     return (
                       <FormRenderer

@@ -624,6 +624,20 @@
       "when": 1793113200000,
       "tag": "0089_compliance_obligation_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793116800000,
+      "tag": "0090_hazid_plan_template_fixes",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1793120400000,
+      "tag": "0091_builder_external_capture_and_delete_own",
+      "breakpoints": true
     }
   ]
 }

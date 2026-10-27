@@ -50,6 +50,11 @@ export async function loadHazidPdfAppendices(
         name: formTemplates.name,
         responseId: formResponses.id,
         status: formResponses.status,
+        captureMode: formResponses.captureMode,
+        externalReference: formResponses.externalReference,
+        externalIssuer: formResponses.externalIssuer,
+        externalNotes: formResponses.externalNotes,
+        responseData: formResponses.data,
       })
       .from(hazidAssessmentTypeApps)
       .innerJoin(formTemplates, eq(formTemplates.id, hazidAssessmentTypeApps.templateId))
@@ -97,12 +102,14 @@ export async function loadHazidPdfAppendices(
                 : app.responseId
                   ? 'DRAFT — review and submit this plan'
                   : 'NOT STARTED — this plan has not been completed'
-    const values = app.responseId
-      ? await createFormFlowAdapter(ctx, app.responseId).loadValues()
-      : {}
-    const template = app.responseId
-      ? await getFormTemplateDefaultTemplate(ctx, app.app.templateId)
-      : null
+    const values =
+      app.responseId && app.captureMode !== 'external'
+        ? await createFormFlowAdapter(ctx, app.responseId).loadValues()
+        : {}
+    const template =
+      app.responseId && app.captureMode !== 'external'
+        ? await getFormTemplateDefaultTemplate(ctx, app.app.templateId)
+        : null
     const part = template
       ? buildTemplatePdfPart(template, values)
       : buildSummaryPdfPart(
@@ -114,8 +121,13 @@ export async function loadHazidPdfAppendices(
             values,
           }),
         )
+    if (app.captureMode === 'external') part.html = ''
     // A custom plan template may have no status field. Always label draft plans.
-    part.html = `<div style="font-family:Arial,sans-serif;border-bottom:1px solid #94a3b8;padding:0 0 8px;margin:0 0 12px;break-after:avoid"><strong>${escapeHtml(app.app.label || app.name)}</strong><br/>${escapeHtml(status)}</div>${part.html}`
+    const externalSummary =
+      app.captureMode === 'external'
+        ? `<div style="font-family:Arial,sans-serif;border:1px solid #cbd5e1;padding:10px;margin:10px 0"><strong>External form</strong><br/>Ref ${escapeHtml(app.externalReference || '')}<br/>Issuer ${escapeHtml(app.externalIssuer || '')}<br/>Photos ${Array.isArray((app.responseData as Record<string, unknown> | null)?.__externalPhotoIds) ? ((app.responseData as Record<string, unknown>).__externalPhotoIds as unknown[]).length : 0}${app.externalNotes ? `<br/>Notes ${escapeHtml(app.externalNotes)}` : ''}</div>`
+        : ''
+    part.html = `<div style="font-family:Arial,sans-serif;border-bottom:1px solid #94a3b8;padding:0 0 8px;margin:0 0 12px;break-after:avoid"><strong>${escapeHtml(app.app.label || app.name)}</strong><br/>${escapeHtml(status)}</div>${externalSummary}${part.html}`
     parts.push(part)
   }
   return parts

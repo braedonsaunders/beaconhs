@@ -7,6 +7,7 @@ import { makeTenantContext } from '@beaconhs/tenant'
 import { sendFormResponseRecapEmail } from '@/app/(app)/apps/_lib/recap-email'
 import {
   runOnSubmitAutomations,
+  runOnDeleteAutomations,
   runStatusChangeAutomations,
 } from '@/app/(app)/apps/_lib/run-automations'
 import { executeModuleFlowsNow } from '@/lib/flows/run-module-flows'
@@ -128,6 +129,12 @@ export async function POST(
           score: command.score,
           status: command.status,
         },
+        event.id,
+      )
+    } else if (command.kind === 'form_deleted') {
+      await runOnDeleteAutomations(
+        ctx,
+        { templateId: command.templateId, responseId: command.subjectId, data: command.data },
         event.id,
       )
     } else if (command.kind === 'flow_gate_decided') {

@@ -4,7 +4,7 @@
 // and by the record saver in `_record-edits.ts` (offline-capable field edits),
 // so both apply the same guards inside their own transaction.
 
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   formResponses,
@@ -131,6 +131,23 @@ export async function createAssessmentAppResponse(
   const version = await latestTemplateVersion(tx, args.templateId)
   if (!version) return null
 
+  // Drop stale links whose response was soft-deleted so the unique
+  // (assessment_id, type_app_id) slot is free for the new response.
+  const staleLinks = await tx
+    .select({ id: hazidAssessmentAppResponses.id })
+    .from(hazidAssessmentAppResponses)
+    .innerJoin(formResponses, eq(formResponses.id, hazidAssessmentAppResponses.responseId))
+    .where(
+      and(
+        eq(hazidAssessmentAppResponses.assessmentId, args.assessmentId),
+        eq(hazidAssessmentAppResponses.typeAppId, args.typeAppId),
+        isNotNull(formResponses.deletedAt),
+      ),
+    )
+  for (const stale of staleLinks) {
+    await tx.delete(hazidAssessmentAppResponses).where(eq(hazidAssessmentAppResponses.id, stale.id))
+  }
+
   const [response] = await tx
     .insert(formResponses)
     .values({
@@ -207,7 +224,13 @@ export async function createAutoAssessmentApps(
     tx
       .select({ typeAppId: hazidAssessmentAppResponses.typeAppId })
       .from(hazidAssessmentAppResponses)
-      .where(eq(hazidAssessmentAppResponses.assessmentId, args.assessmentId)),
+      .innerJoin(formResponses, eq(formResponses.id, hazidAssessmentAppResponses.responseId))
+      .where(
+        and(
+          eq(hazidAssessmentAppResponses.assessmentId, args.assessmentId),
+          isNull(formResponses.deletedAt),
+        ),
+      ),
   ])
   const answers = new Map<string, string | null>(
     questionRows.flatMap((row: { sourceTypeQuestionId: string | null; answer: string | null }) =>
