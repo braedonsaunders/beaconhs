@@ -4,7 +4,7 @@
 // row's status. Returns {ok,error} so the worker can throw → retry. Never throws
 // itself for a delivery failure (only a thrown infra error would propagate).
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull, ne } from 'drizzle-orm'
 import { integrationExportLog, tenantIntegrations } from '@beaconhs/db/schema'
 import { unsealSecret } from '@beaconhs/sync'
 import type { Database } from '@beaconhs/db'
@@ -111,6 +111,75 @@ async function replaceRefs(
   })
 }
 
+/**
+ * Whether a failed delivery result still needs a ledger row of its own.
+ * A destination that fails before creating anything (connection refused,
+ * TLS error, missing config) returns no refs; without a row the failure is
+ * invisible in the delivery history even though the event was published.
+ */
+export function needsFailureRecord(result: DeliverResult): boolean {
+  return !result.ok && (result.refs === undefined || result.refs.length === 0)
+}
+
+async function recordFailedDelivery(
+  ctx: DispatchCtx,
+  automationId: string,
+  destinationKey: string,
+  triggerKey: string,
+  subjectId: string,
+  error: string,
+): Promise<void> {
+  await ctx.db(async (tx) => {
+    // One current failure row per (automation, subject): drop the superseded
+    // no-ref failure rows, but keep real external refs (they may still need
+    // reversal on retry, and pushed refs are delivery history).
+    await tx
+      .delete(integrationExportLog)
+      .where(
+        and(
+          eq(integrationExportLog.tenantId, ctx.tenantId),
+          eq(integrationExportLog.automationId, automationId),
+          eq(integrationExportLog.subjectType, triggerKey),
+          eq(integrationExportLog.subjectId, subjectId),
+          eq(integrationExportLog.status, 'failed'),
+          isNull(integrationExportLog.externalRef),
+        ),
+      )
+    await tx.insert(integrationExportLog).values({
+      tenantId: ctx.tenantId,
+      automationId,
+      subjectType: triggerKey,
+      subjectId,
+      externalSystem: destinationKey,
+      externalRef: null,
+      status: 'failed',
+      detail: { error },
+    })
+  })
+}
+
+async function clearFailureRecords(
+  ctx: DispatchCtx,
+  automationId: string,
+  triggerKey: string,
+  subjectId: string,
+): Promise<void> {
+  await ctx.db((tx) =>
+    tx
+      .delete(integrationExportLog)
+      .where(
+        and(
+          eq(integrationExportLog.tenantId, ctx.tenantId),
+          eq(integrationExportLog.automationId, automationId),
+          eq(integrationExportLog.subjectType, triggerKey),
+          eq(integrationExportLog.subjectId, subjectId),
+          ne(integrationExportLog.status, 'pushed'),
+          isNull(integrationExportLog.externalRef),
+        ),
+      ),
+  )
+}
+
 export async function dispatchOne(
   ctx: DispatchCtx,
   automationId: string,
@@ -173,7 +242,9 @@ export async function dispatchOne(
   // Persist an explicitly returned ref set, including an empty one that clears
   // stale refs. Partial results are marked failed: a retry receives those refs
   // as retryRefs, while oncePerRecord only suppresses a fully pushed delivery.
-  if (result.refs !== undefined) {
+  // A failed delivery with no refs must NOT clear prior refs (a retry may
+  // still need to reverse them); it gets a no-ref failure row below instead.
+  if (result.refs !== undefined && !needsFailureRecord(result)) {
     try {
       await replaceRefs(
         ctx,
@@ -185,6 +256,33 @@ export async function dispatchOne(
         result.ok ? 'pushed' : 'failed',
       )
     } catch (error) {
+      result = {
+        ...result,
+        ok: false,
+        error: `Outbound delivery could not be recorded safely: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
+  }
+
+  // A failure that created nothing must still appear in the delivery
+  // history; a success clears any earlier no-ref failure rows for the
+  // subject (replaceRefs already removed them when it ran, this covers
+  // destinations that succeed without returning refs).
+  try {
+    if (needsFailureRecord(result)) {
+      await recordFailedDelivery(
+        ctx,
+        automationId,
+        dest.key,
+        event.type,
+        event.subjectId,
+        result.error ?? 'Outbound delivery failed',
+      )
+    } else if (result.ok && result.refs === undefined) {
+      await clearFailureRecords(ctx, automationId, event.type, event.subjectId)
+    }
+  } catch (error) {
+    if (result.ok) {
       result = {
         ...result,
         ok: false,

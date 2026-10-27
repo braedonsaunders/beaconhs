@@ -18,6 +18,7 @@ import { isUuid } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { deleteOutbound } from '../_actions'
 import { DeleteIntegrationButton } from '../../_delete-integration-button'
+import { AutomationDeliveries } from '@/components/integration-deliveries'
 import { IntegrationBuilder, type DestLite } from './_builder.client'
 
 export async function generateMetadata() {
@@ -39,11 +40,14 @@ const STATUS_PILL: Record<string, string> = {
 
 export default async function OutboundIntegrationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const tGenerated = await getGeneratedTranslations()
   const { id } = await params
+  const sp = await searchParams
   if (!isUuid(id)) notFound()
 
   const ctx = await requireRequestContext()
@@ -138,6 +142,16 @@ export default async function OutboundIntegrationPage({
             />
           </CardContent>
         </Card>
+
+        {row.triggerKey ? (
+          <AutomationDeliveries
+            ctx={ctx}
+            automation={{ id: row.id, name: row.name, triggerKey: row.triggerKey }}
+            subjectLabel={trigger?.subjectLabel ?? 'record'}
+            basePath={`/admin/integrations/outbound/${row.id}`}
+            searchParams={sp}
+          />
+        ) : null}
 
         <DeleteIntegrationButton
           id={row.id}

@@ -8,9 +8,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, eq, isNull } from 'drizzle-orm'
-import { tenantIntegrations } from '@beaconhs/db/schema'
-import { can } from '@beaconhs/tenant'
+import { randomUUID } from 'node:crypto'
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { domainEventOutbox, tenantIntegrations } from '@beaconhs/db/schema'
+import { assertCan, can } from '@beaconhs/tenant'
+import { enqueueOutboundDispatch } from '@beaconhs/jobs'
 import { sealSecret, unsealSecret } from '@beaconhs/sync'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -252,6 +254,59 @@ export async function testOutbound(formData: FormData): Promise<{ ok: boolean; m
         ? result.summary
         : 'Connection successful.'
       : (result.error ?? 'Test failed.'),
+  }
+}
+
+/**
+ * Re-queue one failed (or never-landed) delivery. The original event payload
+ * is still in the domain-event outbox, so a re-send replays exactly what the
+ * source mutation emitted; reversible destinations delete their prior rows
+ * first, so re-sending cannot double-post.
+ */
+export async function resendOutboundDelivery(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  if (!ctx.isSuperAdmin) assertCan(ctx, PERM)
+  const automationId = String(formData.get('automationId') ?? '').trim()
+  const subjectId = String(formData.get('subjectId') ?? '').trim()
+  const triggerKey = String(formData.get('triggerKey') ?? '').trim()
+  if (!isUuid(automationId) || !isUuid(subjectId) || !triggerKey) return
+
+  const automation = await loadById(ctx, automationId)
+  if (!automation || !automation.enabled || automation.triggerKey !== triggerKey) return
+
+  const event = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ payload: domainEventOutbox.payload })
+      .from(domainEventOutbox)
+      .where(
+        and(
+          eq(domainEventOutbox.eventType, triggerKey),
+          eq(domainEventOutbox.subjectId, subjectId),
+          isNotNull(domainEventOutbox.integrationPublishedAt),
+        ),
+      )
+      .orderBy(desc(domainEventOutbox.createdAt))
+      .limit(1)
+    return row?.payload.integration ?? null
+  })
+  if (!event) return
+
+  await enqueueOutboundDispatch(
+    { tenantId: ctx.tenantId, automationId, event },
+    `domain-outbound-resend|${automationId}|${subjectId}|${randomUUID()}`,
+  )
+  await recordAudit(ctx, {
+    entityType: 'tenant_integration',
+    entityId: automationId,
+    action: 'update',
+    summary: `Re-sent failed delivery for ${triggerKey}`,
+    metadata: { triggerKey, subjectId },
+  })
+  revalidatePath(`/admin/integrations/outbound/${automationId}`)
+  revalidatePath('/admin/integrations')
+  const classId = String(formData.get('classId') ?? '').trim()
+  if (triggerKey === 'training.class.completed' && isUuid(classId)) {
+    revalidatePath(`/training/classes/${classId}`)
   }
 }
 

@@ -1,4 +1,5 @@
 import { RecordActionMenu } from '@/components/record-action-menu'
+import { SubjectDeliveryWarnings } from '@/components/integration-deliveries'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -433,6 +434,15 @@ export default async function TrainingClassPage({
         }
       >
         <div className="space-y-5">
+          {isCompleted && (canManageClasses || can(ctx, 'admin.integrations.manage')) ? (
+            <SubjectDeliveryWarnings
+              ctx={ctx}
+              triggerKey="training.class.completed"
+              subjectId={id}
+              classId={id}
+              canResend={ctx.isSuperAdmin || can(ctx, 'admin.integrations.manage')}
+            />
+          ) : null}
           <GeneratedValue
             value={
               active === 'details' ? (
