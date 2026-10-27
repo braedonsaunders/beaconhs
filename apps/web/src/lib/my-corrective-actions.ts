@@ -8,7 +8,7 @@ import { correctiveActions } from '@beaconhs/db/schema'
 
 export const OPEN_CA_STATUSES = ['open', 'in_progress', 'pending_verification'] as const
 
-export type MyCorrectiveActionItem = {
+type MyCorrectiveActionItem = {
   id: string
   reference: string
   title: string
