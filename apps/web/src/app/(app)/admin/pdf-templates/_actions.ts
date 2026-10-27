@@ -5,8 +5,10 @@
 // sanitize (shared with email templates). All mutations recordAudit.
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
+import type { Database } from '@beaconhs/db'
 import { pdfTemplates } from '@beaconhs/db/schema'
 import { sanitizeTokenizedEmailFragment } from '@beaconhs/email-render'
 import { requireRequestContext } from '@/lib/auth'
@@ -313,6 +315,145 @@ export async function generateAppPdfTemplate(input: {
   }
   revalidatePath('/admin/pdf-templates')
   return { ok: true, templateId: res.templateId }
+}
+
+async function uniquePdfTemplateKey(tx: Database, base: string): Promise<string> {
+  // Probe ALL rows — the unique index covers soft-deleted templates too.
+  const existing = await tx.select({ key: pdfTemplates.key }).from(pdfTemplates)
+  const taken = new Set(existing.map((r) => r.key))
+  let key = base
+  let n = 2
+  while (taken.has(key)) key = `${base}-${n++}`
+  return key
+}
+
+function copyName(name: string): string {
+  return normalizeTemplateName(`${name} (copy)`) ?? `${name.slice(0, 192)} (copy)`
+}
+
+/** Row action: duplicate a template and open the copy in the builder. */
+export async function duplicatePdfTemplate(formData: FormData): Promise<void> {
+  const ctx = await requireManage()
+  const id = String(formData.get('id') ?? '')
+  if (!isUuid(id)) return
+  const created = await ctx.db(async (tx) => {
+    const [source] = await tx
+      .select()
+      .from(pdfTemplates)
+      .where(and(eq(pdfTemplates.id, id), isNull(pdfTemplates.deletedAt)))
+      .limit(1)
+    if (!source) return null
+    const name = copyName(source.name)
+    const key = await uniquePdfTemplateKey(tx, slugifyTemplateKey(name))
+    const [row] = await tx
+      .insert(pdfTemplates)
+      .values({
+        tenantId: ctx.tenantId,
+        key,
+        name,
+        description: source.description,
+        recordSubjectType: source.recordSubjectType,
+        recordSubjectKey: source.recordSubjectKey,
+        paperSize: source.paperSize,
+        orientation: source.orientation,
+        marginMm: source.marginMm,
+        headerHtml: source.headerHtml,
+        footerHtml: source.footerHtml,
+        compiledHtml: source.compiledHtml,
+        sourceHtml: source.sourceHtml,
+        mergeFields: source.mergeFields,
+        isActive: source.isActive,
+        // A copy never inherits the module-default slot.
+        isModuleDefault: false,
+        createdByTenantUserId: ctx.membership?.id ?? null,
+      })
+      .returning({ id: pdfTemplates.id })
+    return row ? { id: row.id, sourceName: source.name, name } : null
+  })
+  if (!created) return
+  await recordAudit(ctx, {
+    entityType: 'pdf_template',
+    entityId: created.id,
+    action: 'create',
+    summary: `Duplicated PDF template "${created.sourceName}" as "${created.name}"`,
+  })
+  revalidatePath('/admin/pdf-templates')
+  redirect(`/admin/pdf-templates/${created.id}`)
+}
+
+/** Builder action: save the current design as a NEW template, leaving the original untouched. */
+export async function savePdfTemplateAsCopy(input: {
+  id: string
+  name: string
+  sourceHtml: string
+  paperSize: 'letter' | 'a4' | 'legal'
+  orientation: 'portrait' | 'landscape'
+  marginMm: number
+  headerHtml: string
+  footerHtml: string
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const ctx = await requireManage()
+  if (!input || !isUuid(input.id)) return { ok: false, error: 'Invalid template id.' }
+  const name = normalizeTemplateName(input.name)
+  if (!name) return { ok: false, error: 'Enter a template name of 200 characters or fewer.' }
+  if (
+    typeof input.sourceHtml !== 'string' ||
+    typeof input.headerHtml !== 'string' ||
+    typeof input.footerHtml !== 'string'
+  ) {
+    return { ok: false, error: 'The PDF design is invalid.' }
+  }
+  const compiled = compileBuilderHtml(input.sourceHtml)
+  if (compiled.errors.length > 0) return { ok: false, error: compiled.errors.join(' ') }
+  let headerHtml: string
+  let footerHtml: string
+  try {
+    headerHtml = sanitizeTokenizedEmailFragment(input.headerHtml)
+    footerHtml = sanitizeTokenizedEmailFragment(input.footerHtml)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid page header.' }
+  }
+  const created = await ctx.db(async (tx) => {
+    const [source] = await tx
+      .select()
+      .from(pdfTemplates)
+      .where(and(eq(pdfTemplates.id, input.id), isNull(pdfTemplates.deletedAt)))
+      .limit(1)
+    if (!source) return null
+    const key = await uniquePdfTemplateKey(tx, slugifyTemplateKey(name))
+    const [row] = await tx
+      .insert(pdfTemplates)
+      .values({
+        tenantId: ctx.tenantId,
+        key,
+        name,
+        description: source.description,
+        recordSubjectType: source.recordSubjectType,
+        recordSubjectKey: source.recordSubjectKey,
+        paperSize: parsePaperSize(input.paperSize),
+        orientation: parseOrientation(input.orientation),
+        marginMm: clampMarginMm(input.marginMm),
+        headerHtml,
+        footerHtml,
+        compiledHtml: compiled.html,
+        sourceHtml: compiled.sanitizedSource,
+        mergeFields: source.mergeFields,
+        isActive: source.isActive,
+        isModuleDefault: false,
+        createdByTenantUserId: ctx.membership?.id ?? null,
+      })
+      .returning({ id: pdfTemplates.id })
+    return row ?? null
+  })
+  if (!created) return { ok: false, error: 'Template not found.' }
+  await recordAudit(ctx, {
+    entityType: 'pdf_template',
+    entityId: created.id,
+    action: 'create',
+    summary: `Saved a copy of a PDF template as "${name}"`,
+  })
+  revalidatePath('/admin/pdf-templates')
+  return { ok: true, id: created.id }
 }
 
 export async function deletePdfTemplate(formData: FormData): Promise<void> {

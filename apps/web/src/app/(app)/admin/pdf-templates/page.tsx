@@ -7,7 +7,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { FileText, ArrowUpRight } from 'lucide-react'
+import { FileText, ArrowUpRight, Copy } from 'lucide-react'
 import { asc, isNull } from 'drizzle-orm'
 import { Badge, EmptyState, cn } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
@@ -18,7 +18,7 @@ import { listSubjectOptions } from '@/lib/flows/subject-fields'
 import { listAppPdfTemplates, listModulePdfDefaults } from '@/lib/module-pdf'
 import { PageContainer } from '@/components/page-layout'
 import { AdminBackLink } from '../_back-link'
-import { deletePdfTemplate } from './_actions'
+import { deletePdfTemplate, duplicatePdfTemplate } from './_actions'
 import { AppTemplatesPanel } from './_app-templates.client'
 import { DeletePdfTemplateButton } from './_delete-button'
 import { ModuleDefaultsPanel } from './_module-defaults.client'
@@ -182,6 +182,17 @@ export default async function PdfTemplatesPage({
                             </span>
                           </p>
                         </Link>
+                        <form action={duplicatePdfTemplate}>
+                          <input type="hidden" name="id" value={t.id} />
+                          <button
+                            type="submit"
+                            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-teal-700 dark:hover:bg-slate-800"
+                            title={tGenerated('m_13fa26360f0fe9')}
+                            aria-label={tGenerated('m_13fa26360f0fe9')}
+                          >
+                            <Copy size={15} />
+                          </button>
+                        </form>
                         <form action={deletePdfTemplate}>
                           <input type="hidden" name="id" value={t.id} />
                           <DeletePdfTemplateButton name={t.name} />

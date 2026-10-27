@@ -6,7 +6,7 @@ import { getGeneratedTranslations } from '@/i18n/generated.server'
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Mail, ArrowUpRight } from 'lucide-react'
+import { Mail, ArrowUpRight, Copy } from 'lucide-react'
 import { asc, isNull } from 'drizzle-orm'
 import { Badge, EmptyState } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
@@ -17,7 +17,7 @@ import { listSubjectOptions } from '@/lib/flows/subject-fields'
 import { PageContainer } from '@/components/page-layout'
 import { NotificationsSubNav } from '@/components/notifications-sub-nav'
 import { AdminBackLink } from '../_back-link'
-import { deleteEmailTemplate } from './_actions'
+import { deleteEmailTemplate, duplicateEmailTemplate } from './_actions'
 import { DeleteTemplateButton } from './_delete-button'
 import { NewEmailTemplateFlyout } from './_new-template-flyout.client'
 
@@ -133,6 +133,17 @@ export default async function EmailTemplatesPage() {
                             </span>
                           </p>
                         </Link>
+                        <form action={duplicateEmailTemplate}>
+                          <input type="hidden" name="id" value={t.id} />
+                          <button
+                            type="submit"
+                            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-teal-700 dark:hover:bg-slate-800"
+                            title={tGenerated('m_13fa26360f0fe9')}
+                            aria-label={tGenerated('m_13fa26360f0fe9')}
+                          >
+                            <Copy size={15} />
+                          </button>
+                        </form>
                         <form action={deleteEmailTemplate}>
                           <input type="hidden" name="id" value={t.id} />
                           <DeleteTemplateButton name={t.name} />
