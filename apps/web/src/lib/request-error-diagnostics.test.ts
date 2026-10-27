@@ -59,7 +59,7 @@ it('joins framework failures to the authenticated live request without trusting 
   beginDiagnosticRequest(incoming, response)
   annotateDiagnosticContext(incoming.headers, {
     userId: 'peter',
-    tenantId: 'external-training',
+    tenantId: 'example-tenant',
   } as RequestContext)
   const diagnostic = requestErrorDiagnostic(
     new Error('private text'),
@@ -72,7 +72,7 @@ it('joins framework failures to the authenticated live request without trusting 
   expect(diagnostic).toMatchObject({
     actorUserId: 'peter',
     effectiveUserId: 'peter',
-    tenantId: 'external-training',
+    tenantId: 'example-tenant',
   })
   response.emit('close')
   incoming.destroy()

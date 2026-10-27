@@ -55,7 +55,7 @@ describe('record search independent of visible table columns', () => {
   })
 
   it('finds full names, emails and canonical job titles without searching private identity fields', () => {
-    const query = compile('people', 'Ryan Stirtzinger')
+    const query = compile('people', 'Casey Brooks')
     expect(query.sql).toContain('"people"."first_name" ||')
     expect(query.sql).toContain('"people"."email" ilike')
     expect(query.sql).toContain('"people"."formal_name" ilike')

@@ -52,9 +52,9 @@ describe('training paper forms', () => {
         course_description: 'COURSE_PROSE_MUST_NOT_PRINT',
         notes: '',
         attendees: [
-          { name: 'Matt Fisher', email: 'ffindustrialinc@gmail.com', status: 'Registered' },
+          { name: 'Taylor Reed', email: 'taylor.reed@example.com', status: 'Registered' },
           {
-            name: 'Blaize Mann',
+            name: 'Riley Chen',
             email: 'blaize.mann@mannindustrialgroup.com',
             status: 'Registered',
           },

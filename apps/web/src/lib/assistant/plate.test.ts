@@ -55,7 +55,7 @@ describe('assistant plate', () => {
 
   it('tells the assistant to answer a plate question from compliance, not training alone', () => {
     const prompt = assistantSystemPrompt({
-      orgName: 'Rassaun',
+      orgName: 'Example Co',
       userName: 'Adam',
       today: '2026-10-09',
       canWrite: false,

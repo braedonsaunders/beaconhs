@@ -50,7 +50,7 @@ describe('document control facts', () => {
       ...metadata,
       headerIssuedOn: '2024-01-01',
       headerRevisedOn: '2026-09-01',
-      headerApprovedBy: 'Peter Kazmierczak',
+      headerApprovedBy: 'Alex Morgan',
       headerVersionLabel: 'Rev B',
     }
     const header = (
@@ -60,7 +60,7 @@ describe('document control facts', () => {
       version: 'Rev B',
       issuedAt: '2024-01-01',
       revisedAt: '2026-09-01',
-      approvedBy: 'Peter Kazmierczak',
+      approvedBy: 'Alex Morgan',
     })
   })
   it('keeps unpublished changes labelled Draft and derives approvers only when no override is entered', async () => {

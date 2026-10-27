@@ -107,8 +107,8 @@ SMTP targets and requires verified implicit TLS or STARTTLS.
 
 On-prem SQL integrations (inbound database sync and outbound SQL destinations)
 stay public-DNS-only unless `SYNC_DATABASE_HOST_ALLOWLIST` names the exact
-hosts that may resolve privately. The dev compose defaults that list to the
-on-prem AdminApp2 host. Those connections still require
+hosts that may resolve privately. Set it per deployment; the compose default
+is empty. Those connections still require
 TLS. An IP-literal host also needs a TLS certificate host name, and a private
 or self-signed certificate needs its CA PEM pinned on the connection.
 

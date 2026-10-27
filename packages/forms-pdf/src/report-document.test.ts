@@ -16,7 +16,7 @@ describe('AppKit report PDF document', () => {
     'prints the canonical seeded layout on portrait Letter paper',
     async () => {
       const pdf = await renderReportPdf({
-        tenantName: 'Rassaun Services',
+        tenantName: 'Example Co',
         reportName: 'Training — Expired & Upcoming',
         dateRangeLabel: 'Expired certificates and certificates expiring within 90 days.',
         generatedAt: new Date('2026-07-24T14:00:00Z'),
@@ -30,7 +30,7 @@ describe('AppKit report PDF document', () => {
         summary: [{ key: 'rows', label: 'Rows', value: 2 }],
         groups: [
           {
-            title: 'Anderson, Sean',
+            title: 'Parker, Jamie',
             columns: [
               { key: 'employee', label: 'Employee', semanticType: 'category' },
               { key: 'course', label: 'Course', semanticType: 'category' },
@@ -39,13 +39,13 @@ describe('AppKit report PDF document', () => {
             ],
             rows: [
               {
-                employee: 'Anderson, Sean',
+                employee: 'Parker, Jamie',
                 course: 'Confined Space Entry',
                 expires: '2026-06-01',
                 coverage: 'Expired',
               },
               {
-                employee: 'Anderson, Sean',
+                employee: 'Parker, Jamie',
                 course: 'Working at Heights',
                 expires: '2026-09-03',
                 coverage: 'Expiring',
@@ -79,7 +79,7 @@ describe('AppKit report PDF document', () => {
       })
       try {
         const pdf = await renderReportPdf({
-          tenantName: 'Rassaun Services',
+          tenantName: 'Example Co',
           reportName: 'Training — Missing',
           dateRangeLabel: 'Required training',
           generatedAt: new Date('2026-07-24T14:00:00Z'),

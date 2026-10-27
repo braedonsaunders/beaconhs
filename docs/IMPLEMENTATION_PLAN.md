@@ -224,7 +224,7 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 | **Digest**                | None — each notification immediate                                                   |
 | **Critical alerts**       | New incident                                                                         |
 | **Integrations**          | Inbound sync connectors plus outbound trigger/destination automations                |
-| **adminapp2**             | Stays separate; new app reads internal master data from it                           |
+| **External ERP / HR**     | Stays separate; new app reads internal master data from it                           |
 | **External APIs**         | Public REST API with per-tenant keys                                                 |
 | **Calendar**              | In-app calendar only (no Google/Outlook sync in v1)                                  |
 | **Starter content**       | Curated starter library shipped to every new tenant                                  |
@@ -501,7 +501,7 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Location history (current site + holder + history rows).
 - Inspections: pre-use (worker scans QR → form opens) + scheduled inspections.
 - Work orders: defect → WO opened → assigned → repaired → verified → closed.
-- **Out of scope:** rental rates, revenue, and accounting. Maintenance expenses are recorded in the equipment log; other financials belong in adminapp2 or equivalent.
+- **Out of scope:** rental rates, revenue, and accounting. Maintenance expenses are recorded in the equipment log; other financials belong in the external ERP or equivalent.
 
 ### 6.6 PPE
 
@@ -637,10 +637,10 @@ Plugin-era packages, tables, routes, and compatibility redirects are retired.
 ### 11.1 Source systems
 
 - `beaconhs` SQL Server (primary)
-- `peopleapp` SQL Server (HR — replaced by adminapp2 sync + initial seed)
-- `toolcrib` SQL Server (folded into Equipment)
+- Legacy HR database (replaced by ERP/HR sync + initial seed)
+- Legacy tool-crib database (folded into Equipment)
 - External training sources can be folded into Training or split into a dedicated tenant.
-- `adminapp2` (kept; new app reads from it ongoing)
+- External ERP / HR system (kept; new app reads from it ongoing)
 
 ### 11.2 ETL architecture
 
@@ -773,7 +773,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 ### Open questions to resolve before/during build
 
 1. **Should separately migrated tenants be able to share a course catalogue?** Default to full isolation; revisit only if a deployment needs shared catalogue governance.
-2. **What exactly lives in adminapp2 today vs what the new app should own?** Need a working session with whoever owns adminapp2 to draw the line. Particularly: customers, projects, employees — which is canonical where?
+2. **What exactly lives in the external ERP/HR system today vs what the new app should own?** Need a working session with whoever owns it to draw the line. Particularly: customers, projects, employees — which is canonical where?
 3. **How are external training systems implemented for each adopter?** Scan those systems before finalizing a private migration adapter.
 4. **How do you want to handle the existing field-worker user base re: passwords on cutover day?** Magic-link first-login is the friendliest path; let me know if you want a different choice.
 5. **Monitored sessions — is SMS escalation built day-one or later?** SMS is the only critical-channel use case for v1; either way you need a Twilio account if you want it.
@@ -799,6 +799,6 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 
 1. Validate this plan with key stakeholders (you + anyone else who'll use the system).
 2. Inspect private external training systems to confirm Training module scope.
-3. Sit down with whoever owns `adminapp2` to draw the master-data boundary.
+3. Sit down with whoever owns the external ERP/HR system to draw the master-data boundary.
 4. Decide team size + start date — that determines whether the timeline is 7 or 10 months.
 5. Set up the monorepo scaffold + tenant primitives + auth (Phase 0, weeks 1–4) as the proving ground for the rest.

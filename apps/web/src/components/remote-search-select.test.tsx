@@ -62,7 +62,7 @@ async function render(props: Partial<Parameters<typeof RemoteSearchSelect>[0]>) 
 describe('RemoteSearchSelect when disabled', () => {
   it('still resolves the saved choice so a locked record shows its name', async () => {
     mocks.fetch.mockResolvedValue({
-      options: [{ value: 'person-1', label: 'Jacob Kolomaya' }],
+      options: [{ value: 'person-1', label: 'Jordan Lee' }],
       hasMore: false,
     })
     await render({})
@@ -70,13 +70,13 @@ describe('RemoteSearchSelect when disabled', () => {
       expect.objectContaining({ lookup: 'journal-supervisors', query: '', selected: 'person-1' }),
       expect.anything(),
     )
-    expect(container.textContent).toBe('Jacob Kolomaya')
+    expect(container.textContent).toBe('Jordan Lee')
   })
 
   it('uses a supplied label without a lookup', async () => {
-    await render({ initialOption: { value: 'person-1', label: 'Jacob Kolomaya' } })
+    await render({ initialOption: { value: 'person-1', label: 'Jordan Lee' } })
     expect(mocks.fetch).not.toHaveBeenCalled()
-    expect(container.textContent).toBe('Jacob Kolomaya')
+    expect(container.textContent).toBe('Jordan Lee')
   })
 
   it('does not search when there is nothing to show', async () => {

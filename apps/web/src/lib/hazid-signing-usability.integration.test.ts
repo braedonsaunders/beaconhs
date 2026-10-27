@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
@@ -17,10 +16,6 @@ import {
   hazidSigningRounds,
   attachments,
   auditLog,
-  hazidHazards,
-  hazidHazardSets,
-  formTemplates,
-  formTemplateVersions,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { loadOwnSigningRequest } from './hazid-signing-request'
@@ -31,9 +26,9 @@ const url = process.env.MIGRATION_DATABASE_URL!
 if (!url || !['127.0.0.1', 'localhost'].includes(new URL(url).hostname))
   throw Error('Isolated database required')
 let currentCtx: RequestContext
-it('preserves reorder signatures, recovers stale requests only for their owner, and publishes tenant-scoped config without rewriting evidence', async () => {
+it('preserves reorder signatures, and recovers stale requests only for their owner', async () => {
   const c = createClient({ url, max: 1 }),
-    tenantId = '362623eb-f615-4610-b2f9-3422dde18cf4',
+    tenantId = randomUUID(),
     foreign = randomUUID(),
     userId = randomUUID(),
     personId = randomUUID(),
@@ -41,11 +36,7 @@ it('preserves reorder signatures, recovers stale requests only for their owner, 
     assessmentId = randomUUID(),
     signatureId = randomUUID(),
     questionId = randomUUID(),
-    attachmentId = randomUUID(),
-    hazardId = randomUUID(),
-    setId = randomUUID(),
-    templateId = randomUUID(),
-    versionId = randomUUID()
+    attachmentId = randomUUID()
   const rollback = new Error('Test rollback')
   try {
     await expect(
@@ -54,7 +45,7 @@ it('preserves reorder signatures, recovers stale requests only for their owner, 
         if (!owner) throw Error('DATABASE_OWNER_ROLE required')
         await tx.execute(sql`set local role ${sql.identifier(owner)}`)
         await tx.insert(tenants).values([
-          { id: tenantId, slug: 'rassaun', name: 'Isolated Rassaun' },
+          { id: tenantId, slug: tenantId, name: 'Isolated QA' },
           { id: foreign, slug: foreign, name: 'Other QA' },
         ])
         await tx
@@ -73,71 +64,6 @@ it('preserves reorder signatures, recovers stale requests only for their owner, 
           sizeBytes: 68,
           filename: 'signature.png',
         })
-        await tx.insert(hazidHazards).values({ id: hazardId, tenantId, name: 'Welding' })
-        await tx
-          .insert(hazidHazardSets)
-          .values({ id: setId, tenantId, name: 'Standard Mechanical Hazards', hazardIds: [] })
-        const schema = {
-          schemaVersion: 1 as const,
-          title: { en: 'Fall protection' },
-          workflow: {
-            steps: [
-              {
-                key: 'submit',
-                title: { en: 'Submit' },
-                assignee: { type: 'expression' as const, expr: '$submitter' },
-              },
-            ],
-          },
-          sections: [
-            {
-              id: 'main',
-              title: { en: 'Equipment' },
-              fields: [
-                {
-                  id: 'equipment',
-                  type: 'multi_select' as const,
-                  label: { en: 'Fall-protection equipment' },
-                  validation: { options: [{ value: 'rescue', label: { en: 'Rescue Ladder' } }] },
-                },
-              ],
-            },
-          ],
-        }
-        await tx.insert(formTemplates).values({
-          id: templateId,
-          tenantId,
-          key: 'hazid-fall-protection-plan',
-          name: 'Fall Protection Plan',
-          status: 'published',
-        })
-        await tx.insert(formTemplateVersions).values({
-          id: versionId,
-          tenantId,
-          templateId,
-          version: 1,
-          schema,
-          publishedAt: new Date(),
-        })
-        const migration = readFileSync(
-          '../../packages/db/drizzle/0084_hazard_signing_usability.sql',
-          'utf8',
-        )
-        await tx.execute(sql.raw(migration))
-        await tx.execute(sql.raw(migration))
-        const versions = await tx
-          .select()
-          .from(formTemplateVersions)
-          .where(eq(formTemplateVersions.templateId, templateId))
-          .orderBy(formTemplateVersions.version)
-        expect(versions).toHaveLength(2)
-        expect(versions[0]!.schema).toEqual(schema)
-        expect(versions[1]!.schema.sections[0]!.fields[0]!.label.en).toBe('Rescue equipment')
-        const [hazardSet] = await tx
-          .select()
-          .from(hazidHazardSets)
-          .where(eq(hazidHazardSets.id, setId))
-        expect(hazardSet!.hazardIds).toEqual([hazardId])
         await tx.insert(hazidAssessments).values({
           id: assessmentId,
           tenantId,

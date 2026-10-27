@@ -105,12 +105,12 @@ describe('document overview fields', () => {
     expect(container.querySelector('[data-testid="sync-banner"]')).not.toBeNull()
     await type('o-issued', '2024-01-01')
     await type('o-revised', '2026-09-01')
-    await type('o-approved', 'Peter Kazmierczak')
+    await type('o-approved', 'Alex Morgan')
     await type('o-version', 'Rev B')
     expect(mocks.change.mock.calls).toEqual([
       ['headerIssuedOn', '2024-01-01'],
       ['headerRevisedOn', '2026-09-01'],
-      ['headerApprovedBy', 'Peter Kazmierczak'],
+      ['headerApprovedBy', 'Alex Morgan'],
       ['headerVersionLabel', 'Rev B'],
     ])
     await act(async () => input('o-version').blur())

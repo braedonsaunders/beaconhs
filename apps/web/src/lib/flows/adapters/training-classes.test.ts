@@ -69,8 +69,8 @@ describe('training class print and flow values', () => {
       ])
       .mockResolvedValueOnce([
         {
-          firstName: 'Matt',
-          lastName: 'Wood',
+          firstName: 'Drew',
+          lastName: 'Patel',
           status: 'registered',
           personEmail: 'matt@example.com',
         },
@@ -92,7 +92,7 @@ describe('training class print and flow values', () => {
     expect(values.attendee_count).toBe(2)
     expect(values.attendee_emails).toBe('matt@example.com, zack@example.com')
     expect(values.attendees).toEqual([
-      { name: 'Matt Wood', email: 'matt@example.com', status: 'Registered' },
+      { name: 'Drew Patel', email: 'matt@example.com', status: 'Registered' },
       { name: 'Zack Mann', email: 'zack@example.com', status: 'Registered' },
     ])
   })

@@ -243,15 +243,18 @@ test('database connections reject private hosts and unencrypted credentials befo
 })
 
 test('database host allowlist is exact and still requires TLS identity for IP literals', async () => {
-  assert.equal(isDatabaseHostAllowlisted('10.0.0.44', ' 10.0.0.44, SQL.internal.example '), true)
   assert.equal(
-    isDatabaseHostAllowlisted('sql.internal.example', '10.0.0.44, SQL.internal.example'),
+    isDatabaseHostAllowlisted('10.20.30.40', ' 10.20.30.40, SQL.internal.example '),
     true,
   )
-  assert.equal(isDatabaseHostAllowlisted('10.0.0.45', '10.0.0.44'), false)
+  assert.equal(
+    isDatabaseHostAllowlisted('sql.internal.example', '10.20.30.40, SQL.internal.example'),
+    true,
+  )
+  assert.equal(isDatabaseHostAllowlisted('10.20.30.41', '10.20.30.40'), false)
 
   const previous = process.env.SYNC_DATABASE_HOST_ALLOWLIST
-  process.env.SYNC_DATABASE_HOST_ALLOWLIST = '10.0.0.44,127.0.0.1'
+  process.env.SYNC_DATABASE_HOST_ALLOWLIST = '10.20.30.40,127.0.0.1'
   const base = {
     dbKind: 'postgres' as const,
     database: 'app',
@@ -259,9 +262,12 @@ test('database host allowlist is exact and still requires TLS identity for IP li
     password: 'secret',
   }
   try {
-    await assert.rejects(connectDb({ ...base, host: '10.0.0.44', ssl: false }), /require SSL\/TLS/)
     await assert.rejects(
-      connectDb({ ...base, host: '10.0.0.44', ssl: true }),
+      connectDb({ ...base, host: '10.20.30.40', ssl: false }),
+      /require SSL\/TLS/,
+    )
+    await assert.rejects(
+      connectDb({ ...base, host: '10.20.30.40', ssl: true }),
       /TLS certificate host name/,
     )
     await assert.rejects(

@@ -28,7 +28,7 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_APP_URL', undefined)
   mocks.auth.mockReset().mockResolvedValue({
     userId: 'peter',
-    tenantId: 'external-training',
+    tenantId: 'example-tenant',
     impersonation: { actor: { userId: 'real-admin' } },
   } as RequestContext)
   mocks.rate.mockReset().mockResolvedValue({ allowed: true })
@@ -46,7 +46,7 @@ describe('authenticated browser diagnostic ingestion', () => {
     mocks.rate.mockResolvedValueOnce({ allowed: false })
     expect((await POST(request())).status).toBe(429)
     expect(mocks.rate).toHaveBeenCalledWith({
-      key: 'browser-diagnostics:external-training:real-admin',
+      key: 'browser-diagnostics:example-tenant:real-admin',
       limit: 30,
       windowSeconds: 60,
     })
@@ -82,7 +82,7 @@ describe('authenticated browser diagnostic ingestion', () => {
       kind: 'smoke',
       actorUserId: 'real-admin',
       effectiveUserId: 'peter',
-      tenantId: 'external-training',
+      tenantId: 'example-tenant',
       browser: 'chrome',
     })
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/SECRET|super-secret|cookie/)

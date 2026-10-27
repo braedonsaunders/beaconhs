@@ -167,7 +167,7 @@ const entry: JournalEntryDetail = {
   createdByTenantUserId: 'member',
   tags: [],
   photos: [],
-  authorName: 'Evan Saunders',
+  authorName: 'Sam Rivera',
   siteName: null,
   supervisorName: null,
   updatedAt: '2026-10-05T12:00:00Z',

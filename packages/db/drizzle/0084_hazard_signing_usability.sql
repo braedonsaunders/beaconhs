@@ -98,37 +98,7 @@ BEGIN
 END;
 $$;
 --> statement-breakpoint
--- Tenant-specific configuration corrections. Existing signed response versions stay immutable.
-DO $$
-DECLARE tenant_key uuid := '362623eb-f615-4610-b2f9-3422dde18cf4';
-        previous_tenant text := current_setting('app.tenant_id',true);
-        welding_id uuid; changed_set record; new_version_id uuid; template_key uuid; latest_record record; corrected jsonb;
-BEGIN
- IF NOT EXISTS(SELECT 1 FROM tenants WHERE id=tenant_key AND slug='rassaun') THEN RETURN; END IF;
- PERFORM set_config('app.tenant_id',tenant_key::text,true);
- SELECT id INTO welding_id FROM hazid_hazards WHERE tenant_id=tenant_key AND name='Welding' AND deleted_at IS NULL ORDER BY id LIMIT 1;
- IF welding_id IS NOT NULL THEN
-  FOR changed_set IN UPDATE hazid_hazard_sets SET hazard_ids=hazard_ids || jsonb_build_array(welding_id::text),updated_at=now()
-   WHERE tenant_id=tenant_key AND name IN ('Standard Mechanical Hazards','Standard Electrical Hazards','Fabrication Shop') AND NOT hazard_ids ? welding_id::text RETURNING id LOOP
-    INSERT INTO audit_log(tenant_id,entity_type,entity_id,action,summary,metadata) VALUES(tenant_key,'hazid_hazard_set',changed_set.id,'update','Add existing Welding hazard to default set','{"migration":"0084"}'::jsonb);
-  END LOOP;
- END IF;
- FOR template_key IN SELECT id FROM form_templates WHERE tenant_id=tenant_key AND key='hazid-fall-protection-plan' AND deleted_at IS NULL LOOP
-  SELECT * INTO latest_record FROM form_template_versions WHERE tenant_id=tenant_key AND template_id=template_key AND published_at IS NOT NULL ORDER BY version DESC LIMIT 1;
-  IF latest_record.id IS NULL THEN CONTINUE; END IF;
-  SELECT jsonb_set(latest_record.schema,'{sections}',jsonb_agg(
-   jsonb_set(section,'{fields}',COALESCE((SELECT jsonb_agg(
-     CASE WHEN field->>'id'='equipment' AND field->'label'->>'en'='Fall-protection equipment'
-     THEN jsonb_set(field,'{label}',COALESCE(field->'label','{}'::jsonb) || '{"en":"Rescue equipment","fr":"Équipement de sauvetage","es":"Equipo de rescate"}'::jsonb)
-     ELSE field END ORDER BY field_number)
-     FROM jsonb_array_elements(section->'fields') WITH ORDINALITY f(field,field_number)),'[]'::jsonb)) ORDER BY section_number))
-   INTO corrected FROM jsonb_array_elements(latest_record.schema->'sections') WITH ORDINALITY s(section,section_number);
-  IF corrected IS DISTINCT FROM latest_record.schema THEN
-   INSERT INTO form_template_versions(tenant_id,template_id,version,schema,changelog,published_at)
-    VALUES(tenant_key,template_key,(SELECT max(version)+1 FROM form_template_versions WHERE tenant_id=tenant_key AND template_id=template_key),corrected,'Correct rescue equipment label without changing existing responses',now()) RETURNING id INTO new_version_id;
-   INSERT INTO audit_log(tenant_id,entity_type,entity_id,action,summary,metadata) VALUES(tenant_key,'form_template',template_key,'update','Publish corrected rescue equipment label',jsonb_build_object('migration','0084','versionId',new_version_id));
-  END IF;
- END LOOP;
- PERFORM set_config('app.tenant_id',coalesce(previous_tenant,''),true);
-END;
-$$;
+-- Tenant-specific configuration corrections were applied as a one-off data
+-- change for the affected workspace; they are intentionally not part of the
+-- platform migration history.
+SELECT 1;

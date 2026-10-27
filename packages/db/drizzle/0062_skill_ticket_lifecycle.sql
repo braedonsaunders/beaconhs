@@ -10,13 +10,11 @@ DECLARE t record;
 BEGIN
   FOR t IN SELECT id FROM tenants LOOP
     PERFORM set_config('app.tenant_id', t.id::text, true);
-    IF NOT EXISTS (SELECT 1 FROM tenants WHERE id = t.id AND slug = 'rassaun') THEN
-      UPDATE training_skill_types SET credential_output_ids = coalesce((
-        SELECT jsonb_agg(o->>'id') FROM tenants tenant,
-          jsonb_array_elements(coalesce(tenant.settings->'trainingCredentialOutputs', '[{"id":"certificate","enabled":true},{"id":"wallet-card","enabled":true}]'::jsonb)) o
-        WHERE tenant.id = t.id AND coalesce((o->>'enabled')::boolean, false)), '[]'::jsonb)
-      WHERE tenant_id = t.id;
-    END IF;
+    UPDATE training_skill_types SET credential_output_ids = coalesce((
+      SELECT jsonb_agg(o->>'id') FROM tenants tenant,
+        jsonb_array_elements(coalesce(tenant.settings->'trainingCredentialOutputs', '[{"id":"certificate","enabled":true},{"id":"wallet-card","enabled":true}]'::jsonb)) o
+      WHERE tenant.id = t.id AND coalesce((o->>'enabled')::boolean, false)), '[]'::jsonb)
+    WHERE tenant_id = t.id;
     UPDATE training_extra_fields SET value_mode = 'type' WHERE tenant_id = t.id AND skill_type_id IS NOT NULL AND nullif(trim(field_value), '') IS NOT NULL;
     UPDATE training_skill_assignments SET status = CASE
       WHEN lower(split_part(coalesce(notes, ''), ' · ', 1)) IN ('complete','expired','tested','recommended','failed')

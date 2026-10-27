@@ -20,13 +20,13 @@ describe('PPE register and CSV query parity', () => {
   })
 
   it('keeps soft-deletion and status filtering around searches for hidden notes and holder names', () => {
-    const query = compile({ q: 'Ryan Stirtzinger' })
+    const query = compile({ q: 'Casey Brooks' })
     expect(query.sql).toContain('"ppe_items"."deleted_at" is null and')
     expect(query.sql).toContain('"ppe_items"."notes" ilike')
     expect(query.sql).toContain('"people"."first_name" ||')
     expect(query.sql).toContain('"people"."tenant_id" = "ppe_items"."tenant_id"')
     expect(query.sql).toContain('"ppe_types"."tenant_id" = "ppe_items"."tenant_id"')
-    expect(query.params).toContain('%Ryan Stirtzinger%')
+    expect(query.params).toContain('%Casey Brooks%')
     for (const status of ['in_stock', 'issued', 'returned', 'out_of_service']) {
       expect(query.params).toContain(status)
     }

@@ -441,7 +441,7 @@ jobs:
             printf 'VAPID_SUBJECT=%s\n' "$VAPID_SUBJECT"
             printf 'SENTRY_DSN=%s\n' "$SENTRY_DSN"
             printf 'TENANT_PLUGIN_INSTALLATIONS=%s\n' "$TENANT_PLUGIN_INSTALLATIONS"
-            printf 'SYNC_DATABASE_HOST_ALLOWLIST=%s\n' "${SYNC_DATABASE_HOST_ALLOWLIST:-10.0.0.44}"
+            printf 'SYNC_DATABASE_HOST_ALLOWLIST=%s\n' "${SYNC_DATABASE_HOST_ALLOWLIST}"
           } > "$env_block_file"
           jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" \
             --argjson registry "$DOKPLOY_EXISTING_REGISTRY_ID_JSON" \

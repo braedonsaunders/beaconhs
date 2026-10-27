@@ -6,8 +6,7 @@ import {
   repairLinkedEmbeddedImages,
 } from './external-images'
 
-const AZURE =
-  'https://beaconhs.blob.core.windows.net/beaconhs-rassaun/entities/documents/abc/photo.png'
+const AZURE = 'https://legacy.blob.core.windows.net/tenant-files/entities/documents/abc/photo.png'
 const IMAGE_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 

@@ -6,7 +6,7 @@ vi.mock('node:module', () => ({ createRequire: () => mocks.load }))
 vi.mock('@/lib/audit', () => ({ recordAuditInTransaction: vi.fn() }))
 import { executeTenantPluginAction, loadTenantPluginActions, tenantInstallations } from './host'
 
-const tenantId = '362623eb-f615-4610-b2f9-3422dde18cf4'
+const tenantId = 'a0000000-0000-4000-8000-0000000000e1'
 const otherTenantId = '462623eb-f615-4610-b2f9-3422dde18cf4'
 const context = {
   ctx: { tenantId } as RequestContext,

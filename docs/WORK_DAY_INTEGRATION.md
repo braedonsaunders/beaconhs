@@ -1,6 +1,6 @@
 # Optional employee work-day integration
 
-Journal obligations can require one journal per weekday, per calendar day, or per worked day. Weekdays and calendar days need no integration. Worked-day mode is optional and provider-neutral; no AdminApp, payroll product or tenant is built into the public engine.
+Journal obligations can require one journal per weekday, per calendar day, or per worked day. Weekdays and calendar days need no integration. Worked-day mode is optional and provider-neutral; no particular HR system, payroll product or tenant is built into the public engine.
 
 Use an API key with `compliance.manage` to POST `/api/v1/person_work_days`:
 

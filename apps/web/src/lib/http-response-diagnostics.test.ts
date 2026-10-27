@@ -57,7 +57,7 @@ it('captures failed server actions with authenticated correlation without exposi
   observeHttpResponse(request, response)
   annotateDiagnosticContext(request.headers, {
     userId: 'peter',
-    tenantId: 'external-training',
+    tenantId: 'example-tenant',
   } as RequestContext)
   response.emit('close')
   const line = String(warn.mock.calls[0]?.[0])
@@ -65,7 +65,7 @@ it('captures failed server actions with authenticated correlation without exposi
     kind: 'server_action_failed',
     routeFamily: 'training',
     actorUserId: 'peter',
-    tenantId: 'external-training',
+    tenantId: 'example-tenant',
     statusCode: 404,
   })
   expect(line).not.toMatch(/secret|SECRET-ACTION-ID/)

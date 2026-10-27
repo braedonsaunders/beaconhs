@@ -141,7 +141,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (!isUuid(id)) notFound()
 
   // Use the person's name as the document title so back links that land here
-  // from elsewhere read "Back to Jamie Arsenault", not "Back to Person".
+  // from elsewhere read "Back to <their name>", not "Back to Person".
   try {
     const ctx = await requireRequestContext()
     const name = await ctx.db(async (tx) => {

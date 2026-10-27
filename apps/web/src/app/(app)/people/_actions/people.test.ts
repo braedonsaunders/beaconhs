@@ -19,7 +19,7 @@ vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }))
 import { deletePerson } from './people'
 
 const id = 'ac5947eb-21b4-4a2b-b787-6f40573c8567'
-const before = { id, firstName: 'Ryan', lastName: 'Stirtzinger', userId: 'login', deletedAt: null }
+const before = { id, firstName: 'Casey', lastName: 'Brooks', userId: 'login', deletedAt: null }
 const after = { ...before, deletedAt: new Date('2026-10-05T18:00:00Z') }
 const conditions: SQL[] = []
 const update = vi.fn()
@@ -100,7 +100,7 @@ describe('manual person deletion', () => {
       entityType: 'person',
       entityId: id,
       action: 'delete',
-      summary: 'Deleted person Ryan Stirtzinger',
+      summary: 'Deleted person Casey Brooks',
       before,
       after,
     })

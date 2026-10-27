@@ -24,7 +24,7 @@ const entry = {
 }
 const input = {
   title: 'Safety manual',
-  tenantName: 'Rassaun',
+  tenantName: 'Example Co',
   timeZone: 'America/Toronto',
   entries: [entry],
 }

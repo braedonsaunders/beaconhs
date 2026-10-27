@@ -1,7 +1,7 @@
 // Per-tenant seeder for the built-in Lift Plan form template.
 //
 // This is a faithful recreation of the legacy Laravel "Lift Plan" form
-// (rassaun/beaconhs: LiftPlanController + resources/views/pages/liftplan).
+// (legacy Beacon: LiftPlanController + resources/views/pages/liftplan).
 // It is a single-page form (no multi-step wizard, no sign-off) with six
 // sections, mirroring the original field-for-field:
 //

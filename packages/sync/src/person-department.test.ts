@@ -6,7 +6,7 @@ import type { Database } from '@beaconhs/db'
 import { resolvePersonDepartment } from './person-department'
 import { upsertRecord } from './upsert'
 
-const tenantId = '362623eb-f615-4610-b2f9-3422dde18cf4'
+const tenantId = 'a0000000-0000-4000-8000-0000000000e1'
 const departmentId = '3be5dbb0-bce4-48fc-ab3a-4ab65bab9962'
 function database(results: { id: string }[][], inserted: { id: string }[] = []) {
   const queries: SQL[] = []
