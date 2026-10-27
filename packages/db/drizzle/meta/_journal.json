@@ -596,6 +596,13 @@
       "when": 1793016000000,
       "tag": "0085_journal_pdf_rich_body",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1793275200000,
+      "tag": "0089_clear_legacy_azure_provenance",
+      "breakpoints": true
     }
   ]
 }
