@@ -410,6 +410,16 @@ async function ensureTemplate(
       status: 'published' as const,
       kind: 'wizard' as const,
       iconKey: args.key.includes('arc') ? 'zap' : 'badge-alert',
+      recordConfig:
+        args.key === HAZID_CONFINED_SPACE_APP_KEY || args.key === HAZID_FALL_PROTECTION_APP_KEY
+          ? {
+              externalCapture: {
+                enabled: true,
+                referenceLabel: 'Assessment number',
+                requirePhoto: false,
+              },
+            }
+          : null,
       createdBy: null,
     })
     .onConflictDoNothing({ target: [formTemplates.tenantId, formTemplates.key] })

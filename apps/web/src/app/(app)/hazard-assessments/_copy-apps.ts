@@ -74,17 +74,25 @@ export async function copyAssessmentApps(
       },
     )
     const data = await files.payload(tx, copiedPayload)
+    const copiedData =
+      app.response.captureMode === 'external' ? { ...data, __externalPhotoIds: [] } : data
     const [response] = await tx
       .insert(formResponses)
       .values({
         tenantId: ctx.tenantId,
         templateId: app.response.templateId,
         templateVersionId: latest?.id ?? app.response.templateVersionId,
-        status: 'draft',
+        captureMode: app.response.captureMode,
+        externalReference:
+          app.response.captureMode === 'external' ? copy.reference : app.response.externalReference,
+        externalIssuer: app.response.externalIssuer,
+        externalNotes: app.response.externalNotes,
+        status: app.response.captureMode === 'external' ? 'submitted' : 'draft',
+        submittedAt: app.response.captureMode === 'external' ? new Date() : null,
         submittedBy: ctx.membership?.id ?? null,
         siteOrgUnitId: copy.siteOrgUnitId,
         subjectPersonId: app.response.subjectPersonId,
-        data,
+        data: copiedData,
         sourceEntityType: 'hazid_assessment',
         sourceEntityId: copy.id,
       })

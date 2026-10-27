@@ -113,6 +113,7 @@ import {
   moveTask,
   unlockAssessment,
   openAssessmentApp,
+  captureExternalAssessmentApp,
   reviewAssessment,
   removePhoto,
   reorderPhotos,
@@ -122,6 +123,7 @@ import {
   updatePhoto,
   updateTask,
 } from '../_actions'
+import { ExternalCapture } from '../_external-capture'
 import {
   AddHazardDrawerBody,
   AddHazardLibraryDrawerBody,
@@ -619,6 +621,12 @@ export default async function HazidAssessmentDetailPage({
     const canEdit = linked
       ? !done && canOperate && canEditResponsePayload(ctx, linked.response)
       : canOperate && can(ctx, 'forms.response.create')
+    const captureConfig = (
+      template.recordConfig as {
+        externalCapture?: { enabled?: boolean; referenceLabel?: string; requirePhoto?: boolean }
+      } | null
+    )?.externalCapture
+    const externalCapture = captureConfig?.enabled ? captureConfig : null
     return {
       app,
       template,
@@ -628,6 +636,7 @@ export default async function HazidAssessmentDetailPage({
       done,
       started,
       canEdit,
+      externalCapture,
     }
   })
   const requiredEmbeddedApps = embeddedApps.filter((item) => item.app.required)
@@ -1462,7 +1471,9 @@ export default async function HazidAssessmentDetailPage({
                               ? 'View response'
                               : item.started
                                 ? 'Continue'
-                                : 'Start'
+                                : item.externalCapture
+                                  ? 'Fill in BeaconHS'
+                                  : 'Start'
                           return (
                             <div
                               key={item.app.id}
@@ -1504,6 +1515,11 @@ export default async function HazidAssessmentDetailPage({
                                     <span>
                                       <GeneratedValue value={item.template.name} />
                                     </span>
+                                    {item.response?.captureMode === 'external' ? (
+                                      <Badge variant="outline">
+                                        <GeneratedValue value="External form" />
+                                      </Badge>
+                                    ) : null}
                                     <GeneratedValue
                                       value={
                                         item.response?.updatedAt ? (
@@ -1522,6 +1538,21 @@ export default async function HazidAssessmentDetailPage({
                                       }
                                     />
                                   </div>
+                                  {item.response?.captureMode === 'external' ? (
+                                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                                      <GeneratedValue value="Ref" />:{' '}
+                                      {item.response.externalReference}
+                                      {' · '}
+                                      <GeneratedValue value="Issued by" />:{' '}
+                                      {item.response.externalIssuer}
+                                      {' · '}
+                                      <GeneratedValue value="Photos" />:{' '}
+                                      {(
+                                        (item.response.data as Record<string, unknown> | null)
+                                          ?.__externalPhotoIds as string[] | undefined
+                                      )?.length ?? 0}
+                                    </p>
+                                  ) : null}
                                 </div>
                                 <GeneratedValue
                                   value={
@@ -1536,34 +1567,60 @@ export default async function HazidAssessmentDetailPage({
                                   }
                                 />
                               </div>
-                              <OnlineActionForm
-                                action={openAssessmentApp}
-                                // Starting an app creates its response; opening
-                                // one acts on it. Both need signal.
-                                purpose={item.started ? 'finish' : 'start'}
-                                className="mt-4"
-                              >
-                                <input type="hidden" name="assessmentId" value={id} />
-                                <input type="hidden" name="typeAppId" value={item.app.id} />
-                                <Button
-                                  type="submit"
-                                  // Locked assessments are read-only: submitted responses
-                                  // stay viewable, drafts cannot be continued or started.
-                                  disabled={!item.done && (locked || !item.canEdit)}
-                                  className="ff-chip w-full sm:w-auto sm:min-w-32"
-                                >
-                                  <GeneratedValue
-                                    value={
-                                      item.done ? (
-                                        <CheckCircle2 size={16} />
-                                      ) : (
-                                        <PlayCircle size={16} />
-                                      )
+                              {item.externalCapture && !item.started && item.canEdit ? (
+                                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                  <OnlineActionForm
+                                    action={openAssessmentApp}
+                                    purpose="start"
+                                    className="w-full"
+                                  >
+                                    <input type="hidden" name="assessmentId" value={id} />
+                                    <input type="hidden" name="typeAppId" value={item.app.id} />
+                                    <Button type="submit" className="w-full">
+                                      <GeneratedValue value="Fill in BeaconHS" />
+                                    </Button>
+                                  </OnlineActionForm>
+                                  <ExternalCapture
+                                    assessmentId={id}
+                                    typeAppId={item.app.id}
+                                    reference={a.reference}
+                                    referenceLabel={
+                                      item.externalCapture.referenceLabel ?? 'Assessment number'
                                     }
+                                    requirePhoto={item.externalCapture.requirePhoto ?? false}
+                                    action={captureExternalAssessmentApp}
                                   />
-                                  <GeneratedValue value={buttonLabel} />
-                                </Button>
-                              </OnlineActionForm>
+                                </div>
+                              ) : (
+                                <OnlineActionForm
+                                  action={openAssessmentApp}
+                                  // Starting an app creates its response; opening
+                                  // one acts on it. Both need signal.
+                                  purpose={item.started ? 'finish' : 'start'}
+                                  className="mt-4"
+                                >
+                                  <input type="hidden" name="assessmentId" value={id} />
+                                  <input type="hidden" name="typeAppId" value={item.app.id} />
+                                  <Button
+                                    type="submit"
+                                    // Locked assessments are read-only: submitted responses
+                                    // stay viewable, drafts cannot be continued or started.
+                                    disabled={!item.done && (locked || !item.canEdit)}
+                                    className="ff-chip w-full sm:w-auto sm:min-w-32"
+                                  >
+                                    <GeneratedValue
+                                      value={
+                                        item.done ? (
+                                          <CheckCircle2 size={16} />
+                                        ) : (
+                                          <PlayCircle size={16} />
+                                        )
+                                      }
+                                    />
+                                    <GeneratedValue value={buttonLabel} />
+                                  </Button>
+                                </OnlineActionForm>
+                              )}
                             </div>
                           )
                         })}

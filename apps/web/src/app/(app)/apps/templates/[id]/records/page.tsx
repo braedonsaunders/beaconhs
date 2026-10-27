@@ -11,7 +11,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ClipboardCheck, Plus, Settings2 } from 'lucide-react'
+import { ClipboardCheck, Plus, Settings2, Trash2 } from 'lucide-react'
 import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
@@ -26,6 +26,9 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
+import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { ConfirmedSubmitButton } from '@/components/record-header-actions'
+import { bulkDeleteBuilderResponses } from './_bulk-delete-action'
 import { localizeText, type AppLocale } from '@beaconhs/i18n'
 import {
   formResponses,
@@ -192,6 +195,7 @@ export default async function AppRecordsPage({
   const canSubmitResponses =
     can(ctx, 'forms.response.create') &&
     canAccessTemplate(ctx, template, effectiveRoleKeys, 'operate')
+  const canBulkDelete = can(ctx, 'forms.response.delete') || can(ctx, 'forms.response.delete.own')
   const listConfig = ((template.recordConfig as { list?: ListConfig } | null)?.list ??
     {}) as ListConfig
   const defaultSortKey: (typeof SORTS)[number] =
@@ -398,165 +402,205 @@ export default async function AppRecordsPage({
             />
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
+              <form action={bulkDeleteBuilderResponses}>
+                <input type="hidden" name="templateId" value={id} />
+                {canBulkDelete ? (
+                  <div className="mb-3">
+                    <ConfirmedSubmitButton
+                      title={tGeneratedValue('Delete selected responses?')}
+                      message={tGeneratedValue(
+                        'Selected unlocked responses will be archived and removed from linked assessments.',
+                      )}
+                      confirmLabel={tGeneratedValue('Delete selected')}
+                    >
+                      <Trash2 size={14} /> <GeneratedValue value="Delete selected" />
+                    </ConfirmedSubmitButton>
+                  </div>
+                ) : null}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {canBulkDelete ? (
+                        <TableHead>
+                          <GeneratedValue value="Select" />
+                        </TableHead>
+                      ) : null}
+                      <GeneratedValue
+                        value={columns.map((col) =>
+                          col.source === 'builtin' && SORTABLE_BUILTINS.has(col.key) ? (
+                            <SortableTh
+                              key={col.key}
+                              {...sortProps}
+                              column={col.key}
+                              active={listParams.sort === col.key}
+                            >
+                              <GeneratedValue value={colLabel(col)} />
+                            </SortableTh>
+                          ) : (
+                            <TableHead
+                              key={col.key}
+                              className={col.key === 'pdf' ? 'w-16' : undefined}
+                            >
+                              <GeneratedValue value={colLabel(col)} />
+                            </TableHead>
+                          ),
+                        )}
+                      />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     <GeneratedValue
-                      value={columns.map((col) =>
-                        col.source === 'builtin' && SORTABLE_BUILTINS.has(col.key) ? (
-                          <SortableTh
-                            key={col.key}
-                            {...sortProps}
-                            column={col.key}
-                            active={listParams.sort === col.key}
-                          >
-                            <GeneratedValue value={colLabel(col)} />
-                          </SortableTh>
-                        ) : (
-                          <TableHead
-                            key={col.key}
-                            className={col.key === 'pdf' ? 'w-16' : undefined}
-                          >
-                            <GeneratedValue value={colLabel(col)} />
-                          </TableHead>
-                        ),
+                      value={rows.map(
+                        ({ response, site, submittedByName, subjectFirst, subjectLast }) => {
+                          const subject =
+                            subjectFirst || subjectLast
+                              ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
+                              : null
+                          const data = (response.data as Record<string, unknown> | null) ?? {}
+                          const cell = (col: ListColumnConfig) => {
+                            if (col.source === 'field') {
+                              return (
+                                <span className="text-xs text-slate-600">
+                                  <GeneratedValue
+                                    value={formatListCell(
+                                      fieldMap.get(col.key),
+                                      data[col.key],
+                                      ctx.locale,
+                                      ctx.defaultLocale,
+                                    )}
+                                  />
+                                </span>
+                              )
+                            }
+                            switch (col.key) {
+                              case 'id':
+                                return (
+                                  <Link
+                                    href={`/apps/responses/${response.id}`}
+                                    className="font-mono text-xs hover:underline"
+                                  >
+                                    <GeneratedValue value={response.id.slice(0, 8)} />
+                                  </Link>
+                                )
+                              case 'subject':
+                                return (
+                                  <span className="text-xs text-slate-600">
+                                    <GeneratedValue
+                                      value={subject || <span className="text-slate-400">—</span>}
+                                    />
+                                  </span>
+                                )
+                              case 'site':
+                                return (
+                                  <span className="text-xs text-slate-600">
+                                    <GeneratedValue value={site?.name ?? '—'} />
+                                  </span>
+                                )
+                              case 'status':
+                                return (
+                                  <Badge
+                                    variant={
+                                      response.status === 'closed' ||
+                                      response.status === 'submitted'
+                                        ? 'success'
+                                        : response.status === 'rejected' ||
+                                            response.status === 'non_compliant'
+                                          ? 'destructive'
+                                          : 'warning'
+                                    }
+                                  >
+                                    <GeneratedValue value={response.status.replace('_', ' ')} />
+                                  </Badge>
+                                )
+                              case 'created_at':
+                                return (
+                                  <span className="text-xs text-slate-600 tabular-nums">
+                                    <GeneratedValue
+                                      value={
+                                        response.createdAt
+                                          ? formatDate(
+                                              new Date(response.createdAt),
+                                              ctx.timezone,
+                                              ctx.locale,
+                                            )
+                                          : '—'
+                                      }
+                                    />
+                                  </span>
+                                )
+                              case 'submitted_at':
+                                return (
+                                  <span className="text-xs text-slate-600 tabular-nums">
+                                    <GeneratedValue
+                                      value={
+                                        response.submittedAt
+                                          ? formatDate(
+                                              new Date(response.submittedAt),
+                                              ctx.timezone,
+                                              ctx.locale,
+                                            )
+                                          : '—'
+                                      }
+                                    />
+                                  </span>
+                                )
+                              case 'submittedBy':
+                                return (
+                                  <span className="text-xs text-slate-600">
+                                    <GeneratedValue
+                                      value={
+                                        submittedByName ?? <span className="text-slate-400">—</span>
+                                      }
+                                    />
+                                  </span>
+                                )
+                              case 'pdf':
+                                return response.pdfAttachmentId ? (
+                                  <Badge variant="success" className="text-[10px]">
+                                    <GeneratedText id="m_1a2b2ed6729166" />
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-slate-400">—</span>
+                                )
+                              default:
+                                return <span className="text-slate-400">—</span>
+                            }
+                          }
+                          return (
+                            <TableRow key={response.id}>
+                              {canBulkDelete ? (
+                                <TableCell>
+                                  {!response.locked &&
+                                  (can(ctx, 'forms.response.delete') ||
+                                    canDeleteOwnRecord(
+                                      ctx,
+                                      'forms.response.delete.own',
+                                      response.submittedBy,
+                                    )) ? (
+                                    <input
+                                      type="checkbox"
+                                      name="responseId"
+                                      value={response.id}
+                                      aria-label={tGeneratedValue('Select response')}
+                                    />
+                                  ) : null}
+                                </TableCell>
+                              ) : null}
+                              <GeneratedValue
+                                value={columns.map((col) => (
+                                  <TableCell key={col.key}>
+                                    <GeneratedValue value={cell(col)} />
+                                  </TableCell>
+                                ))}
+                              />
+                            </TableRow>
+                          )
+                        },
                       )}
                     />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <GeneratedValue
-                    value={rows.map(
-                      ({ response, site, submittedByName, subjectFirst, subjectLast }) => {
-                        const subject =
-                          subjectFirst || subjectLast
-                            ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
-                            : null
-                        const data = (response.data as Record<string, unknown> | null) ?? {}
-                        const cell = (col: ListColumnConfig) => {
-                          if (col.source === 'field') {
-                            return (
-                              <span className="text-xs text-slate-600">
-                                <GeneratedValue
-                                  value={formatListCell(
-                                    fieldMap.get(col.key),
-                                    data[col.key],
-                                    ctx.locale,
-                                    ctx.defaultLocale,
-                                  )}
-                                />
-                              </span>
-                            )
-                          }
-                          switch (col.key) {
-                            case 'id':
-                              return (
-                                <Link
-                                  href={`/apps/responses/${response.id}`}
-                                  className="font-mono text-xs hover:underline"
-                                >
-                                  <GeneratedValue value={response.id.slice(0, 8)} />
-                                </Link>
-                              )
-                            case 'subject':
-                              return (
-                                <span className="text-xs text-slate-600">
-                                  <GeneratedValue
-                                    value={subject || <span className="text-slate-400">—</span>}
-                                  />
-                                </span>
-                              )
-                            case 'site':
-                              return (
-                                <span className="text-xs text-slate-600">
-                                  <GeneratedValue value={site?.name ?? '—'} />
-                                </span>
-                              )
-                            case 'status':
-                              return (
-                                <Badge
-                                  variant={
-                                    response.status === 'closed' || response.status === 'submitted'
-                                      ? 'success'
-                                      : response.status === 'rejected' ||
-                                          response.status === 'non_compliant'
-                                        ? 'destructive'
-                                        : 'warning'
-                                  }
-                                >
-                                  <GeneratedValue value={response.status.replace('_', ' ')} />
-                                </Badge>
-                              )
-                            case 'created_at':
-                              return (
-                                <span className="text-xs text-slate-600 tabular-nums">
-                                  <GeneratedValue
-                                    value={
-                                      response.createdAt
-                                        ? formatDate(
-                                            new Date(response.createdAt),
-                                            ctx.timezone,
-                                            ctx.locale,
-                                          )
-                                        : '—'
-                                    }
-                                  />
-                                </span>
-                              )
-                            case 'submitted_at':
-                              return (
-                                <span className="text-xs text-slate-600 tabular-nums">
-                                  <GeneratedValue
-                                    value={
-                                      response.submittedAt
-                                        ? formatDate(
-                                            new Date(response.submittedAt),
-                                            ctx.timezone,
-                                            ctx.locale,
-                                          )
-                                        : '—'
-                                    }
-                                  />
-                                </span>
-                              )
-                            case 'submittedBy':
-                              return (
-                                <span className="text-xs text-slate-600">
-                                  <GeneratedValue
-                                    value={
-                                      submittedByName ?? <span className="text-slate-400">—</span>
-                                    }
-                                  />
-                                </span>
-                              )
-                            case 'pdf':
-                              return response.pdfAttachmentId ? (
-                                <Badge variant="success" className="text-[10px]">
-                                  <GeneratedText id="m_1a2b2ed6729166" />
-                                </Badge>
-                              ) : (
-                                <span className="text-xs text-slate-400">—</span>
-                              )
-                            default:
-                              return <span className="text-slate-400">—</span>
-                          }
-                        }
-                        return (
-                          <TableRow key={response.id}>
-                            <GeneratedValue
-                              value={columns.map((col) => (
-                                <TableCell key={col.key}>
-                                  <GeneratedValue value={cell(col)} />
-                                </TableCell>
-                              ))}
-                            />
-                          </TableRow>
-                        )
-                      },
-                    )}
-                  />
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+              </form>
               <Pagination
                 basePath={basePath}
                 currentParams={sp}

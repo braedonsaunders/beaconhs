@@ -9,13 +9,14 @@ import { activePeopleWhere } from '@beaconhs/db'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
-import { and, asc, count, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
 import { assertCan, can } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
   attachments,
   formResponses,
   formTemplates,
+  formTemplateVersions,
   hazidAssessmentAppResponses,
   hazidAssessmentHazards,
   hazidAssessmentPPE,
@@ -45,7 +46,12 @@ import {
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
-import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
+import {
+  domainEventActor,
+  moduleFlowCommand,
+  recordDomainEvent,
+  recordModuleFlowEvent,
+} from '@beaconhs/events'
 import { hazardAssessmentCreatedEvent } from '@beaconhs/integrations'
 import { nextReference } from '@/lib/reference'
 import { parseDatetimeLocal } from '@/lib/datetime'
@@ -514,6 +520,166 @@ export async function openAssessmentApp(formData: FormData) {
     )
   }
   redirect(`/apps/responses/${target.responseId}` as any)
+}
+
+export async function captureExternalAssessmentApp(formData: FormData) {
+  const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  const typeAppId = String(formData.get('typeAppId') ?? '')
+  const issuer = String(formData.get('issuer') ?? '').trim()
+  const notes = String(formData.get('notes') ?? '').trim()
+  const rawPhotoIds = String(formData.get('photoIds') ?? '')
+    .split(',')
+    .filter(Boolean)
+  const photoIds = [...new Set(rawPhotoIds)]
+  if (!isUuid(assessmentId) || !isUuid(typeAppId)) throw new Error('Invalid assessment app')
+  if (
+    !issuer ||
+    issuer.length > 200 ||
+    notes.length > 2000 ||
+    photoIds.length > 10 ||
+    photoIds.some((photoId) => !isUuid(photoId))
+  ) {
+    throw new Error('Enter a valid issuer and no more than 10 photos')
+  }
+  await assertCanSeeAssessment(ctx, assessmentId)
+  await ctx.db(async (tx) => {
+    const assessment = await lockVisibleAssessment(ctx, tx, assessmentId)
+    if (assessment.locked)
+      throw new Error('Unlock this assessment before capturing an external form')
+    const [typeApp] = await tx
+      .select({ app: hazidAssessmentTypeApps, template: formTemplates })
+      .from(hazidAssessmentTypeApps)
+      .innerJoin(formTemplates, eq(formTemplates.id, hazidAssessmentTypeApps.templateId))
+      .where(
+        and(eq(hazidAssessmentTypeApps.id, typeAppId), isNull(hazidAssessmentTypeApps.deletedAt)),
+      )
+      .limit(1)
+    if (!typeApp?.app || typeApp.app.typeId !== assessment.assessmentTypeId) {
+      throw new Error('Assessment app is not available for this type')
+    }
+    const conditionalAnswers = await tx
+      .select({
+        sourceTypeQuestionId: hazidAssessmentQuestions.sourceTypeQuestionId,
+        answer: hazidAssessmentQuestions.answer,
+      })
+      .from(hazidAssessmentQuestions)
+      .where(eq(hazidAssessmentQuestions.assessmentId, assessmentId))
+    const answersByTypeQuestionId = new Map(
+      conditionalAnswers.flatMap((row) =>
+        row.sourceTypeQuestionId ? [[row.sourceTypeQuestionId, row.answer] as const] : [],
+      ),
+    )
+    if (!hazidAppIsApplicable(typeApp.app.config, answersByTypeQuestionId)) {
+      throw new Error('Answer the configured assessment question before capturing this app')
+    }
+    const config = typeApp.template.recordConfig as {
+      externalCapture?: { enabled?: boolean; requirePhoto?: boolean }
+    } | null
+    if (!config?.externalCapture?.enabled)
+      throw new Error('External capture is not enabled for this app')
+    if (config.externalCapture.requirePhoto && photoIds.length === 0)
+      throw new Error('Add at least one photo of the completed external form')
+    const roleKeys = await getEffectiveRoleKeys(ctx, tx)
+    if (
+      !canAccessTemplate(ctx, typeApp.template, roleKeys, 'operate') ||
+      !can(ctx, 'forms.response.create')
+    ) {
+      throw new Error('You do not have permission to complete this assessment app')
+    }
+    if (photoIds.length) await validateTenantImageAttachmentIdsInTx(tx, ctx.tenantId, photoIds)
+    const [existing] = await tx
+      .select({ responseId: hazidAssessmentAppResponses.responseId })
+      .from(hazidAssessmentAppResponses)
+      .innerJoin(formResponses, eq(formResponses.id, hazidAssessmentAppResponses.responseId))
+      .where(
+        and(
+          eq(hazidAssessmentAppResponses.assessmentId, assessmentId),
+          eq(hazidAssessmentAppResponses.typeAppId, typeAppId),
+          isNull(formResponses.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (existing) throw new Error('This assessment app already has a response')
+    const [version] = await tx
+      .select({ id: formTemplateVersions.id })
+      .from(formTemplateVersions)
+      .where(
+        and(
+          eq(formTemplateVersions.templateId, typeApp.template.id),
+          isNotNull(formTemplateVersions.publishedAt),
+        ),
+      )
+      .orderBy(desc(formTemplateVersions.version))
+      .limit(1)
+    if (!version) throw new Error('No published app version found')
+    const now = new Date()
+    const [response] = await tx
+      .insert(formResponses)
+      .values({
+        tenantId: ctx.tenantId,
+        templateId: typeApp.template.id,
+        templateVersionId: version.id,
+        status: 'submitted',
+        captureMode: 'external',
+        externalReference: assessment.reference,
+        externalIssuer: issuer,
+        externalNotes: notes || null,
+        submittedAt: now,
+        submittedBy: ctx.membership?.id ?? null,
+        siteOrgUnitId: assessment.siteOrgUnitId,
+        sourceEntityType: 'hazid_assessment',
+        sourceEntityId: assessmentId,
+        data: { __externalPhotoIds: photoIds },
+      })
+      .returning()
+    if (!response) throw new Error('Could not complete external capture')
+    await tx.insert(hazidAssessmentAppResponses).values({
+      tenantId: ctx.tenantId,
+      assessmentId,
+      typeAppId,
+      templateId: typeApp.template.id,
+      responseId: response.id,
+      entityOrder: typeApp.app.entityOrder,
+    })
+    await recordDomainEvent(tx, {
+      tenantId: ctx.tenantId,
+      eventType: 'form.submitted',
+      subjectId: response.id,
+      dedupKey: `form.submitted:${response.id}`,
+      payload: {
+        web: {
+          kind: 'form_submitted',
+          subjectId: response.id,
+          templateId: response.templateId,
+          data: {
+            ...(response.data as Record<string, unknown>),
+            capture_mode: 'external',
+            external_reference: response.externalReference,
+            external_issuer: response.externalIssuer,
+          },
+          score: 0,
+          status: 'compliant',
+          recap: true,
+          actor: domainEventActor(ctx),
+        },
+      },
+    })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'form_response',
+      entityId: response.id,
+      action: 'create',
+      summary: `Captured external ${typeApp.template.name} form`,
+      metadata: {
+        captureMode: 'external',
+        externalReference: assessment.reference,
+        photoCount: photoIds.length,
+      },
+    })
+  })
+  revalidateAssessment(assessmentId)
+  redirect(`/hazard-assessments/${assessmentId}#section-apps` as any)
 }
 
 export async function lockAssessment(formData: FormData) {

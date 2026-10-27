@@ -204,6 +204,10 @@ export const formResponseStatus = pgEnum('form_response_status', [
   'non_compliant',
 ])
 
+// How a response was captured: filled in BeaconHS or recorded from a paper or
+// customer form. External captures store a reference, issuer, notes and photos.
+export const formResponseCaptureMode = pgEnum('form_response_capture_mode', ['digital', 'external'])
+
 // Higher-level status of the response's compliance verdict. Computed by the
 // score-router helper at submit time and persisted on form_responses. Distinct
 // from formResponseStatus (which tracks workflow position): a response can be
@@ -247,6 +251,10 @@ export const formResponses = pgTable(
     // obligation that happens to target the same template.
     complianceObligationId: uuid('compliance_obligation_id'),
     flowExecutionKey: text('flow_execution_key'),
+    captureMode: formResponseCaptureMode('capture_mode').default('digital').notNull(),
+    externalReference: text('external_reference'),
+    externalIssuer: text('external_issuer'),
+    externalNotes: text('external_notes'),
     status: formResponseStatus('status').default('draft').notNull(),
     currentStep: text('current_step'),
     // Hot indexed columns for filtering

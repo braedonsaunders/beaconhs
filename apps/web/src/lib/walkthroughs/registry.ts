@@ -197,6 +197,10 @@ export const WALKTHROUGHS: Walkthrough[] = [
         body: 'Select the PPE the job needs. Use Add crew for employees or Add external worker for contractors and visitors. Ask each person to sign their own space. Sign opens the signature drawer; Done saves. Request emails employees a personal review link. If the JSA changes, the link offers Review current JSA. Previous signatures lets you read earlier signed versions. When signing as yourself, review any enabled saved signature before Done.',
       },
       {
+        title: 'Attached assessment apps',
+        body: 'For a Builder app, choose Fill in BeaconHS to complete it digitally. If the customer requires a paper form, choose Use external form, write the JSA reference on the paper, enter who issued it, and attach optional photos before completing the capture. In new Fall Protection Plans, anchorage, equipment inspection, and hierarchy checks are under Access & communication; Rescue covers the rescue plan and equipment.',
+      },
+      {
         title: 'Submit it',
         body: 'When everything is filled in and the crew has signed, open Actions, choose Submit & lock (Submit on a phone), and confirm. Use Unlock if the job changes after submitting. Earlier signatures stay in Previous signatures, and the changed job needs fresh signatures. Reordering rows alone keeps signatures.',
       },

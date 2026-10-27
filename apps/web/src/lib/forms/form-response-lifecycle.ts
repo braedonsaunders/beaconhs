@@ -505,7 +505,7 @@ export async function submitFormResponseLifecycle(
             kind: 'form_submitted',
             subjectId: resp.id,
             templateId: args.templateId,
-            data,
+            data: { ...data, capture_mode: resp.captureMode },
             score: verdict.score,
             status: verdict.status,
             recap: true,

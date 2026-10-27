@@ -93,6 +93,9 @@ async function loadRecord(ctx: Ctx, responseId: string) {
         submittedBy: formResponses.submittedBy,
         submittedAt: formResponses.submittedAt,
         data: formResponses.data,
+        captureMode: formResponses.captureMode,
+        externalReference: formResponses.externalReference,
+        externalIssuer: formResponses.externalIssuer,
         draftData: formResponses.draftData,
         templateId: formResponses.templateId,
         category: formTemplates.category,
@@ -290,7 +293,12 @@ export async function finalizeResponse(formData: FormData) {
           submittedAt,
           complianceScore: verdict.score,
           complianceStatus: verdict.status,
-          data,
+          data: {
+            ...data,
+            capture_mode: rec.captureMode,
+            external_reference: rec.externalReference,
+            external_issuer: rec.externalIssuer,
+          },
         }),
         web: {
           kind: 'form_submitted',

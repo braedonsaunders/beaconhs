@@ -23,8 +23,9 @@ import {
 } from '@beaconhs/db/schema'
 import type { FormSchemaV1 } from '@beaconhs/forms-core'
 import { copyAssessmentInTransaction } from './_copy-assessment'
-import type { HazidCtx } from './_assessment-rules'
+import { createAssessmentAppResponse, type HazidCtx } from './_assessment-rules'
 import { loadHazidPdfAppendices } from '@/lib/hazid-pdf-apps'
+import { archiveFormResponseInTransaction } from '@/lib/forms/archive-form-response'
 
 const url = process.env.DATABASE_URL
 const adminUrl = process.env.SUPERADMIN_DATABASE_URL
@@ -41,6 +42,7 @@ const tenantId = randomUUID(),
   typeId = randomUUID(),
   templateId = randomUUID(),
   versionId = randomUUID(),
+  latestVersionId = randomUUID(),
   typeAppId = randomUUID(),
   questionId = randomUUID(),
   workerId = randomUUID()
@@ -100,9 +102,24 @@ beforeAll(async () => {
       name: 'Fall Protection Plan',
       status: 'published',
     })
-    await tx
-      .insert(formTemplateVersions)
-      .values({ id: versionId, tenantId, templateId, version: 1, schema })
+    await tx.insert(formTemplateVersions).values([
+      {
+        id: versionId,
+        tenantId,
+        templateId,
+        version: 1,
+        schema,
+        publishedAt: new Date('2026-09-01T00:00:00Z'),
+      },
+      {
+        id: latestVersionId,
+        tenantId,
+        templateId,
+        version: 2,
+        schema,
+        publishedAt: new Date('2026-10-01T00:00:00Z'),
+      },
+    ])
     await tx.insert(hazidAssessmentTypeApps).values([
       {
         id: typeAppId,
@@ -235,6 +252,102 @@ afterAll(async () => {
     await admin.sql.end()
   }
 })
+it('releases a JSA app slot when its linked Builder response was soft-deleted', async () => {
+  const assessmentId = randomUUID()
+  await ctx.db(async (tx) => {
+    await tx.insert(hazidAssessments).values({
+      id: assessmentId,
+      tenantId,
+      reference: `JSA-${assessmentId.slice(0, 8)}`,
+      occurredAt: new Date(),
+      assessmentTypeId: typeId,
+      locked: false,
+      inProgress: true,
+      signingRevision: 1,
+    })
+    const [oldResponse] = await tx
+      .insert(formResponses)
+      .values({
+        tenantId,
+        templateId,
+        templateVersionId: versionId,
+        status: 'draft',
+        data: {},
+      })
+      .returning({ id: formResponses.id })
+    await tx.insert(hazidAssessmentAppResponses).values({
+      tenantId,
+      assessmentId,
+      typeAppId,
+      templateId,
+      responseId: oldResponse!.id,
+    })
+    await tx
+      .update(formResponses)
+      .set({ deletedAt: new Date() })
+      .where(eq(formResponses.id, oldResponse!.id))
+    const replacement = await createAssessmentAppResponse(tx, {
+      tenantId,
+      assessmentId,
+      typeAppId,
+      templateId,
+      entityOrder: 1,
+    })
+    expect(replacement).not.toBeNull()
+    const links = await tx
+      .select()
+      .from(hazidAssessmentAppResponses)
+      .where(
+        and(
+          eq(hazidAssessmentAppResponses.assessmentId, assessmentId),
+          eq(hazidAssessmentAppResponses.typeAppId, typeAppId),
+        ),
+      )
+    expect(links).toHaveLength(1)
+    expect(links[0]?.responseId).toBe(replacement?.responseId)
+  })
+})
+it('archives an unlocked embedded response and removes its JSA link atomically', async () => {
+  const assessmentId = randomUUID()
+  const responseId = randomUUID()
+  await ctx.db(async (tx) => {
+    await tx.insert(hazidAssessments).values({
+      id: assessmentId,
+      tenantId,
+      reference: `JSA-${assessmentId.slice(0, 8)}`,
+      occurredAt: new Date(),
+      assessmentTypeId: typeId,
+      locked: false,
+      inProgress: true,
+      signingRevision: 1,
+    })
+    await tx.insert(formResponses).values({
+      id: responseId,
+      tenantId,
+      templateId,
+      templateVersionId: versionId,
+      status: 'draft',
+      data: {},
+      sourceEntityType: 'hazid_assessment',
+      sourceEntityId: assessmentId,
+    })
+    await tx.insert(hazidAssessmentAppResponses).values({
+      tenantId,
+      assessmentId,
+      typeAppId,
+      templateId,
+      responseId,
+    })
+    const archived = await archiveFormResponseInTransaction(tx, ctx, responseId, templateId)
+    expect(archived?.archived.deletedAt).not.toBeNull()
+    expect(
+      await tx
+        .select()
+        .from(hazidAssessmentAppResponses)
+        .where(eq(hazidAssessmentAppResponses.responseId, responseId)),
+    ).toHaveLength(0)
+  })
+})
 it('preserves complete job content and linked draft answers while requiring fresh signatures and approvals', async () => {
   const copied = await ctx.db((tx) =>
     copyAssessmentInTransaction(tx, ctx, sourceId, false, {
@@ -253,6 +366,15 @@ it('preserves complete job content and linked draft answers while requiring fres
     signingFrozenAt: null,
   })
   expect(copy.reference).not.toBe('JSA-SOURCE')
+  await ctx.db(async (tx) => {
+    const [copiedApp] = await tx
+      .select({ templateVersionId: formResponses.templateVersionId })
+      .from(hazidAssessmentAppResponses)
+      .innerJoin(formResponses, eq(formResponses.id, hazidAssessmentAppResponses.responseId))
+      .where(eq(hazidAssessmentAppResponses.assessmentId, copy.id))
+      .limit(1)
+    expect(copiedApp?.templateVersionId).toBe(latestVersionId)
+  })
   await ctx.db(async (tx) => {
     expect(
       await tx
@@ -409,6 +531,67 @@ it('includes submitted plan answers in the same export, without labelling the su
       JSON.stringify(job, null, 2),
     )
   }
+})
+it('prints external capture summaries and copies their mode without paper photos', async () => {
+  await ctx.db(async (tx) => {
+    const [link] = await tx
+      .select()
+      .from(hazidAssessmentAppResponses)
+      .where(
+        and(
+          eq(hazidAssessmentAppResponses.assessmentId, sourceId),
+          eq(hazidAssessmentAppResponses.typeAppId, typeAppId),
+        ),
+      )
+    await tx
+      .update(hazidAssessments)
+      .set({ locked: false })
+      .where(eq(hazidAssessments.id, sourceId))
+    await tx
+      .update(formResponses)
+      .set({
+        status: 'submitted',
+        captureMode: 'external',
+        externalReference: 'JSA-SOURCE',
+        externalIssuer: 'Customer safety lead',
+        externalNotes: 'Paper permit checked',
+        submittedAt: new Date(),
+        data: { __externalPhotoIds: ['photo-one'] },
+      })
+      .where(eq(formResponses.id, link!.responseId))
+  })
+  const parts = await loadHazidPdfAppendices(ctx, sourceId)
+  expect(parts[0]?.html).toContain('External form')
+  expect(parts[0]?.html).toContain('JSA-SOURCE')
+  expect(parts[0]?.html).toContain('Customer safety lead')
+  expect(parts[0]?.html).toContain('Photos 1')
+
+  const copied = await ctx.db((tx) =>
+    copyAssessmentInTransaction(tx, ctx, sourceId, false, {
+      attachment: async (_tx, id) => id,
+      payload: async (_tx, data) => data,
+    }),
+  )
+  const [copiedResponse] = await ctx.db((tx) =>
+    tx
+      .select({
+        response: formResponses,
+        link: hazidAssessmentAppResponses,
+      })
+      .from(hazidAssessmentAppResponses)
+      .innerJoin(formResponses, eq(formResponses.id, hazidAssessmentAppResponses.responseId))
+      .where(eq(hazidAssessmentAppResponses.assessmentId, copied.copy.id))
+      .limit(1),
+  )
+  expect(copiedResponse?.response).toMatchObject({
+    status: 'submitted',
+    captureMode: 'external',
+    externalReference: copied.copy.reference,
+    externalIssuer: 'Customer safety lead',
+    externalNotes: 'Paper permit checked',
+    templateVersionId: latestVersionId,
+  })
+  expect(copiedResponse?.response.data).toMatchObject({ __externalPhotoIds: [] })
 })
 
 it('upgrades untouched JSA templates idempotently while preserving customized templates in another tenant', async () => {

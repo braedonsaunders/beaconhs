@@ -603,6 +603,13 @@
       "when": 1793102400000,
       "tag": "0088_hazid_plan_template_fixes",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793124000000,
+      "tag": "0089_builder_external_capture_and_delete_own",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,28 @@ import { CSV_EXPORT_LIMIT_GUIDANCE } from './_shared'
 
 export const OVERSIGHT_ADMIN_ARTICLES: ManualArticle[] = [
   {
+    slug: 'builder-response-deletion',
+    title: 'Delete Builder responses',
+    group: 'Administration',
+    iconKey: 'clipboard-check',
+    summary: 'Delete an unlocked Builder entry or remove several from an app list.',
+    keywords: ['delete response', 'archive response', 'remove entry', 'bulk delete'],
+    requiredPermission: 'forms.template.read',
+    body: `You can delete an unlocked Builder response when your role allows it.
+
+## Delete one response
+
+1. Open the response and open **Actions**.
+2. Choose **Delete response**, then confirm. The response is archived and you return to its app records.
+
+## Delete several responses
+
+1. Open the app's records list and select the unlocked responses you may delete.
+2. Choose **Delete selected**, then confirm. The selected responses are archived together.
+
+Administrators with **Delete responses** can delete any unlocked response. A person with **Delete own unlocked responses** can delete only their own. Locked responses must be unlocked first. Deleting a response attached to a hazard assessment also releases that app slot, so the assessment can start it again.`,
+  },
+  {
     slug: 'people',
     title: 'People directory',
     group: 'Oversight & reports',

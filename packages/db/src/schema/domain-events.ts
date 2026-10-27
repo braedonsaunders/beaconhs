@@ -79,6 +79,13 @@ export type DomainWebCommand =
       actor: DomainEventActor
     }
   | {
+      kind: 'form_deleted'
+      subjectId: string
+      templateId: string
+      data: Record<string, unknown>
+      actor: DomainEventActor
+    }
+  | {
       kind: 'flow_gate_decided'
       subjectId: string
       gateId: string

@@ -31,7 +31,7 @@ type LockAction = (formData: FormData) => Promise<LockResult>
  * Confirming re-submits the same form, so the server action stays bound to the
  * form (no client-side re-implementation of the action call).
  */
-function ConfirmedSubmitButton({
+export function ConfirmedSubmitButton({
   title,
   message,
   confirmLabel,

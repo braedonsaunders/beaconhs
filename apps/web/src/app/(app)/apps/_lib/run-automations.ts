@@ -108,6 +108,56 @@ export async function runOnSubmitAutomations(
   }
 }
 
+/** Run form Flows authored for the explicit on_delete lifecycle trigger. */
+export async function runOnDeleteAutomations(
+  ctx: RequestContext,
+  args: { templateId: string; responseId: string; data: Record<string, unknown> },
+  executionId?: string,
+): Promise<void> {
+  const flows = await ctx.db((tx) =>
+    tx
+      .select({ id: formAutomations.id, graph: formAutomations.graph })
+      .from(formAutomations)
+      .where(
+        and(eq(formAutomations.templateId, args.templateId), eq(formAutomations.enabled, true)),
+      ),
+  )
+  let hadWork = false
+  const failed: string[] = []
+  const ran: string[] = []
+  for (const flow of flows) {
+    const plan = planAutomation(flow.graph, 'on_delete', {
+      values: args.data,
+      rows: {},
+      entities: {},
+    })
+    if (plan.actions.length === 0 && plan.gates.length === 0) continue
+    hadWork = true
+    const result = await executeFlowPlan(ctx, {
+      responseId: args.responseId,
+      flowId: flow.id,
+      plan,
+      values: { ...args.data },
+      executionId,
+    })
+    ran.push(...result.ran)
+    failed.push(...result.failed)
+  }
+  if (failed.length > 0 && executionId)
+    throw new Error(`Form delete flow actions failed: ${failed.join(', ')}`)
+  if (hadWork || failed.length > 0) {
+    await recordAudit(ctx, {
+      entityType: 'form_response',
+      entityId: args.responseId,
+      action: 'update',
+      dedupKey: executionId ? `domain:${executionId}:form-delete-flow` : undefined,
+      summary: executionId
+        ? 'Flows: durable on-delete execution completed'
+        : `Flows: ${ran.length ? `ran ${ran.join(', ')}` : 'no actions ran'}${failed.length ? ` · issues ${failed.join(', ')}` : ''}`,
+    })
+  }
+}
+
 /**
  * Fire flows whose trigger is `status_change` and whose target status matches
  * `toStatus`. Called from the workflow sign/advance/reject actions. Guarded.

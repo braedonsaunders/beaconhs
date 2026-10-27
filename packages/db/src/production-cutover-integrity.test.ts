@@ -136,6 +136,7 @@ describe('production cutover migration integrity', () => {
       '0084_hazard_signing_usability.sql',
       '0085_journal_pdf_rich_body.sql',
       '0088_hazid_plan_template_fixes.sql',
+      '0089_builder_external_capture_and_delete_own.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -228,6 +229,7 @@ describe('production cutover migration integrity', () => {
       { idx: 83, tag: '0084_hazard_signing_usability' },
       { idx: 84, tag: '0085_journal_pdf_rich_body' },
       { idx: 88, tag: '0088_hazid_plan_template_fixes' },
+      { idx: 89, tag: '0089_builder_external_capture_and_delete_own' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
