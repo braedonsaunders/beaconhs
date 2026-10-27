@@ -93,6 +93,8 @@ To filter first, then print, open **Reports → Training — Wallet cards**. Add
 
 When a manager marks a class complete, timesheet exports credit only the people marked **Attended**, plus the class instructor when they are an employee in BeaconHS. People marked absent are never credited. If an export to another system fails, the completed class shows a warning with the error. An admin can fix the connection and click **Re-send** on the class or under **Admin → Integrations**.
 
+If your company connected class schedules to another system (an admin sets this up under **Admin → Integrations**), BeaconHS sends that system the full class schedule whenever the roster, dates, class days, hours, or course change. Cancelling or deleting a class tells it to remove the class. The instructor is never sent as an attendee. A person with no employee ID cannot be booked there — the class shows **Not booked: no employee ID** with their name so you can fix their record. If the other system reports rows it skipped, the class shows those notes too.
+
 ## Carry your tickets with you
 
 1. Go to [My Workspace](/my) and tap **Wallet**.

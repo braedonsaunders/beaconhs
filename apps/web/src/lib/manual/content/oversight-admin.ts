@@ -1034,6 +1034,18 @@ A **Database (SQL)** connection and an **External SQL database** automation both
 
 Open an outbound automation under **Admin → Integrations**. **Delivery history** lists every record it sent, with search, a **Status** filter, and page controls. **Delivered** means the other system accepted it. **Failed** shows the error from the other system. **Not delivered** means BeaconHS published the event but the delivery never landed. Fix the connection first, then click **Re-send** on the failed row. Re-sending never posts twice: destinations that support it replace their earlier rows.
 
+## Send training class schedules to another system
+
+The **Training class schedule changed** trigger sends the full schedule of a class — course, class days, hours per day, and every active attendee with their employee ID and department — whenever the class is created or its roster, dates, days, hours, or course change. Cancelling or deleting a class sends that status so the other system can remove it. The instructor is never included as an attendee. Edits settle for a few seconds first, so a burst of changes sends one update with the latest state.
+
+1. Open **Admin → Integrations** and add an outbound automation.
+2. Choose the **Training class schedule changed** trigger.
+3. Choose the **HTTP / REST request** destination. Set **Method** to **PUT**, enter the other system's HTTPS **URL** (it can contain tokens like {{classId}}), and turn on **Send one request for the whole event** so each delivery carries the complete schedule in one request.
+4. To remove cancelled or deleted classes at the other end, set **Method override field** to **status** and **Method overrides** to **cancelled=DELETE, deleted=DELETE**.
+5. Add the other system's token under **Auth header value** if it needs one, then turn the automation on and save.
+
+If the other system accepts a delivery but skips some rows, it can say so in its reply. Those notes appear in **Delivery history** and on the class itself. A person with no employee ID is still sent in the schedule, and the class warns **Not booked: no employee ID** so you can add the ID on their person record.
+
 ## Configure AI
 
 1. Open **Admin**, then click **AI**. Platform super-admins set the shared default under **Platform AI**.
