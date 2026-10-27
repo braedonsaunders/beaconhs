@@ -4,6 +4,8 @@
 -- UTC wall-clock as Toronto local time for exactly the ETL-imported classes
 -- (identified through the etl.id_map crosswalk, source TRAININGCLASSES).
 --
+-- Classes whose schedule was edited in BeaconHS after import are left as-is.
+--
 -- Idempotency: corrected class ids are recorded in
 -- etl.training_class_tz_corrections and never shifted twice. Environments
 -- without the ETL bookkeeping schema (fresh/CI databases) no-op. The derived
@@ -54,6 +56,17 @@ BEGIN
         SELECT 1
         FROM etl.training_class_tz_corrections x
         WHERE x.class_id = c.id
+      )
+      -- A class whose times were already edited in BeaconHS holds a real
+      -- instant; reinterpreting it would shift a corrected schedule.
+      AND NOT EXISTS (
+        SELECT 1
+        FROM audit_log a
+        WHERE a.tenant_id = tenant_row.id
+          AND a.entity_type = 'training_class'
+          AND a.entity_id = c.id
+          AND a.action = 'update'
+          AND a.summary IN ('Updated startsAt', 'Updated endsAt', 'Updated schedule')
       );
 
     INSERT INTO etl.training_class_tz_corrections (class_id)
