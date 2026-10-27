@@ -226,6 +226,14 @@ export const formMonitorStatus = pgEnum('form_monitor_status', [
   'cancelled',
 ])
 
+// How a response was captured: filled in BeaconHS ('digital') or completed
+// on an external/paper form ('external'), where BeaconHS only records the
+// reference written on the paper copy, who issued it, and optional photos.
+export const formResponseCaptureMode = pgEnum('form_response_capture_mode', [
+  'digital',
+  'external',
+])
+
 export const formResponseCheckinKind = pgEnum('form_response_checkin_kind', [
   'manual',
   'auto_prompted',
@@ -247,6 +255,12 @@ export const formResponses = pgTable(
     // obligation that happens to target the same template.
     complianceObligationId: uuid('compliance_obligation_id'),
     flowExecutionKey: text('flow_execution_key'),
+    // External (paper) capture — see formResponseCaptureMode. The reference is
+    // the number written on the paper/customer form; issuer is free text.
+    captureMode: formResponseCaptureMode('capture_mode').default('digital').notNull(),
+    externalReference: text('external_reference'),
+    externalIssuer: text('external_issuer'),
+    externalNotes: text('external_notes'),
     status: formResponseStatus('status').default('draft').notNull(),
     currentStep: text('current_step'),
     // Hot indexed columns for filtering

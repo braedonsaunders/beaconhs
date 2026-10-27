@@ -445,6 +445,7 @@ export async function openAssessmentApp(formData: FormData) {
         and(
           eq(hazidAssessmentAppResponses.assessmentId, assessmentId),
           eq(hazidAssessmentAppResponses.typeAppId, typeAppId),
+          isNull(formResponses.deletedAt),
         ),
       )
       .limit(1)

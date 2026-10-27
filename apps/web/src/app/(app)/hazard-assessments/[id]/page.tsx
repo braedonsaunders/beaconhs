@@ -334,7 +334,12 @@ export default async function HazidAssessmentDetailPage({
             .select({ link: hazidAssessmentAppResponses, response: formResponses })
             .from(hazidAssessmentAppResponses)
             .innerJoin(formResponses, eq(formResponses.id, hazidAssessmentAppResponses.responseId))
-            .where(eq(hazidAssessmentAppResponses.assessmentId, id))
+            .where(
+              and(
+                eq(hazidAssessmentAppResponses.assessmentId, id),
+                isNull(formResponses.deletedAt),
+              ),
+            )
             .orderBy(asc(hazidAssessmentAppResponses.entityOrder))
         : []
 

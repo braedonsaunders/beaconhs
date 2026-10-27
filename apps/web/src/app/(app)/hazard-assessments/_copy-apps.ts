@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   formResponses,
@@ -45,8 +45,22 @@ export async function copyAssessmentApps(
         `Cannot copy the attached plan "${app.template.name}" with your current access. Ask an administrator to restore access before copying.`,
       )
     }
+    // Copies always land on the latest published version so template fixes
+    // reach copied assessments (field ids are stable across versions). Fall
+    // back to the source version only when nothing is published.
+    const [latest] = await tx
+      .select({ id: formTemplateVersions.id, schema: formTemplateVersions.schema })
+      .from(formTemplateVersions)
+      .where(
+        and(
+          eq(formTemplateVersions.templateId, app.response.templateId),
+          isNotNull(formTemplateVersions.publishedAt),
+        ),
+      )
+      .orderBy(desc(formTemplateVersions.version))
+      .limit(1)
     const copiedPayload = copyHazidAppPayload(
-      app.schema,
+      latest?.schema ?? app.schema,
       responsePayload(
         app.response.data,
         app.response.status === 'draft' || app.response.status === 'in_progress'
@@ -65,7 +79,16 @@ export async function copyAssessmentApps(
       .values({
         tenantId: ctx.tenantId,
         templateId: app.response.templateId,
-        templateVersionId: app.response.templateVersionId,
+        templateVersionId: latest?.id ?? app.response.templateVersionId,
+        // External (paper) copies keep the capture mode and issuer/reference,
+        // but not the photos of the paper copy (attachments are not copied
+        // unless includePhotos copies payload files; the reference is reset
+        // to the new assessment by the caller flow when it stays external).
+        captureMode: app.response.captureMode,
+        externalReference:
+          app.response.captureMode === 'external' ? copy.reference : app.response.externalReference,
+        externalIssuer: app.response.externalIssuer,
+        externalNotes: app.response.externalNotes,
         status: 'draft',
         submittedBy: ctx.membership?.id ?? null,
         siteOrgUnitId: copy.siteOrgUnitId,
