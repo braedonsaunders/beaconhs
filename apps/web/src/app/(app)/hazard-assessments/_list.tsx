@@ -10,6 +10,8 @@ import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { ShieldAlert } from 'lucide-react'
 import { and, asc, count, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
+import { ListCard, MobileCardList } from '@/components/list-card'
 import {
   Badge,
   Button,
@@ -58,7 +60,15 @@ import {
   loadMyHazardAssessmentSiteOptions,
 } from './_site-picker-actions'
 
-const SORTS = ['reference', 'occurred_at', 'site', 'supervisor', 'completed_by', 'type'] as const
+const SORTS = [
+  'reference',
+  'occurred_at',
+  'site',
+  'project',
+  'supervisor',
+  'completed_by',
+  'type',
+] as const
 
 export async function AssessmentsListPage({
   searchParams,
@@ -126,6 +136,8 @@ export async function AssessmentsListPage({
     if (dateFrom) filters.push(gte(hazidAssessments.occurredAt, dateFrom))
     if (dateTo) filters.push(lte(hazidAssessments.occurredAt, dateTo))
     const whereClause = and(...filters)
+    // The project (job) — its org-unit name begins with the job number.
+    const project = alias(orgUnits, 'hazid_project')
 
     const orderBy =
       params.sort === 'reference'
@@ -136,27 +148,30 @@ export async function AssessmentsListPage({
           ]
         : params.sort === 'site'
           ? [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
-          : params.sort === 'supervisor'
-            ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
-            : params.sort === 'completed_by'
-              ? [params.dir === 'asc' ? asc(users.name) : desc(users.name)]
-              : params.sort === 'type'
-                ? [
-                    params.dir === 'asc'
-                      ? asc(hazidAssessmentTypes.name)
-                      : desc(hazidAssessmentTypes.name),
-                  ]
-                : [
-                    params.dir === 'asc'
-                      ? asc(hazidAssessments.occurredAt)
-                      : desc(hazidAssessments.occurredAt),
-                  ]
+          : params.sort === 'project'
+            ? [params.dir === 'asc' ? asc(project.name) : desc(project.name)]
+            : params.sort === 'supervisor'
+              ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
+              : params.sort === 'completed_by'
+                ? [params.dir === 'asc' ? asc(users.name) : desc(users.name)]
+                : params.sort === 'type'
+                  ? [
+                      params.dir === 'asc'
+                        ? asc(hazidAssessmentTypes.name)
+                        : desc(hazidAssessmentTypes.name),
+                    ]
+                  : [
+                      params.dir === 'asc'
+                        ? asc(hazidAssessments.occurredAt)
+                        : desc(hazidAssessments.occurredAt),
+                    ]
 
     const [tot] = await tx.select({ c: count() }).from(hazidAssessments).where(whereClause)
     const rows = await tx
       .select({
         a: hazidAssessments,
         site: orgUnits,
+        project,
         supervisor: people,
         type: hazidAssessmentTypes,
         // Who actually filled it in — distinct from the supervisor named on the
@@ -165,6 +180,7 @@ export async function AssessmentsListPage({
       })
       .from(hazidAssessments)
       .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
+      .leftJoin(project, eq(project.id, hazidAssessments.projectOrgUnitId))
       .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
       .leftJoin(
         hazidAssessmentTypes,
@@ -432,52 +448,44 @@ export async function AssessmentsListPage({
               ) : (
                 <>
                   {/* Phones: tappable cards — the whole card opens the assessment. */}
-                  <ul className="space-y-2 sm:hidden">
+                  <MobileCardList>
                     <GeneratedValue
-                      value={rows.map(({ a, site, type }) => {
+                      value={rows.map(({ a, site, project, type, completedByName }) => {
                         const worst = worstRisk.get(a.id)
                         const scope = htmlToSnippet(a.jobScope, 120)
                         return (
-                          <li key={a.id}>
-                            <Link
-                              href={`/hazard-assessments/${a.id}`}
-                              className="block rounded-lg border border-slate-200 bg-white p-3.5 active:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:active:bg-slate-800"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="font-mono text-xs font-semibold text-teal-700 dark:text-teal-400">
-                                  <GeneratedValue value={a.reference} />
-                                </span>
-                                <GeneratedValue
-                                  value={
-                                    a.locked ? (
-                                      <Badge variant="success">
-                                        <GeneratedText id="m_0e259fa0babc2d" />
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant="secondary">
-                                        <GeneratedText id="m_1a03b06872ffd9" />
-                                      </Badge>
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="mt-1 line-clamp-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                                <GeneratedValue
-                                  value={
-                                    scope || type?.name || <GeneratedText id="m_171ca9d60eef14" />
-                                  }
-                                />
-                              </div>
-                              <div className="mt-1 text-xs text-slate-500">
+                          <ListCard
+                            key={a.id}
+                            href={`/hazard-assessments/${a.id}`}
+                            person={completedByName}
+                            reference={a.reference}
+                            status={
+                              a.locked ? (
+                                <Badge variant="success">
+                                  <GeneratedText id="m_0e259fa0babc2d" />
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary">
+                                  <GeneratedText id="m_1a03b06872ffd9" />
+                                </Badge>
+                              )
+                            }
+                            title={scope || type?.name || tGenerated('m_171ca9d60eef14')}
+                            meta={
+                              <>
                                 <GeneratedValue
                                   value={formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
                                 />
+                                {/* Full project name — it begins with the job number. */}
+                                <GeneratedValue value={project ? ` · ${project.name}` : ''} />
                                 <GeneratedValue value={site ? ` · ${site.name}` : ''} />
                                 <GeneratedValue
                                   value={type?.name && scope ? ` · ${type.name}` : ''}
                                 />
-                              </div>
-                              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              </>
+                            }
+                            footer={
+                              <>
                                 <GeneratedValue
                                   value={worst != null ? <RiskScoreChip score={worst} /> : null}
                                 />
@@ -493,13 +501,13 @@ export async function AssessmentsListPage({
                                   <GeneratedText id="m_0419fd6343482d" />{' '}
                                   <GeneratedValue value={a.reviewStatus} />
                                 </Badge>
-                              </div>
-                            </Link>
-                          </li>
+                              </>
+                            }
+                          />
                         )
                       })}
                     />
-                  </ul>
+                  </MobileCardList>
 
                   <div className="hidden sm:block">
                     <Table>
@@ -524,6 +532,13 @@ export async function AssessmentsListPage({
                           </SortableTh>
                           <SortableTh {...sortProps} column="site" active={params.sort === 'site'}>
                             <GeneratedText id="m_055f11420b2da4" />
+                          </SortableTh>
+                          <SortableTh
+                            {...sortProps}
+                            column="project"
+                            active={params.sort === 'project'}
+                          >
+                            <GeneratedText id="m_05069b4b587da8" />
                           </SortableTh>
                           <SortableTh
                             {...sortProps}
@@ -555,96 +570,101 @@ export async function AssessmentsListPage({
                       </TableHeader>
                       <TableBody>
                         <GeneratedValue
-                          value={rows.map(({ a, site, supervisor, type, completedByName }) => {
-                            const worst = worstRisk.get(a.id)
-                            const scope = htmlToSnippet(a.jobScope, 70)
-                            return (
-                              <TableRow key={a.id}>
-                                <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                                  <Link
-                                    href={`/hazard-assessments/${a.id}`}
-                                    className="hover:underline"
-                                  >
-                                    <GeneratedValue value={a.reference} />
-                                  </Link>
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                                  <GeneratedValue
-                                    value={formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
-                                  />
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-400">
-                                  <GeneratedValue value={type?.name ?? '—'} />
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-400">
-                                  <GeneratedValue value={site?.name ?? '—'} />
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-400">
-                                  <GeneratedValue
-                                    value={
-                                      supervisor
-                                        ? `${supervisor.firstName} ${supervisor.lastName}`
-                                        : '—'
-                                    }
-                                  />
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-400">
-                                  <GeneratedValue value={completedByName ?? '—'} />
-                                </TableCell>
-                                <TableCell>
-                                  <Link
-                                    href={`/hazard-assessments/${a.id}`}
-                                    className="text-slate-900 hover:underline dark:text-slate-100"
-                                  >
+                          value={rows.map(
+                            ({ a, site, project, supervisor, type, completedByName }) => {
+                              const worst = worstRisk.get(a.id)
+                              const scope = htmlToSnippet(a.jobScope, 70)
+                              return (
+                                <TableRow key={a.id}>
+                                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                                    <Link
+                                      href={`/hazard-assessments/${a.id}`}
+                                      className="hover:underline"
+                                    >
+                                      <GeneratedValue value={a.reference} />
+                                    </Link>
+                                  </TableCell>
+                                  <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue
+                                      value={formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue value={type?.name ?? '—'} />
+                                  </TableCell>
+                                  <TableCell className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue value={site?.name ?? '—'} />
+                                  </TableCell>
+                                  <TableCell className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue value={project?.name ?? '—'} />
+                                  </TableCell>
+                                  <TableCell className="text-slate-600 dark:text-slate-400">
                                     <GeneratedValue
                                       value={
-                                        scope ? scope : <span className="text-slate-400">—</span>
+                                        supervisor
+                                          ? `${supervisor.firstName} ${supervisor.lastName}`
+                                          : '—'
                                       }
                                     />
-                                  </Link>
-                                </TableCell>
-                                <TableCell>
-                                  <GeneratedValue
-                                    value={
-                                      worst != null ? (
-                                        <RiskScoreChip score={worst} />
-                                      ) : (
-                                        <span className="text-xs text-slate-400">—</span>
-                                      )
-                                    }
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <GeneratedValue
-                                    value={
-                                      a.locked ? (
-                                        <Badge variant="success">
-                                          <GeneratedText id="m_0e259fa0babc2d" />
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="secondary">
-                                          <GeneratedText id="m_1a03b06872ffd9" />
-                                        </Badge>
-                                      )
-                                    }
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      a.reviewStatus === 'approved'
-                                        ? 'success'
-                                        : a.reviewStatus === 'rejected'
-                                          ? 'destructive'
-                                          : 'outline'
-                                    }
-                                  >
-                                    <GeneratedValue value={a.reviewStatus} />
-                                  </Badge>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
+                                  </TableCell>
+                                  <TableCell className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue value={completedByName ?? '—'} />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Link
+                                      href={`/hazard-assessments/${a.id}`}
+                                      className="text-slate-900 hover:underline dark:text-slate-100"
+                                    >
+                                      <GeneratedValue
+                                        value={
+                                          scope ? scope : <span className="text-slate-400">—</span>
+                                        }
+                                      />
+                                    </Link>
+                                  </TableCell>
+                                  <TableCell>
+                                    <GeneratedValue
+                                      value={
+                                        worst != null ? (
+                                          <RiskScoreChip score={worst} />
+                                        ) : (
+                                          <span className="text-xs text-slate-400">—</span>
+                                        )
+                                      }
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <GeneratedValue
+                                      value={
+                                        a.locked ? (
+                                          <Badge variant="success">
+                                            <GeneratedText id="m_0e259fa0babc2d" />
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="secondary">
+                                            <GeneratedText id="m_1a03b06872ffd9" />
+                                          </Badge>
+                                        )
+                                      }
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        a.reviewStatus === 'approved'
+                                          ? 'success'
+                                          : a.reviewStatus === 'rejected'
+                                            ? 'destructive'
+                                            : 'outline'
+                                      }
+                                    >
+                                      <GeneratedValue value={a.reviewStatus} />
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            },
+                          )}
                         />
                       </TableBody>
                     </Table>
