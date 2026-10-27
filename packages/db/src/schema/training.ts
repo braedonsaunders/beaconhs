@@ -74,16 +74,20 @@ export const trainingClasses = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     courseId: uuid('course_id').notNull(),
     title: text('title').notNull(),
-    siteOrgUnitId: uuid('site_org_unit_id'),
+    // The customer the training was delivered for (an org unit), recorded only
+    // by tenants that enable customer tracking for classes. This is who the
+    // training was FOR; `location` below is where it was held.
+    customerOrgUnitId: uuid('customer_org_unit_id'),
     location: text('location'),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
     endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
     instructorTenantUserId: uuid('instructor_tenant_user_id'),
     capacity: integer('capacity'),
-    // Hours credited per attendee per day, and how many days the class spans.
-    // Both optional: when null, outbound time integrations derive hours from
-    // starts_at/ends_at (single-day) and fall back to a sensible default for
-    // multi-day classes. Set them to override the derivation.
+    // Paid hours credited per attendee per class day, and how many weekdays
+    // the class runs. Both are edited on the class form (defaults: weekdays
+    // spanned by starts_at..ends_at, and 8 hours). When null, consumers derive
+    // them through the shared class-days helper in @beaconhs/integrations —
+    // never from the raw clock span, which includes lunch.
     hoursPerDay: numeric('hours_per_day', { precision: 5, scale: 2 }),
     lengthDays: integer('length_days'),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
@@ -99,7 +103,7 @@ export const trainingClasses = pgTable(
     tenantIdx: index('training_classes_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('training_classes_tenant_id_id_ux').on(t.tenantId, t.id),
     courseIdx: index('training_classes_course_idx').on(t.tenantId, t.courseId),
-    siteIdx: index('training_classes_site_idx').on(t.tenantId, t.siteOrgUnitId),
+    customerIdx: index('training_classes_customer_idx').on(t.tenantId, t.customerOrgUnitId),
     instructorIdx: index('training_classes_instructor_idx').on(
       t.tenantId,
       t.instructorTenantUserId,
@@ -109,14 +113,22 @@ export const trainingClasses = pgTable(
       'training_classes_reminder_hours_check',
       sql`${t.reminderHours} is null or ${t.reminderHours} in (24, 48, 168)`,
     ),
+    lengthDaysCheck: check(
+      'training_classes_length_days_check',
+      sql`${t.lengthDays} is null or (${t.lengthDays} >= 1 and ${t.lengthDays} <= 366)`,
+    ),
+    hoursPerDayCheck: check(
+      'training_classes_hours_per_day_check',
+      sql`${t.hoursPerDay} is null or (${t.hoursPerDay} >= 0.25 and ${t.hoursPerDay} <= 24 and ${t.hoursPerDay} * 4 = trunc(${t.hoursPerDay} * 4))`,
+    ),
     courseFk: foreignKey({
       name: 'training_classes_tenant_course_fk',
       columns: [t.tenantId, t.courseId],
       foreignColumns: [trainingCourses.tenantId, trainingCourses.id],
     }).onDelete('cascade'),
-    siteFk: foreignKey({
-      name: 'training_classes_tenant_site_fk',
-      columns: [t.tenantId, t.siteOrgUnitId],
+    customerFk: foreignKey({
+      name: 'training_classes_tenant_customer_fk',
+      columns: [t.tenantId, t.customerOrgUnitId],
       foreignColumns: [orgUnits.tenantId, orgUnits.id],
     }),
     instructorFk: foreignKey({

@@ -113,7 +113,8 @@ describe('picker options route policy', () => {
     ],
     ['lookup=training-course-library-content', 'training.course.manage'],
     ['lookup=training-class-courses', 'training.class.manage'],
-    ['lookup=training-class-sites', 'training.class.manage'],
+    ['lookup=training-class-customers', 'training.class.manage'],
+    ['lookup=training-class-customers', 'training.read.all'],
     ['lookup=training-class-instructors', 'training.class.manage'],
     [
       'lookup=training-class-attendee-candidates&contextId=10000000-0000-4000-8000-000000000001',

@@ -17,10 +17,12 @@ export const TRAINING_CLASS_MUTABLE_FIELDS = [
   'courseId',
   'title',
   'schedule',
-  'siteOrgUnitId',
+  'customerOrgUnitId',
   'location',
   'instructorTenantUserId',
   'capacity',
+  'lengthDays',
+  'hoursPerDay',
   'notes',
   'reminderHours',
 ] as const
@@ -31,10 +33,13 @@ export type ParsedTrainingClassField =
   | { field: 'courseId'; value: string }
   | { field: 'title'; value: string }
   | { field: 'schedule'; value: { startsAt: Date; endsAt: Date } }
-  | { field: 'siteOrgUnitId'; value: string | null }
+  | { field: 'customerOrgUnitId'; value: string | null }
   | { field: 'location'; value: string | null }
   | { field: 'instructorTenantUserId'; value: string | null }
   | { field: 'capacity'; value: number | null }
+  | { field: 'lengthDays'; value: number | null }
+  // Credited hours ride the wire (and the numeric column) as a decimal string.
+  | { field: 'hoursPerDay'; value: string | null }
   | { field: 'notes'; value: string | null }
   | { field: 'reminderHours'; value: number | null }
 
@@ -63,8 +68,8 @@ export function parseTrainingClassField(
       }
       return { field, value: hours }
     }
-    case 'siteOrgUnitId':
-      return { field, value: optionalUuidInput(value, 'Site') }
+    case 'customerOrgUnitId':
+      return { field, value: optionalUuidInput(value, 'Customer') }
     case 'instructorTenantUserId':
       return { field, value: optionalUuidInput(value, 'Instructor') }
     case 'capacity':
@@ -76,6 +81,24 @@ export function parseTrainingClassField(
           max: MAX_TRAINING_CLASS_ATTENDEES,
         }),
       }
+    case 'lengthDays':
+      return {
+        field,
+        value: optionalNumberInput(value, 'Days', { integer: true, min: 1, max: 366 }),
+      }
+    case 'hoursPerDay': {
+      // Credited (paid) hours per class day: quarter-hour steps only.
+      const hours = optionalNumberInput(value, 'Credited hours per day', {
+        min: 0.25,
+        max: 24,
+      })
+      if (hours == null) return { field, value: null }
+      const quarters = Math.round(hours * 4)
+      if (Math.abs(quarters / 4 - hours) > 1e-9) {
+        throw new Error('Credited hours per day must be in quarter-hour steps (0.25).')
+      }
+      return { field, value: String(quarters / 4) }
+    }
     case 'notes':
       return {
         field,

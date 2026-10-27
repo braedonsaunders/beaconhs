@@ -12,7 +12,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // stacks a chip per class scheduled that day; click → /training/classes/[id].
 
 import Link from 'next/link'
-import { and, asc, gte, lt, sql } from 'drizzle-orm'
+import { and, asc, gte, lt, or, sql } from 'drizzle-orm'
 import { CalendarDays, ChevronLeft, ChevronRight, List, Plus } from 'lucide-react'
 import { Badge, Button, PageHeader } from '@beaconhs/ui'
 import {
@@ -29,8 +29,12 @@ import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
+import { expandClassDays } from '@beaconhs/integrations'
+import {
+  trackClassCustomerInTransaction,
+  trainingClassTimeZone,
+} from '@/lib/training-class-settings'
 import { startClass } from '../_actions'
-import { classDayCount } from './class-days'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -117,7 +121,8 @@ type ClassChip = {
   start: Date
   cancelled: boolean
   completed: boolean
-  siteName: string | null
+  location: string | null
+  customerName: string | null
   instructorName: string | null
   attendees: number
   /** 1-based position within a multi-day class; dayCount === 1 for a single day. */
@@ -149,12 +154,14 @@ export default async function TrainingClassesCalendarPage({
   const windowEndExclusive = new Date(lastCell.date)
   windowEndExclusive.setDate(windowEndExclusive.getDate() + 1)
 
-  const rows = await ctx.db((tx) =>
-    tx
+  const { rows, trackCustomer, classTimeZone } = await ctx.db(async (tx) => {
+    const trackCustomer = await trackClassCustomerInTransaction(tx, ctx.tenantId)
+    const classTimeZone = await trainingClassTimeZone(tx, ctx.tenantId)
+    const rows = await tx
       .select({
         cls: trainingClasses,
         course: trainingCourses,
-        siteName: orgUnits.name,
+        customerName: orgUnits.name,
         instructorName: users.name,
         attendees: sql<number>`(
           select count(*)::int from ${trainingClassAttendees} a
@@ -163,37 +170,47 @@ export default async function TrainingClassesCalendarPage({
       })
       .from(trainingClasses)
       .innerJoin(trainingCourses, eq(trainingCourses.id, trainingClasses.courseId))
-      .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.siteOrgUnitId))
+      .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.customerOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, trainingClasses.instructorTenantUserId))
       .leftJoin(users, eq(users.id, tenantUsers.userId))
       // Any class OVERLAPPING the visible grid, not just one starting in it —
-      // a course that began last month still runs into this one.
+      // a course that began last month still runs into this one. A multi-day
+      // class entered with one day's clock times ends (on the clock) before
+      // its last weekday, so length_days also extends the overlap: each
+      // weekday adds at most two calendar days.
       .where(
         and(
           lt(trainingClasses.startsAt, windowEndExclusive),
-          gte(trainingClasses.endsAt, windowStart),
+          or(
+            gte(trainingClasses.endsAt, windowStart),
+            sql`${trainingClasses.lengthDays} is not null and ${trainingClasses.startsAt} + (${trainingClasses.lengthDays} * interval '2 days') >= ${windowStart}`,
+          ),
         ),
       )
-      .orderBy(asc(trainingClasses.startsAt)),
-  )
+      .orderBy(asc(trainingClasses.startsAt))
+    return { rows, trackCustomer, classTimeZone }
+  })
 
-  const isoDay = (d: Date) =>
-    `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d
-      .getDate()
-      .toString()
-      .padStart(2, '0')}`
-
-  // Bucket classes by local-date iso string, repeating a multi-day class on
-  // every day it runs.
+  // Bucket classes by tenant-timezone date, repeating a multi-day class on
+  // every weekday it runs (the shared class-days expansion; weekends never
+  // carry a class).
+  const windowStartIso = `${windowStart.getFullYear()}-${(windowStart.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}-${windowStart.getDate().toString().padStart(2, '0')}`
+  const windowEndIso = `${windowEndExclusive.getFullYear()}-${(windowEndExclusive.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}-${windowEndExclusive.getDate().toString().padStart(2, '0')}`
   const byDay = new Map<string, ClassChip[]>()
   for (const r of rows) {
     const start = new Date(r.cls.startsAt)
-    const dayCount = classDayCount(start, new Date(r.cls.endsAt), r.cls.lengthDays)
-    for (let offset = 0; offset < dayCount; offset += 1) {
-      const day = new Date(start)
-      day.setDate(day.getDate() + offset)
-      if (day < windowStart || day >= windowEndExclusive) continue
-      const iso = isoDay(day)
+    const days = expandClassDays({
+      startsAt: start,
+      endsAt: new Date(r.cls.endsAt),
+      lengthDays: r.cls.lengthDays,
+      timeZone: classTimeZone,
+    })
+    days.forEach((iso, offset) => {
+      if (iso < windowStartIso || iso >= windowEndIso) return
       const list = byDay.get(iso) ?? []
       list.push({
         id: r.cls.id,
@@ -202,14 +219,15 @@ export default async function TrainingClassesCalendarPage({
         start,
         cancelled: !!r.cls.cancelledAt,
         completed: !!r.cls.completedAt,
-        siteName: r.cls.location || r.siteName,
+        location: r.cls.location,
+        customerName: trackCustomer ? r.customerName : null,
         instructorName: r.instructorName,
         attendees: r.attendees,
         day: offset + 1,
-        dayCount,
+        dayCount: days.length,
       })
       byDay.set(iso, list)
-    }
+    })
   }
 
   const prev = shiftMonth(year, month, -1)
@@ -357,7 +375,8 @@ export default async function TrainingClassesCalendarPage({
                               [
                                 `${c.title} — ${c.courseName}`,
                                 c.dayCount > 1 ? `Day ${c.day} of ${c.dayCount}` : null,
-                                c.siteName,
+                                c.location,
+                                c.customerName,
                                 c.instructorName,
                                 `${c.attendees} booked`,
                               ]
@@ -400,7 +419,9 @@ export default async function TrainingClassesCalendarPage({
                                 things a coordinator opened every class to find. */}
                             <span className="block truncate text-[10px] text-slate-500 dark:text-slate-400">
                               <GeneratedValue
-                                value={[c.siteName, c.instructorName].filter(Boolean).join(' · ')}
+                                value={[c.location, c.customerName, c.instructorName]
+                                  .filter(Boolean)
+                                  .join(' · ')}
                               />
                             </span>
                             <span className="block text-[10px] text-slate-500 tabular-nums dark:text-slate-400">

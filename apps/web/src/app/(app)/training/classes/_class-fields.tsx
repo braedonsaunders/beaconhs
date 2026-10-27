@@ -16,17 +16,19 @@ type ClassFieldValues = {
   title: string
   startsAt: string // datetime-local string
   endsAt: string // datetime-local string
-  siteOrgUnitId: string | null
+  customerOrgUnitId: string | null
   location: string | null
   instructorTenantUserId: string | null
   capacity: string | null
+  lengthDays: string | null
+  hoursPerDay: string | null
   notes: string | null
   reminderHours: string | null
 }
 
 type ClassFieldOptions = {
   course?: SelectOption
-  site?: SelectOption
+  customer?: SelectOption
   instructor?: SelectOption
 }
 
@@ -36,12 +38,15 @@ export function ClassDetailFields({
   disabled,
   courseHref,
   notice,
+  trackCustomer,
 }: {
   initial: ClassFieldValues
   options: ClassFieldOptions
   disabled?: boolean
   courseHref?: string | null
   notice?: React.ReactNode
+  /** Tenant setting: record the customer each class was delivered for. */
+  trackCustomer: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
   const tValue = useGeneratedValueTranslations()
@@ -86,15 +91,31 @@ export function ClassDetailFields({
         />
         <ClassSchedule startsAt={initial.startsAt} endsAt={initial.endsAt} disabled={disabled} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <LiveRemoteSelect
-            field="siteOrgUnitId"
-            label={tGenerated('m_1fc91567299335')}
-            initialValue={initial.siteOrgUnitId}
-            initialOption={options.site}
-            lookup="training-class-sites"
-            emptyLabel={tGenerated('m_13cf177934a5e3')}
+          <LiveField
+            field="lengthDays"
+            label={tValue('Days')}
+            initialValue={initial.lengthDays}
+            type="number"
+            min={1}
+            max={366}
+            step={1}
             disabled={disabled}
           />
+          <LiveField
+            field="hoursPerDay"
+            label={tValue('Credited hours per day')}
+            initialValue={initial.hoursPerDay}
+            type="number"
+            min={0.25}
+            max={24}
+            step={0.25}
+            disabled={disabled}
+          />
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          <GeneratedValue value="Class days are weekdays only — weekends never count. Credited hours are the paid hours each attendee earns per class day." />
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <LiveRemoteSelect
             field="instructorTenantUserId"
             label={tGenerated('m_0797e9a65b95e2')}
@@ -104,17 +125,32 @@ export function ClassDetailFields({
             emptyLabel={tGenerated('m_176dd8fa7fc529')}
             disabled={disabled}
           />
+          <LiveField
+            field="location"
+            label={tValue('Class location')}
+            initialValue={initial.location}
+            maxLength={500}
+            disabled={disabled}
+          />
         </div>
-        <LiveField
-          field="location"
-          label={tValue('Class location')}
-          initialValue={initial.location}
-          maxLength={500}
-          disabled={disabled}
-        />
-        <p className="text-xs text-slate-500">
-          <GeneratedText id="m_1ceec74b520e0b" />
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          <GeneratedValue value="Enter an address or room where the class is held." />
         </p>
+        <GeneratedValue
+          value={
+            trackCustomer ? (
+              <LiveRemoteSelect
+                field="customerOrgUnitId"
+                label={tValue('Customer')}
+                initialValue={initial.customerOrgUnitId}
+                initialOption={options.customer}
+                lookup="training-class-customers"
+                emptyLabel={tValue('— No customer —')}
+                disabled={disabled}
+              />
+            ) : null
+          }
+        />
         <LiveField
           field="capacity"
           label={tGenerated('m_0b57f1d8f70101')}
@@ -145,7 +181,7 @@ export function ClassDetailFields({
           emptyLabel={tValue('Off')}
           disabled={disabled}
         />
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           <GeneratedValue value="Reminders only send after a manager uses Email class. Creating or editing a class does not send its initial email." />
         </p>
       </CardContent>

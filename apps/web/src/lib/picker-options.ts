@@ -17,7 +17,7 @@ const PICKER_LOOKUPS = [
   'training-course-library-content',
   'training-course-library-slides',
   'training-class-courses',
-  'training-class-sites',
+  'training-class-customers',
   'training-class-instructors',
   'training-class-attendee-candidates',
   'training-skill-assignment-people',

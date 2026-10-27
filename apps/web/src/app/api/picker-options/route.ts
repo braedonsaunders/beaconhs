@@ -232,10 +232,13 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
         can(ctx, 'training.read.self')
       )
     case 'training-class-courses':
-    case 'training-class-sites':
     case 'training-class-instructors':
     case 'training-class-attendee-candidates':
       return can(ctx, 'training.class.manage')
+    // The customer picker also backs the class list filter, which anyone who
+    // can view all training may use.
+    case 'training-class-customers':
+      return can(ctx, 'training.class.manage') || can(ctx, 'training.read.all')
     case 'training-skill-assignment-people':
     case 'training-skill-assignment-types':
       return canManage('training')
@@ -1415,7 +1418,7 @@ async function loadOptions(
       )
     }
 
-    if (lookup === 'training-class-sites') {
+    if (lookup === 'training-class-customers') {
       const match = input.hasQuery
         ? or(
             ilike(orgUnits.name, input.term),
@@ -1426,7 +1429,7 @@ async function loadOptions(
       const rows = await tx
         .select({ id: orgUnits.id, name: orgUnits.name, code: orgUnits.code })
         .from(orgUnits)
-        .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt), match))
+        .where(and(eq(orgUnits.level, 'customer'), isNull(orgUnits.deletedAt), match))
         .orderBy(
           ...(input.selected ? [desc(sql`${orgUnits.id} = ${input.selected}`)] : []),
           asc(orgUnits.name),

@@ -26,10 +26,15 @@ import {
 import { assertCan } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
-import { trainingClassCompletedEvent } from '@beaconhs/integrations'
+import {
+  DEFAULT_CREDITED_HOURS_PER_DAY,
+  resolveClassCredit,
+  trainingClassCompletedEvent,
+} from '@beaconhs/integrations'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { trainingClassTimeZone } from '@/lib/training-class-settings'
 import { dateIsoInTimeZone } from '@/lib/datetime'
 import { assertClassEmailConfigured, ClassEmailError } from '@/lib/training-class-email'
 import { requireUuidInput } from '@/lib/mutation-input'
@@ -148,6 +153,8 @@ export async function startClass(): Promise<void> {
         title: 'Untitled class',
         startsAt,
         endsAt,
+        lengthDays: 1,
+        hoursPerDay: String(DEFAULT_CREDITED_HOURS_PER_DAY),
       })
       .returning({ id: trainingClasses.id })
     return row?.id ?? null
@@ -428,7 +435,18 @@ export async function markClassComplete(formData: FormData): Promise<void> {
       )
     }
 
-    const completedOn = dateIsoInTimeZone(cls.endsAt, ctx.timezone)
+    // The credential date is the last actual class day (weekdays only), so a
+    // multi-day class entered with one day's clock times still completes on
+    // its final weekday. Days and credited hours come from the shared helper.
+    const classTimeZone = await trainingClassTimeZone(tx, ctx.tenantId)
+    const credit = resolveClassCredit({
+      startsAt: new Date(cls.startsAt),
+      endsAt: new Date(cls.endsAt),
+      lengthDays: cls.lengthDays,
+      hoursPerDay: cls.hoursPerDay != null ? Number(cls.hoursPerDay) : null,
+      timeZone: classTimeZone,
+    })
+    const completedOn = credit.days.at(-1) ?? dateIsoInTimeZone(cls.endsAt, classTimeZone)
     const expiresOn = course.validForMonths
       ? addMonthsIso(completedOn, course.validForMonths)
       : null
@@ -474,18 +492,7 @@ export async function markClassComplete(formData: FormData): Promise<void> {
 
     const startsAt = new Date(cls.startsAt)
     const endsAt = new Date(cls.endsAt)
-    // Day boundaries are calendar days in the tenant's timezone, not UTC:
-    // an evening class in Toronto is already the next UTC day.
-    const startDay = Date.parse(`${dateIsoInTimeZone(startsAt, ctx.timezone)}T00:00:00Z`)
-    const endDay = Date.parse(`${dateIsoInTimeZone(endsAt, ctx.timezone)}T00:00:00Z`)
-    const spanDays = Math.max(1, Math.round((endDay - startDay) / 86_400_000) + 1)
-    const lengthDays = cls.lengthDays ?? spanDays
-    const hoursPerDay =
-      cls.hoursPerDay != null
-        ? Number(cls.hoursPerDay)
-        : spanDays === 1
-          ? Math.max(0, (endsAt.getTime() - startsAt.getTime()) / 3_600_000)
-          : 8
+    const { lengthDays, hoursPerDay, totalHours } = credit
     // The internal instructor is credited like an attendee (legacy timesheet
     // behaviour) when they resolve to an active person with an employee id.
     const [instructorPerson] = cls.instructorTenantUserId
@@ -523,7 +530,7 @@ export async function markClassComplete(formData: FormData): Promise<void> {
               ? {
                   ...instructorPerson,
                   attended: true,
-                  hours: hoursPerDay * lengthDays,
+                  hours: totalHours,
                 }
               : null,
           attendees: roster.map((person) => ({
@@ -533,7 +540,7 @@ export async function markClassComplete(formData: FormData): Promise<void> {
             lastName: person.lastName,
             departmentName: person.departmentName,
             attended: person.attended === true,
-            hours: person.attended === true ? hoursPerDay * lengthDays : 0,
+            hours: person.attended === true ? totalHours : 0,
           })),
         }),
         web: moduleFlowCommand(ctx, {

@@ -25,7 +25,9 @@ import {
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
+import { trackClassCustomerInTransaction } from '@/lib/training-class-settings'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -64,6 +66,8 @@ export default async function TrainingClassesPage({
     allowedSorts: SORTS,
   })
   const whenFilter = pickString(sp.when) ?? 'upcoming'
+  const customerParam = pickString(sp.customer)
+  const customerFilter = customerParam && isUuid(customerParam) ? customerParam : null
   const ctx = await requireRequestContext()
   // Only class managers get the create affordances; viewing the schedule stays
   // open. Scheduling itself is enforced server-side in startClass.
@@ -71,7 +75,8 @@ export default async function TrainingClassesPage({
 
   const now = new Date()
 
-  const { rows, total, attendeeCounts, whenCounts } = await ctx.db(async (tx) => {
+  const { rows, total, attendeeCounts, whenCounts, trackCustomer } = await ctx.db(async (tx) => {
+    const trackCustomer = await trackClassCustomerInTransaction(tx, ctx.tenantId)
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
@@ -84,6 +89,8 @@ export default async function TrainingClassesPage({
       )
       if (search) filters.push(search)
     }
+    if (trackCustomer && customerFilter)
+      filters.push(eq(trainingClasses.customerOrgUnitId, customerFilter))
     if (whenFilter === 'upcoming') filters.push(gte(trainingClasses.startsAt, now))
     else if (whenFilter === 'past') filters.push(lt(trainingClasses.startsAt, now))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
@@ -99,17 +106,17 @@ export default async function TrainingClassesPage({
       .select({ c: count() })
       .from(trainingClasses)
       .innerJoin(trainingCourses, eq(trainingCourses.id, trainingClasses.courseId))
-      .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.siteOrgUnitId))
+      .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.customerOrgUnitId))
       .where(whereClause)
     const data = await tx
       .select({
         cls: trainingClasses,
         course: trainingCourses,
-        site: orgUnits,
+        customer: orgUnits,
       })
       .from(trainingClasses)
       .innerJoin(trainingCourses, eq(trainingCourses.id, trainingClasses.courseId))
-      .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.siteOrgUnitId))
+      .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.customerOrgUnitId))
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(params.perPage)
@@ -136,6 +143,7 @@ export default async function TrainingClassesPage({
     ])
 
     return {
+      trackCustomer,
       rows: data,
       total: Number(tot?.c ?? 0),
       attendeeCounts: Object.fromEntries(ac.map((x) => [x.classId, Number(x.c)])),
@@ -179,7 +187,28 @@ export default async function TrainingClassesPage({
           />
           <TrainingSubNav active="classes" />
           <TableToolbar>
-            <SearchInput placeholder={tGenerated('m_0b44a104639d3f')} />
+            <SearchInput
+              placeholder={
+                trackCustomer
+                  ? tGeneratedValue('Search class, course, code, location, or customer…')
+                  : tGeneratedValue('Search class, course, code, or location…')
+              }
+            />
+            <GeneratedValue
+              value={
+                trackCustomer && (canManageClasses || can(ctx, 'training.read.all')) ? (
+                  <RemoteSearchFilter
+                    lookup="training-class-customers"
+                    basePath="/training/classes"
+                    currentParams={sp}
+                    paramKey="customer"
+                    placeholder={tGeneratedValue('Customer')}
+                    allLabel="All customers"
+                    searchPlaceholder={tGeneratedValue('Search customers…')}
+                  />
+                ) : null
+              }
+            />
             <FilterChips
               basePath="/training/classes"
               currentParams={sp}
@@ -237,8 +266,17 @@ export default async function TrainingClassesPage({
                     <SortableTh {...sortProps} column="course" active={params.sort === 'course'}>
                       <GeneratedText id="m_14fc1e0739b60e" />
                     </SortableTh>
+                    <GeneratedValue
+                      value={
+                        trackCustomer ? (
+                          <TableHead>
+                            <GeneratedValue value="Customer" />
+                          </TableHead>
+                        ) : null
+                      }
+                    />
                     <TableHead>
-                      <GeneratedText id="m_020146dd3d3d5a" />
+                      <GeneratedValue value="Class location" />
                     </TableHead>
                     <TableHead>
                       <GeneratedText id="m_10ba268d95c8fb" />
@@ -289,8 +327,17 @@ export default async function TrainingClassesPage({
                               <GeneratedValue value={row.course.name} />
                             </Link>
                           </TableCell>
+                          <GeneratedValue
+                            value={
+                              trackCustomer ? (
+                                <TableCell className="text-slate-600 dark:text-slate-400">
+                                  <GeneratedValue value={row.customer?.name || '—'} />
+                                </TableCell>
+                              ) : null
+                            }
+                          />
                           <TableCell className="text-slate-600 dark:text-slate-400">
-                            <GeneratedValue value={row.cls.location || row.site?.name || '—'} />
+                            <GeneratedValue value={row.cls.location || '—'} />
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">

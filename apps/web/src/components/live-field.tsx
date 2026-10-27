@@ -139,6 +139,7 @@ export function LiveField({
   maxLength,
   min,
   max,
+  step,
   disabled,
 }: {
   /** The record saver's op key (usually the column name). */
@@ -153,6 +154,7 @@ export function LiveField({
   maxLength?: number
   min?: number | string
   max?: number | string
+  step?: number | string
   disabled?: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
@@ -163,6 +165,7 @@ export function LiveField({
     maxLength,
     min,
     max,
+    step,
     disabled: disabled || f.paused,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       f.change(e.target.value),

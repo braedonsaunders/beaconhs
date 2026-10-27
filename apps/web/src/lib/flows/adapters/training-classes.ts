@@ -70,12 +70,12 @@ export function createTrainingClassFlowAdapter(
             c: trainingClasses,
             courseName: trainingCourses.name,
             courseCode: trainingCourses.code,
-            siteName: orgUnits.name,
+            customerName: orgUnits.name,
             instructorName: instU.name,
           })
           .from(trainingClasses)
           .leftJoin(trainingCourses, eq(trainingCourses.id, trainingClasses.courseId))
-          .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.siteOrgUnitId))
+          .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.customerOrgUnitId))
           .leftJoin(instTU, eq(instTU.id, trainingClasses.instructorTenantUserId))
           .leftJoin(instU, eq(instU.id, instTU.userId))
           .where(eq(trainingClasses.id, classId))
@@ -120,7 +120,8 @@ export function createTrainingClassFlowAdapter(
         status_label: titleize(status),
         starts_at: formatDateTime(c.startsAt, ctx.timezone, ctx.defaultLocale),
         ends_at: formatDateTime(c.endsAt, ctx.timezone, ctx.defaultLocale),
-        site_name: c.location || head.siteName || '',
+        location: c.location ?? '',
+        customer_name: head.customerName ?? '',
         instructor_name: head.instructorName ?? '',
         capacity: c.capacity ?? null,
         notes: c.notes?.trim().toLowerCase() === 'null' ? '' : (c.notes ?? ''),
@@ -130,7 +131,7 @@ export function createTrainingClassFlowAdapter(
         attendee_emails: emails.join(', '),
         // FK ids for conditions / recipient `field` targets.
         course_id: c.courseId ?? null,
-        site_org_unit_id: c.siteOrgUnitId ?? null,
+        customer_org_unit_id: c.customerOrgUnitId ?? null,
         instructor_tenant_user_id: c.instructorTenantUserId ?? null,
         // Collections.
         attendees: active.map((a) => ({

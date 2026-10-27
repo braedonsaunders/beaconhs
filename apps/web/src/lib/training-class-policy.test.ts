@@ -113,6 +113,54 @@ describe('training class mutation policy', () => {
     )
   })
 
+  it('bounds class days and credited hours per day', () => {
+    expect(parseTrainingClassField('lengthDays', '3', 'America/Toronto')).toEqual({
+      field: 'lengthDays',
+      value: 3,
+    })
+    expect(parseTrainingClassField('lengthDays', '', 'America/Toronto')).toEqual({
+      field: 'lengthDays',
+      value: null,
+    })
+    for (const invalid of ['0', '-1', '367', '2.5', 'many'])
+      expect(() => parseTrainingClassField('lengthDays', invalid, 'America/Toronto')).toThrow()
+
+    expect(parseTrainingClassField('hoursPerDay', '8', 'America/Toronto')).toEqual({
+      field: 'hoursPerDay',
+      value: '8',
+    })
+    expect(parseTrainingClassField('hoursPerDay', '7.50', 'America/Toronto')).toEqual({
+      field: 'hoursPerDay',
+      value: '7.5',
+    })
+    expect(parseTrainingClassField('hoursPerDay', '0.25', 'America/Toronto')).toEqual({
+      field: 'hoursPerDay',
+      value: '0.25',
+    })
+    expect(parseTrainingClassField('hoursPerDay', '', 'America/Toronto')).toEqual({
+      field: 'hoursPerDay',
+      value: null,
+    })
+    for (const invalid of ['0', '0.1', '8.3', '24.25', '-2', 'eight'])
+      expect(() => parseTrainingClassField('hoursPerDay', invalid, 'America/Toronto')).toThrow()
+  })
+
+  it('parses the optional customer like other optional references', () => {
+    expect(parseTrainingClassField('customerOrgUnitId', ID, 'America/Toronto')).toEqual({
+      field: 'customerOrgUnitId',
+      value: ID,
+    })
+    expect(parseTrainingClassField('customerOrgUnitId', '', 'America/Toronto')).toEqual({
+      field: 'customerOrgUnitId',
+      value: null,
+    })
+    expect(() => parseTrainingClassField('customerOrgUnitId', 'acme', 'America/Toronto')).toThrow(
+      /invalid/,
+    )
+    // The retired Site field no longer exists.
+    expect(() => parseTrainingClassField('siteOrgUnitId', ID, 'America/Toronto')).toThrow(/invalid/)
+  })
+
   it('requires an ordered schedule', () => {
     const start = new Date('2026-07-13T13:00:00.000Z')
     expect(() => assertTrainingClassSchedule(start, start)).toThrow(/after/)
