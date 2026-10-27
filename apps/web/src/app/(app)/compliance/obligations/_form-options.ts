@@ -89,6 +89,7 @@ export async function loadObligationFormOptions(
       jobTitles,
       allGroups,
       allCrews,
+      inactivePeople,
     ] = await Promise.all([
       inspectionTypeId
         ? tx
@@ -177,12 +178,7 @@ export async function loadObligationFormOptions(
               jobTitle: primaryPersonTitleName(people.id, people.tenantId),
             })
             .from(people)
-            .where(
-              and(
-                inArray(people.id, personIds),
-                sql`${people.deletedAt} is null and ${people.status} = 'active'`,
-              ),
-            )
+            .where(and(inArray(people.id, personIds), isNull(people.deletedAt)))
         : Promise.resolve([]),
       orgUnitIds.length > 0
         ? tx
@@ -220,6 +216,10 @@ export async function loadObligationFormOptions(
             .from(crews)
             .where(inArray(crews.id, crewIds))
         : Promise.resolve([]),
+      tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(people)
+        .where(and(sql`${people.status} <> 'active'`, isNull(people.deletedAt))),
     ])
     return {
       inspTypes,
@@ -237,6 +237,7 @@ export async function loadObligationFormOptions(
       jobTitles,
       allGroups,
       allCrews,
+      inactivePeople,
     }
   })
 
@@ -277,6 +278,7 @@ export async function loadObligationFormOptions(
       })),
       groups: data.allGroups.map((group) => ({ id: group.id, label: group.name })),
       crews: data.allCrews.map((crew) => ({ id: crew.id, label: crew.name })),
+      inactivePeopleHidden: Number(data.inactivePeople[0]?.count ?? 0),
     },
   }
 }

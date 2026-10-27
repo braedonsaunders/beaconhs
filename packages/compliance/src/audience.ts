@@ -14,6 +14,7 @@ import type { Database } from '@beaconhs/db'
 import {
   people,
   personGroupMemberships,
+  personGroups,
   roleAssignments,
   roles,
   tenantUsers,
@@ -141,6 +142,14 @@ async function resolveAudienceUnion(
           and(
             eq(personGroupMemberships.tenantId, people.tenantId),
             eq(personGroupMemberships.personId, people.id),
+          ),
+        )
+        .innerJoin(
+          personGroups,
+          and(
+            eq(personGroups.tenantId, personGroupMemberships.tenantId),
+            eq(personGroups.id, personGroupMemberships.groupId),
+            isNull(personGroups.deletedAt),
           ),
         )
         .where(and(baseActive, inArray(personGroupMemberships.groupId, personGroupIds))),

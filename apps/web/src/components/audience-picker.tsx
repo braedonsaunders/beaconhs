@@ -47,6 +47,7 @@ export type AudienceOptions = {
   orgUnits: { id: string; label: string }[]
   groups: { id: string; label: string }[]
   crews: { id: string; label: string }[]
+  inactivePeopleHidden?: number
 }
 
 const ALL_AUDIENCE_TYPES: AudienceType[] = [
@@ -330,7 +331,7 @@ function audienceLabel(row: AudienceItem, options: AudienceOptions): string {
     return options.groups.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
   if (row.type === 'crew')
     return options.crews.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
-  return options.people.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
+  return options.people.find((x) => x.id === row.entityKey)?.label ?? 'Inactive person'
 }
 
 /** Includes are a union; subtract the exclusion union once at the end. */
@@ -339,6 +340,14 @@ export function AudiencePicker(props: Omit<Parameters<typeof AudienceSelection>[
   const [pendingValue, setPendingValue] = useState('')
   return (
     <div className="space-y-4">
+      {props.options.inactivePeopleHidden ? (
+        <p className="text-xs text-slate-500" role="status">
+          <GeneratedText
+            id="m_1b659031edf937"
+            values={{ value0: props.options.inactivePeopleHidden }}
+          />
+        </p>
+      ) : null}
       <AudienceSelection
         {...props}
         value={props.value.filter((row) => !row.excluded)}

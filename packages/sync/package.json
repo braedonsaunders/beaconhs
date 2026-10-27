@@ -15,6 +15,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@beaconhs/compliance": "workspace:*",
     "@beaconhs/crypto": "workspace:*",
     "@beaconhs/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
