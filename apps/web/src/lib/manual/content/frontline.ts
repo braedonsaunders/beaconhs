@@ -187,7 +187,7 @@ Walking through the hazards as a crew catches problems while they are still chea
 
 ## Where to find it
 
-Open **Hazard Assessments** in the left menu, or go to [Hazard assessments](/hazard-assessments).
+Open **Hazard Assessments** in the left menu, or go to [Hazard assessments](/hazard-assessments). The list has a **Project** column with the full job name — it starts with the job number, and search matches it too. On a phone, each card shows the job and who completed the assessment.
 
 On a phone, the assessment number, **In progress** or **Locked** status, action buttons, and section tabs stay at the top. Tap a section tab to jump to that part of the assessment. The assessment title, dates, and safety review status scroll with the page; scroll to the top of the content to see them. Open **Actions**, then choose **Submit** for the **Submit & lock** confirmation. **Unlock** is also inside **Actions** when the assessment is locked.
 
@@ -469,7 +469,7 @@ The quick report captures the essentials. Photos, witness statements, and the fu
 
 - The incident starts as **Reported**. The right people are notified automatically.
 - An investigator may move it to investigating, dig into the causes, and record findings on the incident page.
-- Fixes get assigned as [corrective actions](/help/corrective-actions) with owners and due dates.
+- Fixes get assigned as [corrective actions](/help/corrective-actions) — someone is assigned to do each one, with a due date.
 - When the investigation and fixes are done, the incident is closed.
 
 You can open your own reports any time from the [Incidents](/incidents) list to see their status. The top-bar search finds incidents in every status, including closed incidents, with no age limit. Your access permissions still apply.
@@ -543,7 +543,7 @@ You need signal to change the status, lock or unlock the incident, add or edit p
       'assigned to me',
       'close out',
     ],
-    body: `A corrective action is a fix that came out of an incident, inspection, or hazard assessment — with an owner and a due date. If one is assigned to you, it is your job to do the work and record it.
+    body: `A corrective action is a fix that came out of an incident, inspection, or hazard assessment — assigned to someone, with a due date. If one is assigned to you, it is your job to do the work and record it.
 
 ## Manage this module
 
@@ -565,9 +565,21 @@ Finding a problem only matters if someone fixes it. Corrective actions track eac
 
 ## Where to find it
 
-Open **Corrective Actions** in the left menu, or go to [Corrective actions](/corrective-actions). The list opens on open actions. Each row shows the status and the due date — overdue ones are flagged. Use the search box and the status filter to narrow the list; tap **All statuses** to see closed ones too. Search matches reference, title, description, root cause, action taken, and verification notes, including fields not displayed in the list. The top-bar search and CSV export use the same fields. Top-bar search includes actions in every status, including closed and cancelled actions. Its **View all** link opens **All statuses** so those matches stay visible.
+Open **Corrective Actions** in the left menu, or go to [Corrective actions](/corrective-actions). The list opens on open actions. Each row shows who it is **Assigned to**, who assigned it (**Assigned by**, with the date), the status, and the due date — overdue ones are flagged. Use the search box and the status filter to narrow the list; tap **All statuses** to see closed ones too. Search matches reference, title, description, root cause, action taken, and verification notes, including fields not displayed in the list. The top-bar search and CSV export use the same fields. Top-bar search includes actions in every status, including closed and cancelled actions. Its **View all** link opens **All statuses** so those matches stay visible.
+
+## Create a corrective action
+
+1. Open [Corrective actions](/corrective-actions) and tap **New action**. A form opens on the side of the list.
+2. Give it a **Title** and describe the problem.
+3. Pick who it is **Assigned to**. It starts with your name — change it if someone else should do the fix. Your name is saved as **Assigned by**, with today's date. If the action is later given to someone else, **Assigned by** and the date update to whoever made that change.
+4. Set the **Severity**, **Source**, site, and due date.
+5. Tap **Create action**. The new action opens so you can add more detail.
+
+You can also start one from an incident: open the incident and use its corrective action link — the form opens with that incident linked as the source.
 
 ## Completing one assigned to you
+
+Actions assigned to you also show under **My corrective actions** on the **My compliance** dashboard card and at the top of **Compliance → Mine**, and in [Workspace](/my) under **Corrective actions**.
 
 1. Open the action from the list.
 2. Read the **General** section so you understand what is being asked, and check the due date.
@@ -586,7 +598,7 @@ Open **Corrective Actions** in the left menu, or go to [Corrective actions](/cor
 
 The due date is on the row in the list and at the top of the action. Overdue actions are marked and show up in reports your supervisor sees. If you cannot make the date, say so early — do not let it quietly go overdue.
 
-Supervisors can use the report tabs to work through larger backlogs. **Aging** filters open actions by age, severity, and status. **Overdue** searches all overdue actions and filters by severity, status, or whether an owner is assigned. **By assignee** finds owners with overdue or outstanding work, and **By source** shows which records create the most actions. Click a heading to change the sort order.
+Supervisors can use the report tabs to work through larger backlogs. **Aging** filters open actions by age, severity, and status. **Overdue** searches all overdue actions and filters by severity, status, or whether someone is assigned. **By assignee** finds people with overdue or outstanding work, and **By source** shows which records create the most actions. Click a heading to change the sort order.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -838,6 +850,7 @@ Open **Compliance** in the left menu, or go to [Compliance](/compliance). Most p
 
 ## Reading the page
 
+- **My corrective actions** at the top lists fixes assigned to you, with overdue and due-soon counts and the next few due. They are tracked separately — they do not change your compliance progress. The same list appears on the **My compliance** dashboard card.
 - The bar at the top shows your progress — how many items are done out of the total.
 - The **My compliance** dashboard card keeps recurring journals, inspections, and apps visible for the current period, including completed work. Each row shows the completed and expected count plus the period dates.
 - Document acknowledgements appear in the **Documents** summary below current-period work. Tap it to open the document-filtered list.
