@@ -14,10 +14,25 @@ import { getRedisUrl } from './config'
 let producerConnection: Redis | undefined
 let blockingConnection: Redis | undefined
 
+/**
+ * After a Sentinel failover the old primary keeps answering on existing
+ * sockets as a read-only replica, so writes fail with
+ * `READONLY You can't write against a read only replica.` ioredis never
+ * reconnects on its own for that error, which wedges every queue until the
+ * process restarts. Returning 2 tells ioredis to reconnect (re-resolving
+ * the endpoint so Sentinel/DNS hands it the new primary) and resend the
+ * failed command — safe because a READONLY rejection means the command
+ * was never executed.
+ */
+export function redisReconnectOnError(error: Error): boolean | 1 | 2 {
+  return error.message.includes('READONLY') ? 2 : false
+}
+
 export function getConnection(): ConnectionOptions {
   producerConnection ??= new Redis(getRedisUrl(), {
     enableReadyCheck: false,
     maxRetriesPerRequest: 1,
+    reconnectOnError: redisReconnectOnError,
   })
   return producerConnection as unknown as ConnectionOptions
 }
@@ -26,6 +41,7 @@ export function getBlockingConnection(): ConnectionOptions {
   blockingConnection ??= new Redis(getRedisUrl(), {
     enableReadyCheck: false,
     maxRetriesPerRequest: null,
+    reconnectOnError: redisReconnectOnError,
   })
   return blockingConnection as unknown as ConnectionOptions
 }

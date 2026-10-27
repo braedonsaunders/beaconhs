@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis'
 import { getRedisUrl } from './config'
+import { redisReconnectOnError } from './connection'
 
 let client: Redis | null = null
 let clientConnect: Promise<void> | null = null
@@ -11,6 +12,7 @@ async function rateLimitClient() {
       enableOfflineQueue: false,
       lazyConnect: true,
       maxRetriesPerRequest: 1,
+      reconnectOnError: redisReconnectOnError,
     })
     // Command callers surface failures with request-specific context. Keep an
     // idle connection failure from becoming an unhandled EventEmitter error.

@@ -93,10 +93,12 @@ describe('lazy jobs runtime', () => {
     expect(mocks.redis).toHaveBeenNthCalledWith(1, 'redis://runtime.example.test:6379', {
       enableReadyCheck: false,
       maxRetriesPerRequest: 1,
+      reconnectOnError: expect.any(Function),
     })
     expect(mocks.redis).toHaveBeenNthCalledWith(2, 'redis://runtime.example.test:6379', {
       enableReadyCheck: false,
       maxRetriesPerRequest: null,
+      reconnectOnError: expect.any(Function),
     })
 
     const data = {
