@@ -7,6 +7,7 @@
 
 import { connectDb } from '@beaconhs/sync'
 import type { DbConn, DbKind } from '@beaconhs/sync'
+import { expandClassDays } from '../class-days'
 import { resolveValue } from '../resolve'
 import type {
   DeliverContext,
@@ -106,35 +107,14 @@ function missingConn(c: Conn, password: string): string | null {
 }
 
 // --- date helpers ------------------------------------------------------------
-// Week rows are calendar dates in the tenant's timezone: a class starting
-// Sunday 7:30 PM in Toronto is a Sunday class even though the stored instant
-// is already Monday in UTC. Resolve the start instant to its calendar date in
-// the event's timezone first, then do pure calendar arithmetic (anchored to
-// UTC midnights, which DST cannot skew).
+// Week rows are built from the shared class-days expansion (weekdays only,
+// tenant-timezone calendar days) so a timesheet can never credit a weekend or
+// a day the calendar does not show. See ../class-days for the rules.
 function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * 86_400_000)
 }
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10)
-}
-function calendarDateInTimeZone(instant: Date, timeZone: string | undefined): Date {
-  let zone = timeZone?.trim() || 'UTC'
-  try {
-    // Throws RangeError for an unknown IANA zone.
-    new Intl.DateTimeFormat('en-US', { timeZone: zone })
-  } catch {
-    zone = 'UTC'
-  }
-  const parts: Record<string, string> = {}
-  for (const p of new Intl.DateTimeFormat('en-US', {
-    timeZone: zone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(instant)) {
-    parts[p.type] = p.value
-  }
-  return new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)))
 }
 
 interface WeekRow {
@@ -150,16 +130,19 @@ export function buildWeekRows(
 ): WeekRow[] {
   const instant = new Date(startsAtIso)
   if (Number.isNaN(instant.getTime())) return []
-  const start = calendarDateInTimeZone(instant, timeZone)
-  const span = Math.max(1, Math.floor(lengthDays))
-  const last = addDays(start, span - 1)
+  const classDays = new Set(
+    expandClassDays({ startsAt: instant, endsAt: instant, lengthDays, timeZone }),
+  )
+  if (classDays.size === 0) return []
+  const sorted = [...classDays].sort()
+  const first = new Date(`${sorted[0]}T00:00:00.000Z`)
+  const last = new Date(`${sorted[sorted.length - 1]}T00:00:00.000Z`)
   const rows: WeekRow[] = []
-  let weekStart = addDays(start, -start.getUTCDay())
+  let weekStart = addDays(first, -first.getUTCDay())
   for (let guard = 0; guard < 60 && weekStart <= last; guard++) {
     const dayHours = [0, 0, 0, 0, 0, 0, 0]
     for (let i = 0; i < 7; i++) {
-      const day = addDays(weekStart, i)
-      if (day >= start && day <= last) dayHours[i] = hoursPerDay
+      if (classDays.has(ymd(addDays(weekStart, i)))) dayHours[i] = hoursPerDay
     }
     if (dayHours.some((h) => h > 0)) {
       rows.push({ dateStart: ymd(weekStart), dateEnd: ymd(addDays(weekStart, 6)), dayHours })
