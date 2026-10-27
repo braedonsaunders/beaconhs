@@ -55,8 +55,16 @@ export async function createDocument(): Promise<void> {
   redirect(`/documents/${id}`)
 }
 
+type BulkBlockedDocument = {
+  documentId: string
+  title: string
+  reason: string
+  bookTitles: string[]
+}
+
 type BulkActionResult =
-  { ok: true; updated: number; skipped: number } | { ok: false; error: string }
+  | { ok: true; updated: number; skipped: number; blocked?: BulkBlockedDocument[] }
+  | { ok: false; error: string }
 
 export async function bulkArchiveDocuments(args: {
   documentIds: string[]
@@ -73,20 +81,60 @@ export async function bulkArchiveDocuments(args: {
 
   const result = await ctx.db(async (tx) => {
     const rows = await tx
-      .select({ id: documents.id, status: documents.status, deletedAt: documents.deletedAt })
+      .select({
+        id: documents.id,
+        title: documents.title,
+        status: documents.status,
+        deletedAt: documents.deletedAt,
+      })
       .from(documents)
       .where(and(eq(documents.tenantId, ctx.tenantId), inArray(documents.id, ids)))
       .for('update')
     const bookReferences = await publishedBookReferencesForDocuments(tx, ctx.tenantId, ids)
     const bookProtectedIds = publishedBookDocumentIds(bookReferences)
+    const booksByDocument = new Map<string, string[]>()
+    for (const ref of bookReferences) {
+      const list = booksByDocument.get(ref.documentId) ?? []
+      list.push(ref.bookTitle.trim() || 'Untitled book')
+      booksByDocument.set(ref.documentId, list)
+    }
     const editable = rows
       .filter(
         (row) =>
           row.deletedAt === null && row.status !== 'archived' && !bookProtectedIds.has(row.id),
       )
       .map((r) => r.id)
+    const editableSet = new Set(editable)
+    const foundIds = new Set(rows.map((r) => r.id))
+    const blocked: BulkBlockedDocument[] = rows
+      .filter((row) => !editableSet.has(row.id))
+      .map((row) => ({
+        documentId: row.id,
+        title: row.title || 'Untitled document',
+        reason: bookProtectedIds.has(row.id)
+          ? 'In a published document book — unpublish the book first'
+          : row.deletedAt !== null
+            ? 'Already deleted'
+            : 'Already archived',
+        bookTitles: booksByDocument.get(row.id) ?? [],
+      }))
+    for (const id of ids) {
+      if (!foundIds.has(id)) {
+        blocked.push({ documentId: id, title: id, reason: 'Not found', bookTitles: [] })
+      }
+    }
     const skipped = ids.length - editable.length
-    if (editable.length === 0) return { updated: 0, skipped }
+    if (editable.length === 0) {
+      // Audit the blocked attempt too — a silent no-op is what made this
+      // action look broken.
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'document',
+        action: 'archive',
+        summary: `Bulk archive blocked for ${blocked.length} document${blocked.length === 1 ? '' : 's'}`,
+        metadata: { batchId, documentIds: ids, skipped, blocked },
+      })
+      return { updated: 0, skipped, blocked }
+    }
     await tx
       .update(documents)
       .set({ status: 'archived' })
@@ -105,13 +153,13 @@ export async function bulkArchiveDocuments(args: {
       entityType: 'document',
       action: 'archive',
       summary: `Bulk archived ${editable.length} document${editable.length === 1 ? '' : 's'}`,
-      metadata: { batchId, documentIds: editable, skipped, publishedBookBlocked: bookReferences },
+      metadata: { batchId, documentIds: editable, skipped, blocked },
     })
-    return { updated: editable.length, skipped }
+    return { updated: editable.length, skipped, blocked }
   })
 
   revalidatePath('/documents')
-  return { ok: true, updated: result.updated, skipped: result.skipped }
+  return { ok: true, updated: result.updated, skipped: result.skipped, blocked: result.blocked }
 }
 
 // Soft-delete: the document leaves every list and its editor sessions stop

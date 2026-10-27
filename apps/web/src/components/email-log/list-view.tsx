@@ -102,11 +102,19 @@ export async function EmailLogListView({
     if (scope === 'tenant') {
       filters.push(eq(emailLog.tenantId, ctx.tenantId))
     }
+    // Match ANY address on the message (to/cc/bcc), not just the denormalised
+    // primary recipient — over a third of sends carry more than one address.
+    const anyRecipient = (term: string) => sql`(
+      ${emailLog.recipientPrimary} ILIKE ${term}
+      OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(${emailLog.recipients}) AS r(v) WHERE r.v ILIKE ${term})
+      OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(${emailLog.cc}) AS r(v) WHERE r.v ILIKE ${term})
+      OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(${emailLog.bcc}) AS r(v) WHERE r.v ILIKE ${term})
+    )`
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
         ilike(emailLog.subject, term),
-        ilike(emailLog.recipientPrimary, term),
+        anyRecipient(term),
         ilike(emailLog.categoryKey, term),
       )
       if (cond) filters.push(cond)
@@ -118,7 +126,7 @@ export async function EmailLogListView({
       filters.push(eq(emailLog.categoryKey, categoryFilter))
     }
     if (recipientFilter) {
-      filters.push(ilike(emailLog.recipientPrimary, `%${recipientFilter}%`))
+      filters.push(anyRecipient(`%${recipientFilter}%`))
     }
     // Ignore malformed date params — new Date('garbage') doesn't throw, it
     // returns an Invalid Date that blows up during query serialization.

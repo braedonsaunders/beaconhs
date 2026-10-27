@@ -54,10 +54,15 @@ export default async function DocumentsPage({
   })
   // Validate query-string filters before they hit enum/uuid casts — a crafted
   // value is ignored rather than 500ing the page.
+  // Default to Active (everything except archived) so archived rows leave
+  // the list; ?status=all (the filter's "All") shows every status.
   const statusRaw = pickString(sp.status)
-  const statusFilter = STATUS_OPTIONS.some((o) => o.value === statusRaw)
-    ? (statusRaw as DocumentStatus)
-    : undefined
+  const statusFilter: DocumentStatus | 'all' | undefined =
+    statusRaw === 'all'
+      ? 'all'
+      : STATUS_OPTIONS.some((o) => o.value === statusRaw)
+        ? (statusRaw as DocumentStatus)
+        : 'active'
   const categoryRaw = pickString(sp.category)
   const categoryFilter = categoryRaw && isUuid(categoryRaw) ? categoryRaw : undefined
   const typeRaw = pickString(sp.type)
@@ -210,6 +215,7 @@ export default async function DocumentsPage({
                     basePath="/documents"
                     currentParams={sp}
                     paramKey="status"
+                    defaultValue="active"
                     label={tGenerated('m_0b9da892d6faf0')}
                     options={STATUS_OPTIONS.map((o) => ({
                       ...o,
