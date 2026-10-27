@@ -1005,6 +1005,10 @@ Unity collects available history in windows of 1–24 hours per run. **History w
 
 A **Database (SQL)** connection and an **External SQL database** automation both require **Use SSL/TLS**. If the host is an IP address, enter the **TLS certificate host name** from the database certificate. For a private or self-signed certificate, paste the **Pinned CA certificate**. On-prem private hosts also have to be allowlisted by the platform operator.
 
+## Check outbound deliveries and re-send failures
+
+Open an outbound automation under **Admin → Integrations**. **Delivery history** lists every record it sent, with search, a **Status** filter, and page controls. **Delivered** means the other system accepted it. **Failed** shows the error from the other system. **Not delivered** means BeaconHS published the event but the delivery never landed. Fix the connection first, then click **Re-send** on the failed row. Re-sending never posts twice: destinations that support it replace their earlier rows.
+
 ## Configure AI
 
 1. Open **Admin**, then click **AI**. Platform super-admins set the shared default under **Platform AI**.

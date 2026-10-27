@@ -91,6 +91,8 @@ To filter first, then print, open **Reports → Training — Wallet cards**. Add
 2. Search by class, course, code, or site. Filter by **Upcoming**, **Past**, or **All**.
 3. Each class shows the date, course, site, and a status: **Scheduled**, **Awaiting completion**, **Completed**, or **Cancelled**.
 
+When a manager marks a class complete, timesheet exports credit only the people marked **Attended**, plus the class instructor when they are an employee in BeaconHS. People marked absent are never credited. If an export to another system fails, the completed class shows a warning with the error. An admin can fix the connection and click **Re-send** on the class or under **Admin → Integrations**.
+
 ## Carry your tickets with you
 
 1. Go to [My Workspace](/my) and tap **Wallet**.
@@ -191,6 +193,8 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 ## Record actions
 
 On a course certificate or skill ticket, choose **Actions → Renew** to start a renewal or **Actions → Revoke** to withdraw an invalid record. Revocation stays in the separated final section and asks for confirmation.
+
+Open **Activity** on a record to see its full change history. Search it, filter by **Action**, and use the page controls to reach older changes.
 
 ## Verify an online course
 
