@@ -1,0 +1,14 @@
+diff --git a/compose.js b/compose.js
+index b91628759cf6e52d34fad3c58b19ccfcdaa27f57..739c0c30da1159b4f913f8ae1956d4cbc8c24e4c 100644
+--- a/compose.js
++++ b/compose.js
+@@ -82,7 +82,8 @@ function drawImposed(out, src, page, index, geometry, options) {
+     const boxWidth = Math.max(1, geometry.width - margin * 2);
+     const boxHeight = Math.max(1, geometry.height - margin * 2 - reserveTop - reserveBottom);
+     const boxBottom = margin + reserveBottom;
+-    const rotation = normalizeAngle(src.getPage(index).getRotation().angle);
++    // PDF /Rotate is clockwise; drawing transforms use counterclockwise angles.
++    const rotation = normalizeAngle(-src.getPage(index).getRotation().angle);
+     const quarterTurned = rotation === 90 || rotation === 270;
+     // Visual dimensions after the viewer applies /Rotate.
+     const visualWidth = quarterTurned ? page.height : page.width;

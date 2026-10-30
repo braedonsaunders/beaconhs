@@ -71,6 +71,8 @@ peerDependencyRules:
     '@radix-ui/react-presence@1.0.0>react-dom': '19.2.7'
 
 patchedDependencies:
+  # Preserve clockwise PDF page rotation when composing books.
+  '@braedonsaunders/appkit-pdf@0.7.0': patches/@braedonsaunders__appkit-pdf@0.7.0.patch
   # Compression redirects drain registrations to Gzip; removals must follow
   # the same emitter so Node once-listeners are actually removed after firing.
   next@16.4.1: patches/next@16.4.1.patch
