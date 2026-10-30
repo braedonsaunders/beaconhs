@@ -63,7 +63,7 @@ describe('document control facts', () => {
       approvedBy: 'Alex Morgan',
     })
   })
-  it('keeps unpublished changes labelled Draft and derives approvers only when no override is entered', async () => {
+  it('keeps unpublished changes labelled Draft and never treats review attendance as approval', async () => {
     const tx = database([
       [{ ...metadata, status: 'draft' }],
       versions,
@@ -78,6 +78,6 @@ describe('document control facts', () => {
       ],
     ])
     const header = (await loadDocumentControlHeaders(tx, 'tenant', ['doc'])).get('doc')
-    expect(header).toMatchObject({ version: 'Draft', approvedBy: 'Reviewer' })
+    expect(header).toMatchObject({ version: 'Draft', approvedBy: null })
   })
 })

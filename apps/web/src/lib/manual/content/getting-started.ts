@@ -198,6 +198,8 @@ Open **Workspace** in the left menu, under Overview. You can also go straight to
 
 A badge on a tile warns you about anything overdue or expiring soon.
 
+**History** is the ninth Workspace tile. It uses the same cards as **In progress** for submitted journals, hazard assessments, incident reports, inspections, document acknowledgments, and safety talks. Search the history, filter by **Kind**, and use **Next** and **Prev** to browse. Select **View record** to reopen an entry. Document cards identify the signed version and whether the acknowledgment was individual or part of a group talk. History includes voluntary reading and does not change your assigned compliance percentage.
+
 ## Using your credential wallet
 
 Your wallet holds your certificates and skill cards — like the paper tickets in your truck, but always with you.

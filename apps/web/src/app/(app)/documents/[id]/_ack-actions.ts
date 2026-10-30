@@ -27,6 +27,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
+import { canFacilitateDocumentSignoff } from '@/lib/document-signoff-permission'
 import { isUuid } from '@/lib/list-params'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 
@@ -241,6 +242,9 @@ export async function acknowledgeDocument(input: unknown): Promise<Ok | Err> {
 
     revalidatePath(`/documents/${documentId}`)
     revalidatePath(`/documents/${documentId}/read`)
+    revalidatePath('/compliance/mine')
+    revalidatePath('/my')
+    revalidatePath('/my/history')
     return { ok: true }
   } catch (error) {
     if (error instanceof AcknowledgmentError && error.message.includes('already acknowledged')) {
@@ -255,7 +259,7 @@ export async function addSignOffSigner(
   input: unknown,
 ): Promise<Ok<{ sessionId: string; signer: SignerRow }> | Err> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
+  if (!canFacilitateDocumentSignoff(ctx)) throw new Error('Document sign-off permission required')
 
   try {
     const values = inputRecord(input, 'Group sign-off')
@@ -308,6 +312,7 @@ export async function addSignOffSigner(
               ),
             )
             .limit(1)
+            .for('update')
           if (!session) {
             throw new AcknowledgmentError(
               'This sign-off session is no longer available for this document version',
@@ -333,17 +338,20 @@ export async function addSignOffSigner(
           sessionId = session.id
         }
 
-        const existing = await currentDocumentAcknowledgment(
-          tx,
-          ctx.tenantId,
-          documentId,
-          versionId,
-          personId,
-        )
+        // Attendance is unique within this session, not across all talks on a version.
+        const [existing] = await tx
+          .select({ id: documentAcknowledgments.id })
+          .from(documentAcknowledgments)
+          .where(
+            and(
+              eq(documentAcknowledgments.tenantId, ctx.tenantId),
+              eq(documentAcknowledgments.sessionId, sessionId),
+              eq(documentAcknowledgments.personId, personId),
+            ),
+          )
+          .limit(1)
         const name = `${person.firstName} ${person.lastName}`.trim() || '(unnamed)'
-        if (existing) {
-          throw new AcknowledgmentError(`${name} already acknowledged this version`)
-        }
+        if (existing) throw new AcknowledgmentError(`${name} already signed this session`)
 
         const [acknowledgment] = await tx
           .insert(documentAcknowledgments)
@@ -388,6 +396,9 @@ export async function addSignOffSigner(
 
     revalidatePath(`/documents/${documentId}`)
     revalidatePath(`/documents/${documentId}/read`)
+    revalidatePath('/compliance/mine')
+    revalidatePath('/my')
+    revalidatePath('/my/history')
     revalidatePath(`/documents/${documentId}/sign-off`)
     return { ok: true, ...out }
   } catch (error) {
@@ -398,7 +409,7 @@ export async function addSignOffSigner(
 /** Remove only a group-session signer, along with its private signature file. */
 export async function removeSignOffSigner(input: unknown): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
+  if (!canFacilitateDocumentSignoff(ctx)) throw new Error('Document sign-off permission required')
 
   try {
     const values = inputRecord(input, 'Signer removal')
@@ -432,6 +443,7 @@ export async function removeSignOffSigner(input: unknown): Promise<Ok | Err> {
         .from(documentAcknowledgmentSessions)
         .where(eq(documentAcknowledgmentSessions.id, acknowledgment.sessionId))
         .limit(1)
+        .for('update')
       if (session?.completedAt) {
         throw new AcknowledgmentError('Signers cannot be removed from a completed session')
       }
@@ -471,6 +483,9 @@ export async function removeSignOffSigner(input: unknown): Promise<Ok | Err> {
 
     revalidatePath(`/documents/${documentId}`)
     revalidatePath(`/documents/${documentId}/read`)
+    revalidatePath('/compliance/mine')
+    revalidatePath('/my')
+    revalidatePath('/my/history')
     revalidatePath(`/documents/${documentId}/sign-off`)
     return { ok: true }
   } catch (error) {
@@ -481,7 +496,7 @@ export async function removeSignOffSigner(input: unknown): Promise<Ok | Err> {
 /** Finalize a group sign-off and fire its configured Flows exactly once. */
 export async function completeSignOffSession(input: unknown): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
+  if (!canFacilitateDocumentSignoff(ctx)) throw new Error('Document sign-off permission required')
 
   try {
     const values = inputRecord(input, 'Group sign-off')
@@ -568,6 +583,9 @@ export async function completeSignOffSession(input: unknown): Promise<Ok | Err> 
 
     revalidatePath(`/documents/${documentId}`)
     revalidatePath(`/documents/${documentId}/read`)
+    revalidatePath('/compliance/mine')
+    revalidatePath('/my')
+    revalidatePath('/my/history')
     revalidatePath(`/documents/${documentId}/sign-off`)
     return { ok: true }
   } catch (error) {

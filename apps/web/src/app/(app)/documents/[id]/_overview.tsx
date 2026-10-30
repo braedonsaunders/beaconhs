@@ -27,27 +27,23 @@ type OverviewMeta = {
   description: string
   reviewFrequencyMonths: string
   nextReviewOn: string
-  showDocumentHeader: boolean
   headerIssuedOn: string
   headerRevisedOn: string
   headerApprovedBy: string
   headerVersionLabel: string
 }
 
-type TextField = Exclude<keyof OverviewMeta, 'showDocumentHeader' | 'categoryId' | 'typeId'>
+type TextField = Exclude<keyof OverviewMeta, 'categoryId' | 'typeId'>
 
 export function DocumentOverview({
   initialMeta,
   categories,
   types,
-  hasMaster,
 }: {
   initialMeta: OverviewMeta
   categories: { id: string; name: string }[]
   types: { id: string; name: string }[]
-  hasMaster: boolean
 }) {
-  const header = useRecordField('showDocumentHeader', String(initialMeta.showDocumentHeader))
   const category = useRecordField('categoryId', initialMeta.categoryId)
   const type = useRecordField('typeId', initialMeta.typeId)
 
@@ -62,23 +58,10 @@ export function DocumentOverview({
       <div className="space-y-4 p-4">
         <RecordSyncBanner />
         <div className="space-y-1.5 rounded-md border border-slate-200 p-3 dark:border-slate-700">
-          <label
-            className="flex items-center gap-2 text-sm font-medium"
-            htmlFor="o-document-header"
-          >
-            <input
-              id="o-document-header"
-              type="checkbox"
-              className="h-4 w-4 accent-teal-600"
-              checked={header.value === 'true'}
-              disabled={!hasMaster || header.paused}
-              onChange={(e) => header.commit(String(e.currentTarget.checked))}
-            />
-            <GeneratedText id="m_09e4b0c8b299d1" />
-          </label>
-          <RecordFieldError error={header.error} />
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            <GeneratedText id="m_1a3548cd328498" />
+            <GeneratedValue
+              value={'Every document PDF includes its control header and print footer.'}
+            />
           </p>
           <div className="grid grid-cols-2 gap-3 pt-2">
             <div className="space-y-1.5">

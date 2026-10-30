@@ -506,6 +506,21 @@ You only see your own sign-off on this page. Other people's signatures stay with
 
 If a supervisor is running a group sign-off at a toolbox talk, they will pass you the tablet to sign your name on their screen instead.
 
+## Give the same talk again
+
+Supervisors with **Facilitate document sign-offs** permission can run a new talk without editing the document.
+
+1. Open the document to read it.
+2. Select **Start safety talk / group sign-off**, even if you have already acknowledged it.
+3. Add yourself and each attendee. Each person draws their own signature.
+4. Select **Complete session** when everyone has signed.
+
+After completion, the saved session stays open. Use **Print / PDF** to save its register, or bookmark its address to return later.
+
+Open **Workspace → History** and filter **Kind** to **Document acknowledgment** to find your saved reading and safety-talk attendance. Search by document. Voluntary reading is recorded even when no requirement was assigned.
+
+Every talk has its own dated session. Earlier signatures stay in the history. A person can sign again at another talk, but only once in the same session. An individual acknowledgment records that you read the document; it does not add you to a new talk's attendance sheet.
+
 For a facilitator-led session, each signature saves immediately. After the last person signs, the facilitator selects the site or project and taps **Complete session**. Completion locks the roster and runs the configured sign-off automations once. **Print / PDF** in the header saves the acknowledgement register — who was asked, who signed, and when.
 
 Acknowledgment requests can also show up in your notifications. Follow the link, read, and tap **Acknowledge**.
@@ -609,11 +624,10 @@ Imported Word files must be .docx files and 100 MB or smaller.
 
 ## Document header on individual PDFs
 
-1. In **Overview**, turn on **Show document header on PDF** for a Word document.
-2. Edit **Title**, **Category**, **Type**, and **Key** in **Overview**. Set **Issue date**, **Revision date**, **Approved by**, and **Printed version** for the header. Leave these four fields blank to use publication dates, review participants, and the published version number. An unpublished document shows **Draft** unless you enter a printed version label. The label does not change publication status or version history.
-3. Wait for **Saved**, then open **PDF**. The preview uses the saved header details. PDF preview and publishing wait for pending detail changes before continuing.
-4. Turn the setting off to print the document without that table or its reserved space.
-5. Publish the next version to give readers that layout. Published versions keep the setting and details they were published with. To change a published copy, use **Unpublish**, edit the details, and **Publish** the next version.
+1. Every individual PDF includes its control header and print footer, including uploaded PDFs. The reader, version downloads, email download links, and books use the same document details.
+2. Edit **Title**, **Category**, **Type**, and **Key** in **Overview**. Set **Issue date**, **Revision date**, **Approved by**, and **Printed version** for the header. Leave dates and printed version blank to use publication dates and the version number. Leave **Approved by** blank when approval has not been recorded; review attendees are not approvers.
+3. Wait for **Saved**, then open **PDF** to preview a working Word document. The header and footer cannot be turned off for individual PDFs.
+4. Publish the next version to give readers updated content and frozen header details. Historical source files and signatures are preserved; opening a version adds the standard print layout without replacing its source.
 
 The table is added to the PDF. Your Word working file keeps its own layout. A document book's **Controlled-document block** setting controls the book's tables independently and prints one table per document. The same editable header fields apply to books, including documents uploaded as PDF files.
 
@@ -663,11 +677,15 @@ The **Acknowledgments** tab is the evidence roster for this document: name, date
 
 To sign the current published version yourself, tap **Read document** at the top of the page. That opens the same reader field workers use.
 
-For a toolbox talk, tap **Record group sign-off**. Use **Search people or sessions**, **Source**, and **Order** to find a person or a session. Use **Next** and **Prev** to move through the complete history.
+For a toolbox talk, tap **Record group sign-off**, or open **Read document** and select **Start safety talk / group sign-off**. Start a new session each time you repeat the talk. Use **Search people or sessions**, **Source**, and **Order** to find a person or a session. Use **Next** and **Prev** to move through the complete history.
+
+The **Approved by** header uses the document’s recorded approval details. Attendance at a management review does not establish approval. If approval details are missing, the header shows a dash.
 
 ## Uploaded PDFs
 
 Documents can also be plain uploaded PDFs (scanned or externally produced). Open the **PDF** tab and drop the file into the uploader — there is no editor for these; the file itself is the document. To revise a published PDF, click **Unpublish** at the top of the page, then use **Replace** in the PDF toolbar to upload the revised file. Click **Publish** at the top of the page when it is ready. The document is hidden from readers while it is Draft.
+
+Books preserve the reading orientation of uploaded PDFs, including scanned procedures. Generated headings and the procedure pages should both be upright.
 
 ## Organize categories, types, and management reviews
 
@@ -675,7 +693,7 @@ If your role manages Documents, use the document tabs to keep the library organi
 
 1. Open **Categories** to arrange the library into a hierarchy. Search by category, description, or parent. Use **Level** to show top-level or nested categories, and **Usage** to find categories with or without documents. Use the searchable **Parent** picker to move a category within the hierarchy. Category names must be unique under the same parent, but different branches can reuse a name.
 2. Open **Types** to manage classifications such as Policy, Procedure, SDS, and Manual. Use the search box to find a type by name, key, or description. Use **Usage** to show types that are used or unused.
-3. Open **Management reviews** to record board reviews of the safety management system. **Actions → Print / PDF** on a review gives you the minutes: attendees, documents reviewed, decisions, and actions raised. Under **Documents reviewed**, add the published documents the board reviewed, then click **Save documents**. BeaconHS pins each document to its exact published version, so a later revision cannot change the historical review record. Search by review title, or use **Next review** to show reviews that have or do not have another review scheduled.
+3. The **Management reviews** tab is available only to people with **Manage documents** permission. Open it to record board reviews of the safety management system. **Actions → Print / PDF** on a review gives you the minutes: attendees, documents reviewed, decisions, and actions raised. Under **Documents reviewed**, add the published documents the board reviewed, then click **Save documents**. BeaconHS pins each document to its exact published version, so a later revision cannot change the historical review record. Search by review title, or use **Next review** to show reviews that have or do not have another review scheduled.
 
 Periodic reviews on an individual document also record the exact published version. Open the document's **Reviews** tab, click **Record review**, and explicitly choose the outcome. Historical reviews whose old source did not capture an outcome are labelled **outcome not recorded** instead of being treated as approvals.
 

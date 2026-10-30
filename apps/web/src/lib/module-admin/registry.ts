@@ -483,6 +483,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       { key: 'books', label: 'Books', href: '/documents/books' },
       {
         key: 'management-reviews',
+        permission: 'documents.manage',
         label: 'Management reviews',
         href: '/documents/management-reviews',
       },

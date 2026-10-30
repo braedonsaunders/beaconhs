@@ -1,7 +1,7 @@
 import { activePeopleWhere } from '@beaconhs/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq, gte, inArray, isNull, lt } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
 import { type Database, isUniqueViolation } from '@beaconhs/db'
 import {
   equipmentCategories,
@@ -17,7 +17,7 @@ import {
 } from '@beaconhs/db/schema'
 import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import {
   assertCanEditDriverLog,
   vehicleDriverScopeWhere,
@@ -45,6 +45,7 @@ export type VehicleLogEntryDraft = {
   entryDate: string
   entryMode: VehicleLogMode
   startOdometer: number | null
+  startOdometerCarried: boolean
   endOdometer: number | null
   businessKm: number | null
   personalKm: number | null
@@ -113,6 +114,7 @@ export type VehicleLogWorkspace = {
   mode: VehicleLogMode
   /** Modes the tenant has enabled — drives the segmented toggle. */
   modeOptions: VehicleLogMode[]
+  previousEnd: number | null
   selectedDriverId: string
   selectedEquipmentId: string
   drivers: VehicleLogSelectorOption[]
@@ -272,6 +274,7 @@ function manualEntryFields(input: NormalizedVehicleLogEntryInput) {
   return {
     entryMode,
     startOdometer: entryMode === 'odometer' ? startOdometer : null,
+    startOdometerCarried: entryMode === 'odometer' && input.startOdometerCarried,
     endOdometer: entryMode === 'odometer' ? endOdometer : null,
     kmDriven,
     businessKm: entryMode === 'destination' ? businessKm : null,
@@ -302,6 +305,7 @@ function entryDraft(
     entryDate: row?.entryDate ?? date,
     entryMode,
     startOdometer: row?.startOdometer ?? null,
+    startOdometerCarried: row?.startOdometerCarried ?? true,
     endOdometer: row?.endOdometer ?? null,
     businessKm: row?.businessKm ?? null,
     personalKm: row?.personalKm ?? null,
@@ -434,6 +438,7 @@ export async function loadVehicleLogWorkspace(
         vehicles,
         sites,
         rows: [],
+        previousEnd: null,
         totals: {
           loggedDays: 0,
           importSourceDays: 0,
@@ -455,6 +460,19 @@ export async function loadVehicleLogWorkspace(
           lt(truckLogEntries.entryDate, endExclusive),
         ),
       )
+    const [previousEntry] = await tx
+      .select({ end: truckLogEntries.endOdometer })
+      .from(truckLogEntries)
+      .where(
+        and(
+          eq(truckLogEntries.driverPersonId, selectedDriver.id),
+          eq(truckLogEntries.equipmentItemId, selectedVehicle.id),
+          lt(truckLogEntries.entryDate, start),
+          isNotNull(truckLogEntries.endOdometer),
+        ),
+      )
+      .orderBy(desc(truckLogEntries.entryDate))
+      .limit(1)
     const entryByDate = new Map(entries.map((entry) => [entry.entryDate, entry]))
     const rows: VehicleLogWorkspaceRow[] = []
     let businessKm = 0
@@ -493,6 +511,7 @@ export async function loadVehicleLogWorkspace(
       },
       mode,
       modeOptions: modeConfig.enabledModes,
+      previousEnd: previousEntry?.end ?? null,
       selectedDriverId: selectedDriver.id,
       selectedEquipmentId: selectedVehicle.id,
       drivers,
@@ -511,21 +530,101 @@ export async function loadVehicleLogWorkspace(
   return result
 }
 
+async function lockLog(tx: Database, tenantId: string, equipmentId: string, driverId: string) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`${tenantId}:${equipmentId}:${driverId}`}, 0))`,
+  )
+}
+
+async function resolveCarriedStart(tx: Database, input: NormalizedVehicleLogEntryInput) {
+  if (input.entryMode !== 'odometer' || !input.startOdometerCarried) return input
+  const [previous] = await tx
+    .select({ end: truckLogEntries.endOdometer })
+    .from(truckLogEntries)
+    .where(
+      and(
+        eq(truckLogEntries.equipmentItemId, input.equipmentItemId),
+        eq(truckLogEntries.driverPersonId, input.driverPersonId),
+        lt(truckLogEntries.entryDate, input.entryDate),
+        isNotNull(truckLogEntries.endOdometer),
+      ),
+    )
+    .orderBy(desc(truckLogEntries.entryDate))
+    .limit(1)
+  const start = previous?.end ?? null
+  if (start == null && input.endOdometer != null)
+    throw new Error('Enter a starting odometer for the first log entry.')
+  if (start != null && input.endOdometer != null && input.endOdometer < start)
+    throw new Error('End odometer cannot be less than the previous ending reading.')
+  return { ...input, startOdometer: start }
+}
+
+async function refreshFollowingStart(
+  tx: Database,
+  ctx: RequestContext,
+  entry: Pick<TruckLogRow, 'id' | 'equipmentItemId' | 'driverPersonId' | 'entryDate'>,
+) {
+  let date = entry.entryDate
+  for (;;) {
+    const [next] = await tx
+      .select()
+      .from(truckLogEntries)
+      .where(
+        and(
+          eq(truckLogEntries.equipmentItemId, entry.equipmentItemId),
+          eq(truckLogEntries.driverPersonId, entry.driverPersonId),
+          gt(truckLogEntries.entryDate, date),
+          eq(truckLogEntries.entryMode, 'odometer'),
+        ),
+      )
+      .orderBy(asc(truckLogEntries.entryDate))
+      .limit(1)
+      .for('update')
+    if (!next) return
+    if (next.startOdometerCarried) {
+      const normalized = await resolveCarriedStart(tx, normalizeVehicleLogEntryInput(next))
+      const fields = manualEntryFields(normalized)
+      if (fields.kmDriven != null && (next.personalKm ?? 0) > fields.kmDriven)
+        throw new Error(
+          `The correction makes personal kilometres exceed the distance on ${next.entryDate}. Correct that entry first.`,
+        )
+      if (normalized.startOdometer !== next.startOdometer) {
+        await tx
+          .update(truckLogEntries)
+          .set({ startOdometer: fields.startOdometer, kmDriven: fields.kmDriven })
+          .where(eq(truckLogEntries.id, next.id))
+        await recordAuditInTransaction(tx, ctx, {
+          entityType: 'truck_log_entry',
+          entityId: next.id,
+          action: 'update',
+          summary: 'Recalculated carried starting odometer',
+          before: { startOdometer: next.startOdometer, kmDriven: next.kmDriven },
+          after: { startOdometer: fields.startOdometer, kmDriven: fields.kmDriven },
+          metadata: { precedingEntryId: entry.id },
+        })
+      }
+    }
+    if (next.endOdometer != null) return
+    date = next.entryDate
+  }
+}
+
 export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehicleLogEntryInput) {
   const normalized = normalizeVehicleLogEntryInput(input)
   assertCanEditDriverLog(ctx, normalized.driverPersonId)
   const { equipmentItemId, driverPersonId, entryDate, entryMode } = normalized
-  const fields = {
-    ...manualEntryFields(normalized),
-    sourceConnectionId: null,
-    sourceExternalId: null,
-    importStatus: 'manual' as const,
-    importedAt: null,
-    importMeta: {},
-  }
-
   const row = await ctx.db(async (tx) => {
     await assertManualVehicleLogReferences(ctx, tx, normalized)
+    await lockLog(tx, ctx.tenantId, equipmentItemId, driverPersonId)
+    const resolved = await resolveCarriedStart(tx, normalized)
+    const fields = {
+      ...manualEntryFields(resolved),
+      sourceConnectionId: null,
+      sourceExternalId: null,
+      importStatus: 'manual' as const,
+      importedAt: null,
+      importMeta: {},
+    }
 
     const [inserted] = await tx
       .insert(truckLogEntries)
@@ -548,6 +647,21 @@ export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehi
       })
       .returning()
     if (inserted) {
+      await refreshFollowingStart(tx, ctx, inserted)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'truck_log_entry',
+        entityId: inserted.id,
+        action: 'update',
+        summary: `Saved vehicle log for ${entryDate}`,
+        after: {
+          equipmentItemId,
+          driverPersonId,
+          entryDate,
+          kmDriven: inserted.kmDriven,
+          importStatus: 'manual',
+        },
+        metadata: { operation: 'upsert' },
+      })
       await recordModuleFlowEvent(tx, ctx, {
         subjectId: inserted.id,
         moduleKey: 'vehicle-log',
@@ -559,22 +673,47 @@ export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehi
   })
   if (!row) throw new Error('Failed to save vehicle log entry.')
 
-  await recordAudit(ctx, {
-    entityType: 'truck_log_entry',
-    entityId: row.id,
-    action: 'update',
-    summary: `Saved vehicle log for ${entryDate}`,
-    after: {
-      equipmentItemId,
-      driverPersonId,
-      entryDate,
-      kmDriven: fields.kmDriven,
-      importStatus: 'manual',
-    },
-    metadata: { operation: 'upsert' },
-  })
   revalidateVehicleLogPaths(equipmentItemId, entryDate)
   return entryDraft(row, entryDate, entryMode)
+}
+
+export async function deleteVehicleLogEntry(ctx: RequestContext, entryIdValue: unknown) {
+  assertCan(ctx, 'equipment.manage')
+  const id = requireUuidInput(entryIdValue, 'Vehicle log entry')
+  const removed = await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
+    const [existing] = await tx
+      .select()
+      .from(truckLogEntries)
+      .where(and(eq(truckLogEntries.id, id), vehicleLogEntryScopeWhere(ctx, vehicleWhere)))
+      .limit(1)
+    if (!existing) return null
+    await lockLog(tx, ctx.tenantId, existing.equipmentItemId, existing.driverPersonId)
+    const [locked] = await tx
+      .select()
+      .from(truckLogEntries)
+      .where(eq(truckLogEntries.id, id))
+      .limit(1)
+      .for('update')
+    if (
+      !locked ||
+      locked.equipmentItemId !== existing.equipmentItemId ||
+      locked.driverPersonId !== existing.driverPersonId
+    )
+      throw new Error('This entry changed. Reload and try again.')
+    await tx.delete(truckLogEntries).where(eq(truckLogEntries.id, id))
+    await refreshFollowingStart(tx, ctx, locked)
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'truck_log_entry',
+      entityId: id,
+      action: 'delete',
+      summary: `Deleted entry for ${locked.entryDate}`,
+      before: { entryDate: locked.entryDate, equipmentItemId: locked.equipmentItemId },
+    })
+    return locked
+  })
+  if (removed) revalidateVehicleLogPaths(removed.equipmentItemId, removed.entryDate)
+  return removed
 }
 
 export async function updateVehicleLogEntry(
@@ -590,21 +729,42 @@ export async function updateVehicleLogEntry(
         id: truckLogEntries.id,
         driverPersonId: truckLogEntries.driverPersonId,
         entryMode: truckLogEntries.entryMode,
+        entryDate: truckLogEntries.entryDate,
         equipmentItemId: truckLogEntries.equipmentItemId,
       })
       .from(truckLogEntries)
       .where(and(eq(truckLogEntries.id, entryId), vehicleLogEntryScopeWhere(ctx, vehicleWhere)))
       .limit(1)
-      .for('update')
     if (!existing) throw new Error('Vehicle log entry was not found.')
     assertCanEditDriverLog(ctx, existing.driverPersonId ?? '')
 
-    const normalized = normalizeVehicleLogEntryInput({
+    let normalized = normalizeVehicleLogEntryInput({
       ...input,
       entryMode: existing.entryMode,
     })
     assertCanEditDriverLog(ctx, normalized.driverPersonId)
     await assertManualVehicleLogReferences(ctx, tx, normalized)
+    const locks = new Map<string, { equipmentItemId: string; driverPersonId: string }>([
+      [`${existing.equipmentItemId}:${existing.driverPersonId}`, existing],
+      [`${normalized.equipmentItemId}:${normalized.driverPersonId}`, normalized],
+    ])
+    for (const [, scope] of [...locks].sort(([a], [b]) => a.localeCompare(b))) {
+      await lockLog(tx, ctx.tenantId, scope.equipmentItemId, scope.driverPersonId)
+    }
+    const [locked] = await tx
+      .select()
+      .from(truckLogEntries)
+      .where(eq(truckLogEntries.id, entryId))
+      .limit(1)
+      .for('update')
+    if (
+      !locked ||
+      locked.equipmentItemId !== existing.equipmentItemId ||
+      locked.driverPersonId !== existing.driverPersonId ||
+      locked.entryDate !== existing.entryDate
+    )
+      throw new Error('This entry changed. Reload and try again.')
+    normalized = await resolveCarriedStart(tx, normalized)
     const fields = manualEntryFields(normalized)
     let updated: typeof truckLogEntries.$inferSelect | undefined
     try {
@@ -628,21 +788,28 @@ export async function updateVehicleLogEntry(
       throw error
     }
     if (!updated) throw new Error('Vehicle log entry was not updated.')
+    await refreshFollowingStart(tx, ctx, updated)
+    if (
+      existing.entryDate !== updated.entryDate ||
+      existing.equipmentItemId !== updated.equipmentItemId ||
+      existing.driverPersonId !== updated.driverPersonId
+    )
+      await refreshFollowingStart(tx, ctx, existing)
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'truck_log_entry',
+      entityId: entryId,
+      action: 'update',
+      summary: `Updated entry for ${normalized.entryDate}`,
+      after: {
+        equipmentItemId: normalized.equipmentItemId,
+        driverPersonId: normalized.driverPersonId,
+        entryDate: normalized.entryDate,
+        kmDriven: updated.kmDriven,
+      },
+    })
     return { existing, normalized, updated }
   })
 
-  await recordAudit(ctx, {
-    entityType: 'truck_log_entry',
-    entityId: entryId,
-    action: 'update',
-    summary: `Updated entry for ${result.normalized.entryDate}`,
-    after: {
-      equipmentItemId: result.normalized.equipmentItemId,
-      driverPersonId: result.normalized.driverPersonId,
-      entryDate: result.normalized.entryDate,
-      kmDriven: result.updated.kmDriven,
-    },
-  })
   revalidateVehicleLogPaths(result.normalized.equipmentItemId, result.normalized.entryDate)
   if (result.existing.equipmentItemId !== result.normalized.equipmentItemId) {
     revalidatePath(`/equipment/${result.existing.equipmentItemId}`)
@@ -665,6 +832,7 @@ export async function deleteVehicleLogMonth(
 
   const ids = await ctx.db(async (tx) => {
     const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
+    await lockLog(tx, ctx.tenantId, equipmentItemId, driverPersonId)
     const rows = await tx
       .select({ id: truckLogEntries.id })
       .from(truckLogEntries)
@@ -684,6 +852,12 @@ export async function deleteVehicleLogMonth(
         rows.map((r) => r.id),
       ),
     )
+    await refreshFollowingStart(tx, ctx, {
+      id: rows[0]!.id,
+      equipmentItemId,
+      driverPersonId,
+      entryDate: start,
+    })
     return rows.map((r) => r.id)
   })
 

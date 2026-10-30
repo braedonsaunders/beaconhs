@@ -7,7 +7,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm'
 import { documentAcknowledgmentSessions } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
+import { canFacilitateDocumentSignoff } from '@/lib/document-signoff-permission'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
@@ -29,7 +29,8 @@ export async function GET(
   if (!ctx.tenantId) return Response.json({ error: 'No active tenant' }, { status: 400 })
   // The register names every person asked to sign, so it follows the same
   // permission as the sign-off surface it is printed from.
-  assertCan(ctx, 'documents.manage')
+  if (!canFacilitateDocumentSignoff(ctx))
+    return Response.json({ error: 'Forbidden' }, { status: 403 })
 
   const [session] = await ctx.db((tx) =>
     tx

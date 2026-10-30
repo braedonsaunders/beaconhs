@@ -7,7 +7,8 @@ import { loadAudience, resolveComplianceClock } from './materialize'
 
 /**
  * A historical signature remains evidence, but does not suppress a new cadence
- * requirement. Readers and both signing paths use the same eligibility check.
+ * requirement. Readers and personal acknowledgments use this eligibility check.
+ * Group attendance is recorded independently for each facilitator-led session.
  * Writers hold the document owner lock before calling this, so retries cannot
  * create a second acknowledgment after the first satisfies the active period.
  */

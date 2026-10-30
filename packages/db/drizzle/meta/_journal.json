@@ -652,6 +652,13 @@
       "when": 1793127600000,
       "tag": "0093_training_class_days_customer",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1793358000000,
+      "tag": "0094_document_signoffs_and_odometer_carry",
+      "breakpoints": true
     }
   ]
 }

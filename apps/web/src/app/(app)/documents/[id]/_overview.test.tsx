@@ -51,7 +51,6 @@ const initial = {
   description: '',
   reviewFrequencyMonths: '',
   nextReviewOn: '',
-  showDocumentHeader: true,
   headerIssuedOn: '',
   headerRevisedOn: '',
   headerApprovedBy: '',
@@ -59,11 +58,9 @@ const initial = {
 }
 let root: Root
 let container: HTMLDivElement
-async function render(meta = initial, hasMaster = true) {
+async function render(meta = initial) {
   await act(async () =>
-    root.render(
-      <DocumentOverview initialMeta={meta} categories={[]} types={[]} hasMaster={hasMaster} />,
-    ),
+    root.render(<DocumentOverview initialMeta={meta} categories={[]} types={[]} />),
   )
 }
 beforeEach(async () => {
@@ -125,11 +122,11 @@ describe('document overview fields', () => {
     expect(input('o-key').value).toBe('safety')
   })
 
-  it('switches the PDF header with a string wire value and only with a Word master', async () => {
-    await act(async () => input('o-document-header').click())
-    expect(mocks.commit).toHaveBeenCalledWith('showDocumentHeader', 'false')
-    await render(initial, false)
-    expect(input('o-document-header').disabled).toBe(true)
+  it('always includes controlled document furniture without an off switch', () => {
+    expect(container.querySelector('#o-document-header')).toBeNull()
+    expect(container.textContent).toContain(
+      'Every document PDF includes its control header and print footer.',
+    )
   })
 
   it('shows why the server refused a value next to the field', async () => {
@@ -144,14 +141,7 @@ describe('document overview fields', () => {
   it('disables every field while editing is paused', async () => {
     mocks.paused = true
     await render({ ...initial })
-    for (const id of [
-      'o-title',
-      'o-key',
-      'o-desc',
-      'o-review',
-      'o-approved',
-      'o-document-header',
-    ]) {
+    for (const id of ['o-title', 'o-key', 'o-desc', 'o-review', 'o-approved']) {
       expect(input(id).disabled).toBe(true)
     }
   })

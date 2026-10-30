@@ -3,16 +3,18 @@
 // published versions; unpublished snapshots require documents.manage.
 
 import { NextResponse, type NextRequest } from 'next/server'
-import { and, eq } from 'drizzle-orm'
-import { attachments, documentVersions } from '@beaconhs/db/schema'
+import { and, eq, isNull } from 'drizzle-orm'
+import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
 import { getObjectStream } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 import { isUuid } from '@/lib/list-params'
 import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 120
 
 export async function GET(
   req: NextRequest,
@@ -37,7 +39,14 @@ export async function GET(
         contentAttachmentId: documentVersions.contentAttachmentId,
       })
       .from(documentVersions)
-      .where(and(eq(documentVersions.id, versionId), eq(documentVersions.documentId, id)))
+      .innerJoin(documents, eq(documents.id, documentVersions.documentId))
+      .where(
+        and(
+          eq(documentVersions.id, versionId),
+          eq(documentVersions.documentId, id),
+          isNull(documents.deletedAt),
+        ),
+      )
       .limit(1)
     if (!v) return null
     if (!v.publishedAt && !can(ctx, 'documents.manage')) return null
@@ -52,6 +61,33 @@ export async function GET(
     return row ? { ...row, versionNumber: v.version } : null
   })
   if (!att) return new NextResponse('Not found', { status: 404 })
+
+  if (kind === 'pdf') {
+    const response = await renderOnDemandPdfResponse({
+      kind: 'document_version_pdf',
+      tenantId: ctx.tenantId,
+      documentId: id,
+      versionId,
+    })
+    if (response.ok) {
+      await recordAudit(ctx, {
+        entityType: 'document',
+        entityId: id,
+        action: 'export',
+        summary: 'Exported controlled document PDF',
+        metadata: { versionId, kind },
+      })
+      if (req.nextUrl.searchParams.get('inline') !== '1')
+        response.headers.set(
+          'Content-Disposition',
+          (response.headers.get('Content-Disposition') ?? 'inline').replace(
+            /^inline/,
+            'attachment',
+          ),
+        )
+    }
+    return response
+  }
 
   await recordAudit(ctx, {
     entityType: 'document',

@@ -1,3 +1,4 @@
+import { canFacilitateDocumentSignoff } from '@/lib/document-signoff-permission'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { recordSearchWhere } from '@/lib/record-search'
@@ -285,7 +286,7 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'person-locations':
       return true
     case 'document-signoff-sites':
-      return can(ctx, 'documents.manage')
+      return canFacilitateDocumentSignoff(ctx)
     case 'incident-sites':
     case 'incident-departments':
     case 'incident-classifications':
@@ -315,6 +316,7 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'corrective-action-owners':
       return can(ctx, 'ca.create') || can(ctx, 'ca.update')
     case 'document-signoff-people':
+      return canFacilitateDocumentSignoff(ctx)
     case 'management-review-members':
     case 'management-review-documents':
     case 'management-review-actions':

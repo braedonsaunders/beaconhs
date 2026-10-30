@@ -261,7 +261,6 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
           title: documents.title,
           key: documents.key,
           sourceAttachmentId: documents.sourceAttachmentId,
-          showDocumentHeader: documents.showDocumentHeader,
           headerVersionLabel: documents.headerVersionLabel,
           headerRevisedOn: documents.headerRevisedOn,
         })
@@ -326,11 +325,8 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
       if (!snapshot) throw new Error('Failed to snapshot the document file')
 
       const publishedAt = new Date()
-      const header = doc.showDocumentHeader
-        ? (await loadDocumentControlHeaders(tx, tenantId, [documentId])).get(documentId)
-        : null
-      if (doc.showDocumentHeader && !header)
-        throw new Error('Document header details are unavailable')
+      const header = (await loadDocumentControlHeaders(tx, tenantId, [documentId])).get(documentId)
+      if (!header) throw new Error('Document header details are unavailable')
       const [version] = await tx
         .insert(documentVersions)
         .values({

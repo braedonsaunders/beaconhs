@@ -21,7 +21,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { attachmentUrl } from '@/lib/attachment-url'
-import { can } from '@beaconhs/tenant'
+import { canFacilitateDocumentSignoff } from '@/lib/document-signoff-permission'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { DownloadLink } from '@/components/download-link'
@@ -48,13 +48,13 @@ export default async function SignOffPage({
   const resumeSessionId = pickString(sp.session) ?? null
   if (!isUuid(id) || (resumeSessionId !== null && !isUuid(resumeSessionId))) notFound()
 
-  const backHref = `/documents/${id}?tab=acknowledgments`
+  const backHref = `/documents/${id}/read`
 
   const ctx = await requireRequestContext()
   // Facilitator-only: the sign-off sheet loads the full active-people directory
-  // and writes acks on behalf of others. Gate the render on documents.manage so
+  // and writes acks on behalf of others. Require explicit facilitator access so
   // a read-only user can't reach the kiosk session or enumerate people.
-  if (!can(ctx, 'documents.manage')) notFound()
+  if (!canFacilitateDocumentSignoff(ctx)) notFound()
 
   const data = await ctx.db(async (tx) => {
     const [doc] = await tx
@@ -66,10 +66,30 @@ export default async function SignOffPage({
       .limit(1)
     if (!doc) return null
 
+    const [requestedSession] = resumeSessionId
+      ? await tx
+          .select({ versionId: documentAcknowledgmentSessions.versionId })
+          .from(documentAcknowledgmentSessions)
+          .where(
+            and(
+              eq(documentAcknowledgmentSessions.id, resumeSessionId),
+              eq(documentAcknowledgmentSessions.documentId, id),
+              isNull(documentAcknowledgmentSessions.deletedAt),
+            ),
+          )
+          .limit(1)
+      : []
+    if (resumeSessionId && !requestedSession) return null
     const [pub] = await tx
       .select({ id: documentVersions.id, version: documentVersions.version })
       .from(documentVersions)
-      .where(and(eq(documentVersions.documentId, id), isNotNull(documentVersions.publishedAt)))
+      .where(
+        and(
+          eq(documentVersions.documentId, id),
+          isNotNull(documentVersions.publishedAt),
+          requestedSession ? eq(documentVersions.id, requestedSession.versionId) : undefined,
+        ),
+      )
       .orderBy(desc(documentVersions.version))
       .limit(1)
 

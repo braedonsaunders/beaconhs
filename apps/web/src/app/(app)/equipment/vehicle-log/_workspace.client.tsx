@@ -121,6 +121,7 @@ function hasMeaningfulDraft(entry: VehicleLogEntryDraft) {
 function serializeDraft(entry: VehicleLogEntryDraft) {
   return JSON.stringify([
     entry.startOdometer,
+    entry.startOdometerCarried,
     entry.endOdometer,
     entry.businessKm,
     entry.personalKm,
@@ -174,10 +175,10 @@ function withCarriedStart(
   if (
     mode === 'odometer' &&
     draft.endOdometer != null &&
-    draft.startOdometer == null &&
+    (draft.startOdometer == null || draft.startOdometerCarried) &&
     prevEnd != null
   ) {
-    return { ...draft, startOdometer: prevEnd }
+    return { ...draft, startOdometer: prevEnd, startOdometerCarried: true }
   }
   return draft
 }
@@ -185,8 +186,46 @@ function withCarriedStart(
 // End odometer below the start it follows (typed or carried) — flag it red.
 function endBelowStart(draft: VehicleLogEntryDraft, prevEnd: number | null): boolean {
   if (draft.endOdometer == null) return false
-  const start = draft.startOdometer ?? prevEnd
+  const start = draft.startOdometerCarried ? prevEnd : (draft.startOdometer ?? prevEnd)
   return start != null && draft.endOdometer < start
+}
+
+function CarryStartControl({
+  draft,
+  prevEnd,
+  disabled,
+  onCarry,
+}: {
+  draft: VehicleLogEntryDraft
+  prevEnd: number | null
+  disabled: boolean
+  onCarry: () => void
+}) {
+  if (prevEnd == null) return null
+  if (draft.startOdometerCarried)
+    return (
+      <span className="text-xs text-slate-500">
+        <GeneratedValue value="Linked to previous end" />
+      </span>
+    )
+  return (
+    <div className="text-xs">
+      {draft.startOdometer != null && draft.startOdometer !== prevEnd && (
+        <span className="text-amber-700 dark:text-amber-300">
+          <GeneratedValue value="Previous end:" /> {prevEnd}.{' '}
+          <GeneratedValue value="Check this starting reading." />
+        </span>
+      )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onCarry}
+        className="block text-teal-700 underline disabled:opacity-50 dark:text-teal-300"
+      >
+        <GeneratedValue value="Use previous end" />
+      </button>
+    </div>
+  )
 }
 
 function plural(value: number, singular: string, pluralLabel = `${singular}s`) {
@@ -462,7 +501,7 @@ export function VehicleLogWorkspaceClient({
   // that track every keystroke, like the legacy total row did.
   const computed = useMemo(() => {
     const rows: Record<string, { prevEnd: number | null; total: number | null }> = {}
-    let lastEnd: number | null = null
+    let lastEnd: number | null = workspace.previousEnd
     let business = 0
     let personal = 0
     let grand = 0
@@ -472,7 +511,9 @@ export function VehicleLogWorkspaceClient({
       const prevEnd = lastEnd
       let total: number | null = null
       if (workspace.mode === 'odometer') {
-        const start = draft.startOdometer ?? (draft.endOdometer != null ? prevEnd : null)
+        const start = draft.startOdometerCarried
+          ? prevEnd
+          : (draft.startOdometer ?? (draft.endOdometer != null ? prevEnd : null))
         if (draft.endOdometer != null && start != null && draft.endOdometer >= start) {
           total = draft.endOdometer - start
         }
@@ -487,7 +528,7 @@ export function VehicleLogWorkspaceClient({
       if (draft.id || hasMeaningfulDraft(draft)) logged += 1
     }
     return { rows, business, personal, grand, logged }
-  }, [drafts, workspace.rows, workspace.mode])
+  }, [drafts, workspace.rows, workspace.mode, workspace.previousEnd])
 
   const canEdit =
     canEditDriverLog && Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId)
@@ -525,6 +566,7 @@ export function VehicleLogWorkspaceClient({
       entryDate: date,
       entryMode: workspace.mode,
       startOdometer: draft.startOdometer,
+      startOdometerCarried: draft.startOdometerCarried,
       endOdometer: draft.endOdometer,
       businessKm: draft.businessKm,
       personalKm: draft.personalKm,
@@ -1065,8 +1107,17 @@ export function VehicleLogWorkspaceClient({
                               <div className="mt-2 grid grid-cols-3 gap-2">
                                 <MobileField label={tGenerated('m_144de7fabb13dc')}>
                                   <KmInput
-                                    value={draft.startOdometer}
-                                    onValue={(v) => updateDraft(row.date, { startOdometer: v })}
+                                    value={
+                                      draft.startOdometerCarried
+                                        ? (derived?.prevEnd ?? draft.startOdometer)
+                                        : draft.startOdometer
+                                    }
+                                    onValue={(v) =>
+                                      updateDraft(row.date, {
+                                        startOdometer: v,
+                                        startOdometerCarried: v == null,
+                                      })
+                                    }
                                     onSave={() => void saveRow(row.date)}
                                     nav="start"
                                     idx={index}
@@ -1075,6 +1126,17 @@ export function VehicleLogWorkspaceClient({
                                       numberValue(derived?.prevEnd ?? null),
                                     )}
                                     mobile
+                                  />
+                                  <CarryStartControl
+                                    draft={draft}
+                                    prevEnd={derived?.prevEnd ?? null}
+                                    disabled={!canEdit}
+                                    onCarry={() =>
+                                      updateAndSave(row.date, {
+                                        startOdometerCarried: true,
+                                        startOdometer: derived?.prevEnd ?? null,
+                                      })
+                                    }
                                   />
                                 </MobileField>
                                 <MobileField label={tGenerated('m_0459a16054e623')}>
@@ -1292,13 +1354,30 @@ function VehicleLogTableRow({
               <>
                 <td className="px-1 py-1">
                   <KmInput
-                    value={draft.startOdometer}
-                    onValue={(v) => updateDraft(row.date, { startOdometer: v })}
+                    value={
+                      draft.startOdometerCarried
+                        ? (prevEnd ?? draft.startOdometer)
+                        : draft.startOdometer
+                    }
+                    onValue={(v) =>
+                      updateDraft(row.date, { startOdometer: v, startOdometerCarried: v == null })
+                    }
                     onSave={() => void saveRow(row.date)}
                     nav="start"
                     idx={index}
                     disabled={!canEdit}
                     placeholder={tGeneratedValue(numberValue(prevEnd))}
+                  />
+                  <CarryStartControl
+                    draft={draft}
+                    prevEnd={prevEnd}
+                    disabled={!canEdit}
+                    onCarry={() =>
+                      updateAndSave(row.date, {
+                        startOdometerCarried: true,
+                        startOdometer: prevEnd,
+                      })
+                    }
                   />
                 </td>
                 <td className="px-1 py-1">

@@ -1,14 +1,10 @@
-import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm'
 import type { Database } from './client'
 import {
   documents,
   documentCategories,
   documentTypes,
   documentVersions,
-  documentManagementReviewDocuments,
-  documentManagementReviews,
-  tenantUsers,
-  users,
   type DocumentControlHeader,
 } from './schema'
 
@@ -86,58 +82,6 @@ export async function loadDocumentControlHeaders(
       )
         header.version = row.version
     }
-  }
-  const reviews = await tx
-    .select({
-      documentId: documentManagementReviewDocuments.documentId,
-      participants: documentManagementReviews.participants,
-    })
-    .from(documentManagementReviewDocuments)
-    .innerJoin(
-      documentManagementReviews,
-      and(
-        eq(documentManagementReviews.tenantId, documentManagementReviewDocuments.tenantId),
-        eq(documentManagementReviews.id, documentManagementReviewDocuments.managementReviewId),
-      ),
-    )
-    .where(
-      and(
-        eq(documentManagementReviewDocuments.tenantId, tenantId),
-        inArray(documentManagementReviewDocuments.documentId, documentIds),
-      ),
-    )
-    .orderBy(desc(documentManagementReviews.periodEnd))
-  const participantIds = [...new Set(reviews.flatMap((row) => row.participants ?? []))]
-  const members =
-    participantIds.length === 0
-      ? []
-      : await tx
-          .select({
-            id: tenantUsers.id,
-            displayName: tenantUsers.displayName,
-            name: users.name,
-            email: users.email,
-          })
-          .from(tenantUsers)
-          .leftJoin(users, eq(users.id, tenantUsers.userId))
-          .where(and(eq(tenantUsers.tenantId, tenantId), inArray(tenantUsers.id, participantIds)))
-  const names = new Map(
-    members.map((row) => [
-      row.id,
-      row.displayName?.trim() || row.name?.trim() || row.email?.trim(),
-    ]),
-  )
-  const seen = new Set<string>()
-  for (const row of reviews) {
-    if (seen.has(row.documentId)) continue
-    seen.add(row.documentId)
-    const header = result.get(row.documentId)
-    if (header && !header.approvedBy)
-      header.approvedBy =
-        (row.participants ?? [])
-          .map((id) => names.get(id))
-          .filter(Boolean)
-          .join('; ') || null
   }
   return result
 }

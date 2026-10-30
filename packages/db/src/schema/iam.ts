@@ -225,6 +225,7 @@ export const PERMISSION_CATALOGUE = [
   // Documents
   'documents.read',
   'documents.manage',
+  'documents.signoff',
   'documents.acknowledge',
   'documents.review',
   // Journals
@@ -367,6 +368,7 @@ export const BUILTIN_ROLES: Record<
       'ppe.inspect',
       'documents.read',
       'documents.acknowledge',
+      'documents.signoff',
       'ca.read.site',
       'ca.create',
       'ca.update',

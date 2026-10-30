@@ -17,6 +17,7 @@ export type SaveVehicleLogEntryInput = {
   entryDate: string
   entryMode: VehicleLogMode
   startOdometer?: number | null
+  startOdometerCarried?: boolean
   endOdometer?: number | null
   businessKm?: number | null
   personalKm?: number | null
@@ -31,6 +32,7 @@ export type NormalizedVehicleLogEntryInput = {
   entryDate: string
   entryMode: VehicleLogMode
   startOdometer: number | null
+  startOdometerCarried: boolean
   endOdometer: number | null
   businessKm: number | null
   personalKm: number | null
@@ -45,11 +47,19 @@ export function normalizeVehicleLogEntryInput(value: unknown): NormalizedVehicle
   const input = requireRecordInput(value, 'Vehicle log request')
   const startOdometer = optionalNumberInput(input.startOdometer, 'Start odometer', KM_BOUNDS)
   const endOdometer = optionalNumberInput(input.endOdometer, 'End odometer', KM_BOUNDS)
-  if (startOdometer != null && endOdometer != null && endOdometer < startOdometer) {
+  if (
+    input.startOdometerCarried !== true &&
+    startOdometer != null &&
+    endOdometer != null &&
+    endOdometer < startOdometer
+  ) {
     throw new Error('End odometer cannot be less than start odometer.')
   }
 
+  if (input.startOdometerCarried != null && typeof input.startOdometerCarried !== 'boolean')
+    throw new Error('Invalid odometer carry setting.')
   return {
+    startOdometerCarried: input.startOdometerCarried === true || startOdometer == null,
     equipmentItemId: requireUuidInput(input.equipmentItemId, 'Equipment item'),
     driverPersonId: requireUuidInput(input.driverPersonId, 'Driver'),
     entryDate: requiredDateInput(input.entryDate, 'Entry date'),

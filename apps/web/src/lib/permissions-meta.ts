@@ -91,6 +91,7 @@ const PERMISSION_LABELS: Record<string, string> = {
 
   'documents.read': 'View documents',
   'documents.manage': 'Manage documents',
+  'documents.signoff': 'Facilitate document sign-offs',
   'documents.acknowledge': 'Acknowledge documents',
   'documents.review': 'Review documents',
 

@@ -3,7 +3,6 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
 import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { equipmentItems, orgUnits, people, truckLogEntries } from '@beaconhs/db/schema'
@@ -17,7 +16,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { RemoteSelectField } from '@/components/remote-search-select'
-import { updateVehicleLogEntry } from '../_service'
+import { updateVehicleLogEntry, deleteVehicleLogEntry } from '../_service'
 import { normalizeVehicleLogEntryInput } from '../_entry-input'
 import { canReadVehicleLog, canEditDriverLog, vehicleLogEntryScopeWhere } from '../_access-policy'
 import { resolveVehicleEquipmentWhere } from '../_equipment-policy'
@@ -43,6 +42,7 @@ async function updateEntry(formData: FormData) {
     driverPersonId: formData.get('driverPersonId'),
     entryMode: 'odometer',
     startOdometer: formData.get('startOdometer'),
+    startOdometerCarried: formData.get('startOdometerCarried') === 'on',
     endOdometer: formData.get('endOdometer'),
     businessKm: formData.get('businessKm'),
     personalKm: formData.get('personalKm'),
@@ -57,33 +57,8 @@ async function deleteEntry(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
   const id = requireUuidInput(formData.get('id'), 'Vehicle log entry')
-  const removed = await ctx.db(async (tx) => {
-    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
-    const [existing] = await tx
-      .select({
-        entryDate: truckLogEntries.entryDate,
-        equipmentItemId: truckLogEntries.equipmentItemId,
-      })
-      .from(truckLogEntries)
-      .where(and(eq(truckLogEntries.id, id), vehicleLogEntryScopeWhere(ctx, vehicleWhere)))
-      .limit(1)
-    if (!existing) return null
-    const [deleted] = await tx
-      .delete(truckLogEntries)
-      .where(eq(truckLogEntries.id, id))
-      .returning({ id: truckLogEntries.id })
-    return deleted ? existing : null
-  })
+  const removed = await deleteVehicleLogEntry(ctx, id)
   if (!removed) redirect('/equipment/vehicle-log')
-  await recordAudit(ctx, {
-    entityType: 'truck_log_entry',
-    entityId: id,
-    action: 'delete',
-    summary: `Deleted entry for ${removed.entryDate}`,
-    before: { entryDate: removed.entryDate, equipmentItemId: removed.equipmentItemId },
-  })
-  revalidatePath('/equipment/vehicle-log')
-  revalidatePath(`/equipment/${removed.equipmentItemId}`)
   redirect(`/equipment/vehicle-log?month=${removed.entryDate.slice(0, 7)}`)
 }
 
@@ -372,6 +347,14 @@ export default async function TruckLogDetailPage({
                                     step="1"
                                     defaultValue={entry.startOdometer ?? ''}
                                   />
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      name="startOdometerCarried"
+                                      defaultChecked={entry.startOdometerCarried}
+                                    />
+                                    <GeneratedValue value="Use previous ending reading" />
+                                  </label>
                                 </Field>
                                 <Field label={tGenerated('m_14beb2fa6adb50')}>
                                   <Input

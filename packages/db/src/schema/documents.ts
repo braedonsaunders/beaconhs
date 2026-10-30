@@ -58,7 +58,6 @@ export const documents = pgTable(
     ownerTenantUserId: uuid('owner_tenant_user_id'),
     reviewFrequencyMonths: integer('review_frequency_months'),
     nextReviewOn: date('next_review_on'),
-    showDocumentHeader: boolean('show_document_header').default(false).notNull(),
     headerIssuedOn: date('header_issued_on'),
     headerRevisedOn: date('header_revised_on'),
     headerApprovedBy: text('header_approved_by'),

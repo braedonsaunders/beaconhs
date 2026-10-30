@@ -1,66 +1,51 @@
 import type { DocumentControlHeader } from '@beaconhs/db/schema'
-import { composePdf, countPages, pageGeometry, sofficeConvert } from '@beaconhs/office'
+import { countPages, sofficeConvert } from '@beaconhs/office'
 import {
   CONTROLLED_HEADER_BAND_PT,
   reserveFirstPageBand,
   setDocxPageSize,
 } from '@beaconhs/office/docx-page-size'
-import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
-import { documentAccentColor, documentControlHeaderHtml } from './document-control-header'
+import { composeDocumentBook } from '../workers/document-book-compose'
 
-/** Reflow only when a control table is requested; ordinary PDFs match Writer. */
+/** Keep an undecorated body for book assembly and immutable source preservation. */
 export async function renderDocxToPdf(
   docx: Buffer,
-  options: {
-    header?: DocumentControlHeader | null
-    reserveHeader?: boolean
-    accentColor?: string | null
-  } = {},
+  options: { reserveHeader?: boolean } = {},
 ): Promise<Buffer> {
   const letter = await setDocxPageSize(docx, 'letter')
   const reserved = await reserveFirstPageBand(
     letter,
-    options.header || options.reserveHeader ? CONTROLLED_HEADER_BAND_PT : 0,
+    options.reserveHeader ? CONTROLLED_HEADER_BAND_PT : 0,
   )
-  const pdf = await sofficeConvert(reserved, 'document.docx', 'pdf')
-  if (!options.header) return pdf
-  return addDocumentControlHeader(pdf, options.header, options.accentColor)
+  return sofficeConvert(reserved, 'document.docx', 'pdf')
 }
 
-/** The source has already reflowed around the header band. */
-export async function addDocumentControlHeader(
+/** Individual documents use exactly the same control table and footer as books. */
+export async function composeControlledDocumentPdf(
   pdf: Buffer,
-  controlHeader: DocumentControlHeader,
-  accentColor?: string | null,
+  header: DocumentControlHeader,
+  options: {
+    tenantName: string
+    accentColor?: string | null
+    headerReserved: boolean
+  },
 ): Promise<Buffer> {
-  const geometry = pageGeometry('letter', 'portrait')
-  const header = await renderHtmlDocumentPdf({
-    paperSize: 'letter',
-    orientation: 'portrait',
-    pageSizePt: { width: geometry.width, height: CONTROLLED_HEADER_BAND_PT },
-    marginMm: 4,
-    bodyHtml: documentControlHeaderHtml(
-      controlHeader,
-      documentAccentColor(accentColor),
-      'America/Toronto',
-      false,
-    ),
-  })
-  if ((await countPages(header)) !== 1) {
-    throw new Error(
-      'The document header is too long to fit. Shorten the header details or turn off the PDF header.',
-    )
-  }
-  return composePdf({
-    geometry,
-    parts: [
+  return composeDocumentBook({
+    title: header.title,
+    tenantName: options.tenantName,
+    accentColor: options.accentColor,
+    timeZone: 'America/Toronto',
+    settings: { coverPage: false, tableOfContents: false, documentHeaders: true, footer: true },
+    entries: [
       {
-        bytes: pdf,
-        letterhead: {
-          bytes: header,
-          heightPt: CONTROLLED_HEADER_BAND_PT,
-          reserveSpace: false,
-        },
+        kind: 'document',
+        ...header,
+        key: header.key ?? '',
+        version: 1,
+        headerVersion: header.version,
+        pdf,
+        pageCount: await countPages(pdf),
+        headerReserved: options.headerReserved,
       },
     ],
   })

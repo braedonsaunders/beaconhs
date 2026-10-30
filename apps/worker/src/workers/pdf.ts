@@ -45,7 +45,11 @@ import {
   newTenantObjectKey,
   putObject,
 } from '@beaconhs/storage'
-import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
+import {
+  renderDocumentMasterPdf,
+  renderDocumentVersion,
+  renderDocumentVersionPdf,
+} from './document-render'
 import { countPages, pdfUnite } from '@beaconhs/office'
 import { composeDocumentBook, type ComposeBookNode } from './document-book-compose'
 import { renderTemplate } from '@beaconhs/email-render'
@@ -277,6 +281,8 @@ async function dispatchPdf(data: PdfJobData): Promise<unknown> {
       return await renderDocumentVersion(data)
     case 'document_master_pdf':
       return await renderDocumentMasterPdf(data)
+    case 'document_version_pdf':
+      return await renderDocumentVersionPdf(data)
     case 'document_book':
       return await renderDocumentBook(data.tenantId, data.bookId)
     case 'document_bundle':

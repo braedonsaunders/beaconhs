@@ -691,7 +691,11 @@ The **Total km** column and the month totals at the bottom update as you type.
 ## Quick fill
 
 - Press Enter in a field to jump to the same field on the next day — you can run down the whole month fast.
-- In odometer mode, leaving **Start** blank chains each day off the one before it.
+- In odometer mode, leaving **Start** blank chains each day off the previous recorded ending reading, including across months.
+- **Linked to previous end** means correcting the earlier end also updates this start and its saved distance.
+- Typed starting readings stay fixed. If a starting reading differs from the previous end, check the warning. Select **Use previous end** to link it. Older entries also need this choice because BeaconHS did not record how their starting readings were entered.
+- On an individual entry, select **Use previous ending reading** to keep it linked.
+- A correction that would put the next ending reading below its linked start is rejected. Correct the conflicting readings before saving again.
 
 ## On a phone
 
@@ -874,6 +878,12 @@ Open **Compliance** in the left menu, or go to [Compliance](/compliance). Most p
 - Each row is one obligation. The **Due** column shows the deadline; overdue items are flagged.
 - The **Completed** column shows when you finished it.
 - Use the search box or the **Status** and **Kind** filters when your list is long. Click a heading to sort it.
+
+## Find a completed safety talk
+
+Open **Workspace → History**. Choose **Document acknowledgment** in the **Kind** filter to find your reading and safety talks. Each card shows the document, version, date, and whether you signed individually or in a group. Search by document and use **Next** and **Prev** for more history.
+
+Voluntary acknowledgments appear here even without an assigned requirement. They do not change the percentage for assigned requirements. You do not need to acknowledge again just to make a saved record appear.
 
 ## Clearing an item
 

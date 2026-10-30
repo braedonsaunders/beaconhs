@@ -89,6 +89,7 @@ export type PdfJobData =
   // On-demand PDF of a document's CURRENT working master (the manager's
   // Write→PDF preview) — transient artifact, never persisted to the document.
   | { kind: 'document_master_pdf'; tenantId: string; documentId: string }
+  | { kind: 'document_version_pdf'; tenantId: string; documentId: string; versionId: string }
   | { kind: 'document_book'; tenantId: string; bookId: string }
   // Generic multi-part bundle: each part is pre-merged HTML + its own page
   // setup; the worker prints each part and concatenates them (pdfunite) into
@@ -126,6 +127,7 @@ export type OnDemandPdfJobData = WithoutPdfDelivery<
   // per-record print template); the HTML is merged before enqueue.
   | Extract<PdfJobData, { kind: 'template_pdf' }>
   | Extract<PdfJobData, { kind: 'document_master_pdf' }>
+  | Extract<PdfJobData, { kind: 'document_version_pdf' }>
   | Extract<PdfJobData, { kind: 'document_book' }>
   | Extract<PdfJobData, { kind: 'document_bundle' }>
 >
@@ -249,6 +251,7 @@ export function assertPdfJobData(data: PdfJobData): void {
       assertArtifactTarget(data)
       break
     case 'document_version_render':
+    case 'document_version_pdf':
       assertUuid(data.documentId, 'PDF documentId')
       assertUuid(data.versionId, 'PDF versionId')
       break
@@ -305,6 +308,8 @@ function pdfJobId(data: PdfJobData): string {
       return `pdf|${data.tenantId}|template_pdf|${data.entityId}`
     case 'document_version_render':
       return `pdf|${data.tenantId}|document_version_render|${data.versionId}`
+    case 'document_version_pdf':
+      return `pdf|${data.tenantId}|document_version_pdf|${data.documentId}|${data.versionId}`
     case 'document_master_pdf':
       return `pdf|${data.tenantId}|document_master_pdf|${data.documentId}`
     case 'document_book':

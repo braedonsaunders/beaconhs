@@ -1,3 +1,4 @@
+import { composeControlledDocumentPdf } from '../../../worker/src/lib/document-pdf'
 import { afterAll, describe, expect, it } from 'vitest'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
@@ -49,6 +50,45 @@ describe('editable document PDF header', () => {
     if (directory) {
       await mkdir(directory, { recursive: true })
       await writeFile(`${directory}/document-header.pdf`, pdf)
+    }
+  }, 180_000)
+  it('prints standalone uploaded content with a control header and a footer on every page', async () => {
+    const body = await renderHtmlDocumentPdf({
+      bodyHtml:
+        '<p>First procedure body</p><p style="page-break-before:always">Second procedure body</p>',
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 14,
+    })
+    const pdf = await composeControlledDocumentPdf(
+      body,
+      {
+        title: 'Standalone safety procedure',
+        key: 'QA-101',
+        version: 2,
+        category: 'Safety',
+        type: 'Procedure',
+        issuedAt: null,
+        revisedAt: null,
+        approvedBy: null,
+      },
+      { tenantName: 'QA Company', headerReserved: false },
+    )
+    const text = await extractText(new Uint8Array(pdf), { mergePages: false })
+    expect(text.totalPages).toBe(2)
+    expect(text.text[0]).toContain('Standalone safety procedure')
+    expect(text.text[0]).toContain('First procedure body')
+    expect(text.text[1]).toContain('Second procedure body')
+    for (const page of text.text) {
+      expect(page).toContain('UNCONTROLLED WHEN PRINTED')
+      expect(page).toContain('QA COMPANY')
+    }
+    expect(text.text[0]).toContain('PAGE 1 OF 2')
+    expect(text.text[1]).toContain('PAGE 2 OF 2')
+    const directory = process.env.BEACON_DOCUMENT_PDF_REVIEW_DIR
+    if (directory) {
+      await mkdir(directory, { recursive: true })
+      await writeFile(`${directory}/individual-controlled.pdf`, pdf)
     }
   }, 180_000)
 })

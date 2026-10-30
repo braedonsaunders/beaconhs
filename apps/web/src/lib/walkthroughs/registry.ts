@@ -110,7 +110,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       {
         target: '[data-walkthrough="nav:/my"]',
         title: 'My Workspace',
-        body: 'Everything that is yours in one place: open items, training cards and your certificate wallet.',
+        body: 'Everything that is yours in one place. In progress holds unfinished entries; History holds submitted records and document acknowledgments. Training and Wallet keep your credentials handy.',
       },
       {
         target: '[data-walkthrough="nav:/notifications"]',

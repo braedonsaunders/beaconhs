@@ -5,7 +5,7 @@
 // user must hold documents.read (or manage), and non-managers see published docs
 // only (documentReadFilter). Unlike the tool — which truncates to plain text for
 // the model's context — this returns the complete content for a human to read:
-// the sanitized HTML for in-app documents, or a short-lived presigned URL for an
+// the sanitized HTML for in-app documents, or an authenticated controlled-PDF route for an
 // uploaded PDF version (whose HTML body is empty), so the reader can show even a
 // scanned/image-only PDF that has no extractable text.
 
@@ -13,7 +13,6 @@ import { and, desc, eq, isNull, type SQL } from 'drizzle-orm'
 import { attachments, documentCategories, documentVersions, documents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import { presignExistingGet } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { documentReadFilter } from '@/lib/assistant/doc-access'
 import { documentVersionVisibilityWhere } from '@/lib/document-version-policy'
@@ -29,7 +28,7 @@ export type ReaderDocument = {
   /** Sanitized HTML body. Empty string when the document has no HTML content
    *  (e.g. an uploaded-PDF version — see `pdfUrl`). */
   html: string
-  /** Short-lived presigned URL to the uploaded PDF when the latest version is a
+  /** Authenticated PDF route when the latest version is a
    *  PDF file; null for in-app HTML documents. The reader renders it in an
    *  <iframe> (browsers display PDFs natively). */
   pdfUrl: string | null
@@ -67,6 +66,7 @@ export async function getReaderDocument(id: string): Promise<ReaderResult> {
     // of the DOCX snapshot (authored documents) or the uploaded file itself.
     const [version] = await tx
       .select({
+        id: documentVersions.id,
         text: documentVersions.textContent,
         pdfAttachmentId: documentVersions.pdfAttachmentId,
         attachmentId: documentVersions.contentAttachmentId,
@@ -76,7 +76,7 @@ export async function getReaderDocument(id: string): Promise<ReaderResult> {
       .orderBy(desc(documentVersions.version))
       .limit(1)
 
-    // Hand the reader a short-lived presigned URL so it can show the real
+    // Hand the reader the controlled PDF route so it can show the real
     // pages in an <iframe>. Mirrors getDocumentPdfUrl on the detail page.
     let pdfUrl: string | null = null
     const pdfCandidateId = version?.pdfAttachmentId ?? version?.attachmentId ?? null
@@ -87,7 +87,7 @@ export async function getReaderDocument(id: string): Promise<ReaderResult> {
         .where(eq(attachments.id, pdfCandidateId))
         .limit(1)
       if (att && (version?.pdfAttachmentId || att.contentType === 'application/pdf')) {
-        pdfUrl = await presignExistingGet({ key: att.r2Key, expiresInSeconds: 300 })
+        pdfUrl = `/documents/${id}/versions/${version!.id}/download?inline=1`
       }
     }
 

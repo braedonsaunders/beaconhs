@@ -106,6 +106,12 @@ export function SignOffSheet({
           return
         }
         setSessionId(res.sessionId)
+        // Keep the saved session address so refresh and bookmarks retain the roster.
+        window.history.replaceState(
+          null,
+          '',
+          `/documents/${documentId}/sign-off?session=${res.sessionId}`,
+        )
         setRoster((r) => [
           ...r,
           {
@@ -158,7 +164,7 @@ export function SignOffSheet({
         return
       }
       toast.success(tGenerated('m_0fa873e4616c26'))
-      router.push(backHref)
+      router.replace(`/documents/${documentId}/sign-off?session=${sessionId}`)
       router.refresh()
     })
   }

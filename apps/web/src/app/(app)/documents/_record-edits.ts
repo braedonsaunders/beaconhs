@@ -3,8 +3,7 @@
 // (see lib/record-sync). Same rules the metadata form has always had — the
 // `documents.manage` permission, live (not deleted) documents only, the
 // metadata limits, a slugged key that no other live document uses, existing
-// categories/types, and PDF headers only on documents with a Word working
-// file — applied per field as a compare-and-set against the value the device
+// categories/types — applied per field as a compare-and-set against the value the device
 // last saw. The metadata fields are independent (no rule spans two of them),
 // so each one is its own op and a concurrent edit to one field never blocks
 // another.
@@ -43,7 +42,6 @@ const DOCUMENT_METADATA_FIELDS = [
   'description',
   'reviewFrequencyMonths',
   'nextReviewOn',
-  'showDocumentHeader',
   'headerIssuedOn',
   'headerRevisedOn',
   'headerApprovedBy',
@@ -64,26 +62,9 @@ const documentKey: Codec<string> = {
   format: (value) => value,
 }
 
-/** The PDF-header switch ('true' / 'false' on the wire). */
-function headerSwitch(row: DocumentRow): Codec<boolean> {
-  return {
-    parse: (wire) => {
-      if (wire !== 'true' && wire !== 'false') {
-        throw new RecordEditRejection('The document header setting is invalid.')
-      }
-      const value = wire === 'true'
-      if (value && !row.sourceAttachmentId) {
-        throw new RecordEditRejection('PDF headers require a Word working document.')
-      }
-      return value
-    },
-    format: (value) => (value ? 'true' : 'false'),
-  }
-}
-
 type Codecs = { [K in DocumentMetadataField]: Codec<DocumentRow[K]> }
 
-function metadataCodecs(row: DocumentRow): Codecs {
+function metadataCodecs(): Codecs {
   return {
     title: requiredText({ label: 'Title', maxLength: DOCUMENT_METADATA_LIMITS.title }),
     key: documentKey,
@@ -99,7 +80,6 @@ function metadataCodecs(row: DocumentRow): Codecs {
       max: DOCUMENT_METADATA_LIMITS.reviewFrequencyMonths,
     }),
     nextReviewOn: optionalDate({ label: 'Next review date' }),
-    showDocumentHeader: headerSwitch(row),
     headerIssuedOn: optionalDate({ label: 'Issue date' }),
     headerRevisedOn: optionalDate({ label: 'Revision date' }),
     headerApprovedBy: optionalText({
@@ -139,7 +119,7 @@ function metadataOp<K extends DocumentMetadataField>(
   row: DocumentRow,
   field: K,
 ): ErasedRecordOp {
-  const codec = metadataCodecs(row)[field]
+  const codec = metadataCodecs()[field]
   return recordOp<DocumentRow[K]>({
     current: row[field],
     parse: codec.parse,

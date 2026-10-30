@@ -3,6 +3,7 @@
 
 import { relations } from 'drizzle-orm'
 import {
+  boolean,
   date,
   foreignKey,
   index,
@@ -34,6 +35,7 @@ export const truckLogEntries = pgTable(
     driverPersonId: uuid('driver_person_id').notNull(),
     entryMode: text('entry_mode').$type<TruckLogEntryMode>().default('destination').notNull(),
     startOdometer: integer('start_odometer'),
+    startOdometerCarried: boolean('start_odometer_carried').default(false).notNull(),
     endOdometer: integer('end_odometer'),
     kmDriven: integer('km_driven'),
     businessKm: integer('business_km'),

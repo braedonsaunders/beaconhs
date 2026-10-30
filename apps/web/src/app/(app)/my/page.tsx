@@ -1,3 +1,4 @@
+import { loadWorkspaceHistory } from '@/lib/workspace-history'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 import { GeneratedValue } from '@/i18n/generated'
 // "My" landing page — a hub of personal views for the signed-in user.
@@ -12,6 +13,7 @@ import {
   AlertTriangle,
   ClipboardList,
   GraduationCap,
+  History,
   ListChecks,
   PencilLine,
   Radiation,
@@ -250,6 +252,7 @@ export default async function MyLandingPage() {
         row.status === 'expiring'),
   ).length
 
+  const history = await loadWorkspaceHistory(ctx, { perPage: '5' })
   const inProgressCount = counts.inProgress.length
 
   const tiles: Tile[] = [
@@ -264,6 +267,14 @@ export default async function MyLandingPage() {
       count: inProgressCount,
       hint: inProgressCount > 0 ? `${inProgressCount} to resume` : 'all caught up',
       hintVariant: inProgressCount > 0 ? 'warning' : 'success',
+    },
+    {
+      href: '/my/history',
+      label: 'History',
+      description: 'Submitted records, document acknowledgments, and safety talks.',
+      icon: History,
+      tone: 'indigo',
+      count: history.total,
     },
     {
       href: '/compliance/mine',

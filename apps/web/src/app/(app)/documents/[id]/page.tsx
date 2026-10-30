@@ -1,3 +1,4 @@
+import { loadDocumentControlHeaders } from '@beaconhs/db'
 import { currentDocumentAcknowledgment } from '@beaconhs/compliance'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -154,9 +155,20 @@ async function publishFileDocument(formData: FormData) {
 
     if (!canPublishDocument(doc.status)) return false
     const publishedAt = version.publishedAt ?? new Date()
+    const header = (await loadDocumentControlHeaders(tx, ctx.tenantId, [id])).get(id)
+    if (!header) throw new Error('Document header details are unavailable')
     await tx
       .update(documentVersions)
-      .set({ publishedAt, publishedBy: ctx.userId })
+      .set({
+        publishedAt,
+        publishedBy: ctx.userId,
+        controlHeader: {
+          ...header,
+          version: header.version === 'Draft' ? version.version : header.version,
+          issuedAt: header.issuedAt ?? publishedAt.toISOString(),
+          revisedAt: header.revisedAt ?? publishedAt.toISOString(),
+        },
+      })
       .where(and(eq(documentVersions.id, version.id), isNull(documentVersions.publishedAt)))
     await tx.update(documents).set({ status: 'published' }).where(eq(documents.id, id))
     await recordAuditInTransaction(tx, ctx, {
@@ -957,7 +969,6 @@ export default async function DocumentDetailPage({
                     key={id}
                     categories={categories}
                     types={types}
-                    hasMaster={Boolean(doc.sourceAttachmentId)}
                     initialMeta={{
                       title: doc.title,
                       key: doc.key,
@@ -967,7 +978,6 @@ export default async function DocumentDetailPage({
                       reviewFrequencyMonths:
                         doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
                       nextReviewOn: doc.nextReviewOn ?? '',
-                      showDocumentHeader: doc.showDocumentHeader,
                       headerIssuedOn: doc.headerIssuedOn ?? '',
                       headerRevisedOn: doc.headerRevisedOn ?? '',
                       headerApprovedBy: doc.headerApprovedBy ?? '',

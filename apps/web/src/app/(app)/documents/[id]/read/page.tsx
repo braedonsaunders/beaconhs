@@ -1,3 +1,4 @@
+import { canFacilitateDocumentSignoff } from '@/lib/document-signoff-permission'
 import { currentDocumentAcknowledgment } from '@beaconhs/compliance'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
@@ -100,6 +101,11 @@ export default async function DocumentReadPage({
       selfStatus={selfStatus}
       selfAckedAt={data.myAck?.acknowledgedAt.toISOString() ?? null}
       canManage={canManage}
+      canFacilitate={
+        data.doc.status === 'published' &&
+        Boolean(data.publishedVersion) &&
+        canFacilitateDocumentSignoff(ctx)
+      }
     />
   )
 }

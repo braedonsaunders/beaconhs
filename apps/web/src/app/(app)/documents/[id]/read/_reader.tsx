@@ -28,6 +28,7 @@ export function DocumentReader({
   selfStatus,
   selfAckedAt,
   canManage,
+  canFacilitate,
 }: {
   documentId: string
   versionId?: string
@@ -37,6 +38,7 @@ export function DocumentReader({
   selfStatus: SelfStatus
   selfAckedAt: string | null
   canManage: boolean
+  canFacilitate: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
@@ -106,6 +108,18 @@ export function DocumentReader({
         />
       </div>
 
+      {canFacilitate && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+          <Link href={`/documents/${documentId}/sign-off`}>
+            <Button type="button" variant="outline" size="sm">
+              <GeneratedValue value="Start safety talk / group sign-off" />
+            </Button>
+          </Link>
+          <span className="text-xs text-slate-500">
+            <GeneratedValue value="Start a new session each time you give this talk. Previous signatures stay in the history." />
+          </span>
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         <DocumentPdfPane documentId={documentId} versionId={versionId} readOnly />
       </div>

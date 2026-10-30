@@ -4,13 +4,11 @@
 // `documents` record saver in ../_record-edits.ts). Authoring lives in Collabora Writer
 // (see _master-actions.ts): getDocumentPdfUrl resolves what the PDF pane shows
 // — a fresh render of the working master for managers (draft mode), the
-// published version's PDF for readers, or the uploaded file for file-only
-// documents.
+// selected version's controlled PDF for readers and uploaded-file documents.
 
 import { revalidatePath } from 'next/cache'
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
-import { presignExistingGet } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
@@ -28,9 +26,8 @@ type DocumentPdfUrlResult =
   // nothing published) — the pane shows the centered upload state for it.
   | { ok: false; error: string; reason?: 'no_source' }
 
-// Returns a short-lived URL to view the document inline. Prefers an uploaded
-// PDF version; otherwise points the viewer at the dynamic PDF route, which
-// renders the document on demand.
+// Resolve an authenticated render route for one exact version. Every viewing
+// path decorates its preserved source with the same controlled print layout.
 export async function getDocumentPdfUrl(
   documentId: string,
   opts: { draft?: boolean; versionId?: string } = {},
@@ -84,6 +81,7 @@ export async function getDocumentPdfUrl(
   const [version] = await ctx.db((tx) =>
     tx
       .select({
+        id: documentVersions.id,
         contentAttachmentId: documentVersions.contentAttachmentId,
         pdfAttachmentId: documentVersions.pdfAttachmentId,
         renderStatus: documentVersions.renderStatus,
@@ -120,9 +118,7 @@ export async function getDocumentPdfUrl(
     if (!uploaded || uploaded.contentType !== 'application/pdf') {
       return { ok: false, error: 'The uploaded PDF version is invalid or missing.' }
     }
-    const url = await presignExistingGet({ key: uploaded.key, expiresInSeconds: 300 })
-    if (!url) return { ok: false, error: 'Uploaded PDF is missing from storage.' }
-    return { ok: true, url }
+    return { ok: true, url: `/documents/${documentId}/versions/${version.id}/download?inline=1` }
   }
 
   // Authored document — the selected version's worker-rendered PDF.
@@ -144,9 +140,7 @@ export async function getDocumentPdfUrl(
       .limit(1),
   )
   if (!pdfAtt) return { ok: false, error: 'The rendered PDF is missing from storage.' }
-  const url = await presignExistingGet({ key: pdfAtt.key, expiresInSeconds: 300 })
-  if (!url) return { ok: false, error: 'The rendered PDF is missing from storage.' }
-  return { ok: true, url }
+  return { ok: true, url: `/documents/${documentId}/versions/${version.id}/download?inline=1` }
 }
 
 // Attach an uploaded PDF as a new unpublished file version. The document row
