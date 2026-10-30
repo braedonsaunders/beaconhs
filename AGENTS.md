@@ -2,14 +2,13 @@
 
 ## Mission
 
-BeaconHS is a pre-launch, multi-tenant Health, Safety & Environment platform for
-industrial construction. Treat the repository as a greenfield production system
-headed for a hard cutover, not as a prototype. Agents should leave the app more
-coherent than they found it.
+BeaconHS is a live, multi-tenant Health, Safety & Environment platform for
+industrial construction. Protect production availability, tenant data, and
+historical evidence. Agents should leave the app more coherent than they found it.
 
 ## Non-Negotiable Engineering Rules
 
-1. All code is to be clean cutover -> leave no legacy code. The app has not launched yet, so do not preserve old paths, compatibility shims, deprecated APIs, or duplicate flows unless the user explicitly asks for a temporary migration step.
+1. All code is to be clean cutover -> leave no legacy code. Do not preserve obsolete paths, compatibility shims, deprecated APIs, or duplicate flows unless a safe production migration requires a temporary step. Database migrations must preserve live data and support the rolling deployment.
 2. All features shipped should be complete production-grade code, no stubs, placeholders, mock implementations, TODO-driven behavior, fake data paths, or "wire it later" branches.
 3. If you see a bug or issue when doing something, stop and fix it even if unrelated. If it is too large to fix safely in the current pass, clearly flag it before continuing.
 4. Ensure that before you build something new, there is no duplicate thing already built. Search first, inspect nearby modules, and reuse the existing system where it fits.
