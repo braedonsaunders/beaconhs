@@ -807,38 +807,43 @@ const TRAINING_CLASS = wrap(
 // The monthly vehicle-log sheet: the value map carries the whole
 // driver+vehicle month (`entries` + month totals) anchored on one entry.
 const VEHICLE_LOG_CELL = `${TD}padding:3px 4px;font-size:11px;line-height:1.2;`
-const VEHICLE_LOG_TOTALS =
-  `<tr data-if="entries" style="${ROW}">` +
-  `<td colspan="5" style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">Month total</td>` +
-  `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_business_km}}</td>` +
-  `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_personal_km}}</td>` +
-  `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_total_km}}</td>` +
-  `<td style="${VEHICLE_LOG_CELL}background:#e2e8f0;font-weight:700;">{{month_days_logged}} days logged</td>` +
-  `</tr>`
+function vehicleLogTable(odometer: boolean): string {
+  const columns = odometer
+    ? [
+        ['Day', '{{day}} {{weekday}}'],
+        ['Start odo', '{{start_odometer}}'],
+        ['End odo', '{{end_odometer}}'],
+        ['Personal km', '{{personal_km}}'],
+        ['Total km', '{{total_km}}'],
+      ]
+    : [
+        ['Day', '{{day}} {{weekday}}'],
+        ['Customer / site', '{{site_name}}'],
+        ['Other destination', '{{other_destination}}'],
+        ['Business km', '{{business_km}}'],
+        ['Personal km', '{{personal_km}}'],
+        ['Total km', '{{total_km}}'],
+      ]
+  return (
+    `<table style="${TABLE}"><colgroup>${columns.map(() => `<col style="width:${100 / columns.length}%;" />`).join('')}</colgroup><thead><tr>${columns.map(([label]) => `<th style="${TH}">${label}</th>`).join('')}</tr></thead><tbody>` +
+    `<tr data-each="entries" style="${ROW}">{{#if is_weekend}}${columns.map(([, value]) => `<td style="${VEHICLE_LOG_CELL}background:#d1d5db;">${value}</td>`).join('')}{{else}}${columns.map(([, value]) => `<td style="${VEHICLE_LOG_CELL}background:#ffffff;">${value}</td>`).join('')}{{/if}}</tr>` +
+    `<tr><td colspan="3" style="${VEHICLE_LOG_CELL}font-weight:700;">Month total</td>` +
+    (odometer ? '' : `<td style="${VEHICLE_LOG_CELL}">{{month_business_km}}</td>`) +
+    `<td style="${VEHICLE_LOG_CELL}">{{month_personal_km}}</td><td style="${VEHICLE_LOG_CELL}">{{month_total_km}}</td></tr></tbody></table>`
+  )
+}
 
 const VEHICLE_LOG = wrap(
   letterhead(
     'Vehicle Log',
-    '{{month_label}} · {{driver_name}} · {{vehicle_name}}{{#if driver_employee_no}} · Employee # {{driver_employee_no}}{{/if}}',
+    '{{month_label}} · {{driver_name}} · {{vehicle_name}}',
     '{{month_key}}',
   ) +
-    collection(
-      'Daily entries',
-      'entries',
-      [
-        ['Day', '{{day}} {{weekday}}', 'width:8%;white-space:nowrap;'],
-        ['Customer / site', '{{site_name}}', 'width:16%;'],
-        ['Other destination', '{{other_destination}}', 'width:16%;'],
-        ['Start odo', '{{start_odometer}}', RIGHT + 'width:10%;'],
-        ['End odo', '{{end_odometer}}', RIGHT + 'width:10%;'],
-        ['Business km', '{{business_km}}', RIGHT + 'width:8%;'],
-        ['Personal km', '{{personal_km}}', RIGHT + 'width:8%;'],
-        ['Total km', '{{total_km}}', RIGHT + 'width:8%;'],
-        ['Notes', '{{notes}}', 'width:16%;'],
-      ],
-      VEHICLE_LOG_TOTALS,
-      true,
-    ),
+    '{{#if is_odometer}}' +
+    vehicleLogTable(true) +
+    '{{else}}' +
+    vehicleLogTable(false) +
+    '{{/if}}',
 )
 
 const EQUIPMENT_ASSET = wrap(

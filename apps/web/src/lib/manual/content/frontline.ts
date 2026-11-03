@@ -707,7 +707,7 @@ The grid becomes a stack of day cards with big touch targets, one card per day, 
 2. Wait for any saving row to finish.
 3. Select **Generate PDF** in the month toolbar. The current saved month opens as a PDF in a new tab.
 
-The button stays visible and becomes available after you select a driver and vehicle. You can generate a PDF without importing or deleting entries. The monthly template uses a compact portrait layout, with the driver and vehicle above the daily destinations, odometer readings, business and personal kilometres, notes, and totals. Longer notes can continue onto another page. Your administrator can change the template and paper setup under **PDF templates**.
+The button stays visible and becomes available after you select a driver and vehicle. You can generate a PDF without importing or deleting entries. The monthly PDF shows every day, including blank days. Saturday and Sunday rows are shaded darker grey. **Odometer** logs show starting and ending readings, personal kilometres, and total kilometres. **Destination** logs show customer/site, other destination, business kilometres, personal kilometres, and total kilometres. Choose the log type before generating the PDF. You can print logs you are allowed to view; bulk data-export permission is not required. Your administrator can change the template and paper setup under **PDF templates**.
 
 ## Submit your month by email
 

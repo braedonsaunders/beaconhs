@@ -95,7 +95,12 @@ function templatePdfResponse(
 // isn't a per-record summary (the vehicle-log month sheet).
 export async function renderModulePdfResponse(
   ctx: RequestContext,
-  args: { moduleKey: string; recordId: string; fallback?: OnDemandPdfJobData },
+  args: {
+    moduleKey: string
+    recordId: string
+    fallback?: OnDemandPdfJobData
+    values?: Record<string, unknown>
+  },
 ): Promise<Response> {
   if (!ctx.tenantId) return Response.json({ error: 'No active tenant' }, { status: 400 })
 
@@ -109,7 +114,7 @@ export async function renderModulePdfResponse(
   const tpl = await getModuleDefaultTemplate(ctx, args.moduleKey)
 
   try {
-    const values = await adapter.loadValues()
+    const values = { ...(await adapter.loadValues()), ...args.values }
     if (!tpl && args.fallback) return renderOnDemandPdfResponse(args.fallback)
     const ref =
       typeof values.reference === 'string' && values.reference

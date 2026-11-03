@@ -109,23 +109,30 @@ export function createVehicleLogFlowAdapter(
       let monthBusiness = 0
       let monthPersonal = 0
       let monthTotal = 0
-      const entries = monthRows.map(({ row: e, siteName }) => {
-        monthBusiness += e.businessKm ?? 0
-        monthPersonal += e.personalKm ?? 0
-        monthTotal += e.kmDriven ?? 0
-        const dateObj = new Date(`${e.entryDate}T00:00:00`)
+      const byDate = new Map(monthRows.map((item) => [item.row.entryDate, item]))
+      const days = new Date(Date.parse(`${range.endExclusive}T00:00:00Z`) - 86400000).getUTCDate()
+      const entries = Array.from({ length: days }, (_, index) => {
+        const entryDate = `${range.key}-${String(index + 1).padStart(2, '0')}`
+        const item = byDate.get(entryDate)
+        const e = item?.row
+        const siteName = item?.siteName
+        monthBusiness += e?.businessKm ?? 0
+        monthPersonal += e?.personalKm ?? 0
+        monthTotal += e?.kmDriven ?? 0
+        const dateObj = new Date(`${entryDate}T00:00:00Z`)
         return {
-          date: fmtDate(e.entryDate),
-          day: dateObj.getDate(),
-          weekday: dateObj.toLocaleDateString(undefined, { weekday: 'short' }),
+          date: fmtDate(entryDate),
+          day: dateObj.getUTCDate(),
+          weekday: dateObj.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }),
+          is_weekend: [0, 6].includes(dateObj.getUTCDay()),
           site_name: siteName ?? '',
-          other_destination: e.otherDestination ?? '',
-          start_odometer: num(e.startOdometer),
-          end_odometer: num(e.endOdometer),
-          business_km: num(e.businessKm),
-          personal_km: num(e.personalKm),
-          total_km: num(e.kmDriven),
-          notes: e.notes ?? '',
+          other_destination: e?.otherDestination ?? '',
+          start_odometer: num(e?.startOdometer),
+          end_odometer: num(e?.endOdometer),
+          business_km: num(e?.businessKm),
+          personal_km: num(e?.personalKm),
+          total_km: num(e?.kmDriven),
+          notes: e?.notes ?? '',
         }
       })
 
@@ -141,6 +148,7 @@ export function createVehicleLogFlowAdapter(
         reference: `${anchor.vehicleTag ?? anchor.vehicleName ?? 'Vehicle'} ${range.key}`,
         entry_date: fmtDate(r.entryDate),
         entry_mode: r.entryMode,
+        is_odometer: r.entryMode === 'odometer',
         driver_name: driverName,
         driver_employee_no: anchor.driverEmployeeNo ?? '',
         vehicle_name: vehicleName,

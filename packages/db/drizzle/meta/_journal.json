@@ -659,6 +659,13 @@
       "when": 1793358000000,
       "tag": "0094_document_signoffs_and_odometer_carry",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1793721600000,
+      "tag": "0095_vehicle_log_month_pdf",
+      "breakpoints": true
     }
   ]
 }

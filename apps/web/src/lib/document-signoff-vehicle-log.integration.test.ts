@@ -45,6 +45,7 @@ import {
   updateVehicleLogEntry,
   deleteVehicleLogEntry,
 } from '@/app/(app)/equipment/vehicle-log/_service'
+import { createVehicleLogFlowAdapter } from './flows/adapters/vehicle-log'
 import { loadWorkspaceHistory } from './workspace-history'
 import { canFacilitateDocumentSignoff } from './document-signoff-permission'
 import { moduleAdminByKey } from './module-admin/registry'
@@ -249,6 +250,24 @@ it('records repeated talks independently, enforces facilitator access and update
           startOdometerCarried: true,
         })
         expect(rows[2]).toMatchObject({ startOdometer: 1200, startOdometerCarried: false })
+        const month = await createVehicleLogFlowAdapter(ctx, rows[1]!.id).loadValues()
+        expect(month).toMatchObject({
+          is_odometer: true,
+          month_days_logged: 2,
+          month_total_km: 180,
+        })
+        expect(month.entries).toHaveLength(31)
+        expect((month.entries as Record<string, unknown>[])[2]).toMatchObject({
+          day: 3,
+          weekday: 'Sat',
+          is_weekend: true,
+          total_km: '',
+          start_odometer: '',
+        })
+        expect((month.entries as Record<string, unknown>[])[30]).toMatchObject({
+          day: 31,
+          is_weekend: true,
+        })
         await expect(
           upsertVehicleLogEntry(ctx, {
             ...base,
