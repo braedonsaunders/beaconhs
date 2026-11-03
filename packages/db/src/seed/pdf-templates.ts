@@ -452,7 +452,13 @@ const INCIDENT = wrap(
     heading('Key metrics') +
     grid([
       p('Person assessed', '{{experience_person_name}}'),
-      ...INCIDENT_METRICS.map((metric) => p(metric.label, `{{${metric.key}_answer}}`)),
+      ...INCIDENT_METRICS.map((metric) =>
+        p(
+          metric.label,
+          // During a rolling update, the previous adapter still supplies these numeric keys.
+          `{{#if ${metric.key}_answer}}{{${metric.key}_answer}}{{else}}{{${metric.key}}}{{/if}}`,
+        ),
+      ),
     ]) +
     narrative('Root cause — reporting employee', '{{root_cause}}') +
     heading('Investigating') +

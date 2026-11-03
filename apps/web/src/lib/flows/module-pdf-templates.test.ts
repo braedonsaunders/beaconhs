@@ -70,6 +70,18 @@ function sampleValues(scope: Scope): Record<string, unknown> {
 }
 
 describe('seeded module PDF templates', () => {
+  it('keeps severity values printable while previous-version replicas finish a rolling update', () => {
+    const seed = MODULE_PDF_TEMPLATE_SEEDS.find((entry) => entry.key === 'incident-report-pdf')!
+    const compiled = expandRepeatMarkers(seed.html)
+    const previousAdapter = renderTemplate(compiled, { actual_severity: 2, potential_severity: 4 })
+    expect(previousAdapter).toMatch(/>2<\/td>/)
+    expect(previousAdapter).toMatch(/>4<\/td>/)
+    const currentAdapter = renderTemplate(compiled, {
+      actual_severity: 2,
+      actual_severity_answer: '2 — First aid treatment required. No property damage.',
+    })
+    expect(currentAdapter).toContain('2 — First aid treatment required. No property damage.')
+  })
   it('covers every templatable module subject', () => {
     const seeded = new Set(MODULE_PDF_TEMPLATE_SEEDS.map((t) => t.subjectKey))
     for (const key of Object.keys(MODULE_FLOW_PROFILES)) {
