@@ -105,6 +105,12 @@ export async function GET(req: NextRequest) {
     'Site',
     'Description',
     'Location',
+    'Actual severity',
+    'Potential severity',
+    'Person assessed',
+    'Experience with the process',
+    'Crew response',
+    'Site conditions',
   ])
   const selection = selectCsvColumns(url.searchParams, columns)
 
@@ -122,6 +128,12 @@ export async function GET(req: NextRequest) {
         site?.name ?? '',
         incident.description ?? '',
         incident.location ?? '',
+        incident.actualSeverity ?? '',
+        incident.potentialSeverity ?? '',
+        incident.experiencePersonName ?? '',
+        incident.processExperience ?? '',
+        incident.crewResponse ?? '',
+        incident.siteConditions ?? '',
       ]),
     ),
   })

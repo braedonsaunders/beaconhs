@@ -1,3 +1,5 @@
+import { canEditIncidentReporting } from '../_reporting-access'
+import { INCIDENT_METRICS } from '@beaconhs/db/incident-metrics'
 import { activePeopleWhere } from '@beaconhs/db'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
@@ -114,7 +116,7 @@ import {
   LiveRemoteSelect,
   LiveRichText,
   LiveSelect,
-  LiveSeverityRating,
+  LiveMetricRating,
   LiveToggle,
 } from '@/components/live-field'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
@@ -1561,6 +1563,9 @@ export default async function IncidentDetailPage({
     canDeleteOwnRecord(ctx, 'incidents.delete.own', incident.reportedByTenantUserId)
   const canInvestigate = can(ctx, 'incidents.investigate')
   const locked = incident.locked
+  const canUpdate = can(ctx, 'incidents.update')
+  const reportingReadOnly =
+    locked || !canEditIncidentReporting(ctx, incident.reportedByTenantUserId)
   const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
 
   // Smallest unused ordinal (1..5) for adding a new "why" row.
@@ -1590,7 +1595,7 @@ export default async function IncidentDetailPage({
     { label: 'People & injuries', done: involved.length > 0 || injuries.length > 0 },
     { label: 'Timeline reconstructed', done: timelineEvents.length > 0 },
     { label: 'Causes identified', done: factors.length > 0 },
-    { label: 'Root cause determined', done: Boolean(incident.rootCause) || whys.length > 0 },
+    { label: 'Cause analysis recorded', done: whys.length > 0 },
     { label: 'Preventative steps', done: prevSteps.length > 0 },
     { label: 'Closed', done: incident.status === 'closed' },
   ]
@@ -1602,12 +1607,13 @@ export default async function IncidentDetailPage({
     timelineEvents.length + factors.length + whys.length + prevSteps.length + linkedCAs.length
 
   const sectionItems: SectionNavItem[] = [
-    { id: 'overview', label: 'Overview' },
+    { id: 'overview', label: 'Overview', groupLabel: 'Reporting' },
     { id: 'people', label: 'People', count: involved.length },
     { id: 'medical', label: 'Medical' },
     { id: 'injuries', label: 'Injuries', count: injuries.length },
     { id: 'metrics', label: 'Key metrics' },
-    { id: 'lost-time', label: 'Lost time', count: lostTime.length },
+    { id: 'root-cause', label: 'Root cause' },
+    { id: 'lost-time', label: 'Lost time', count: lostTime.length, groupLabel: 'Investigating' },
     { id: 'investigation', label: 'Investigation', count: investigationCount },
     { id: 'photos', label: 'Photos', count: photos.length },
     { id: 'activity', label: 'Activity', count: activity.length },
@@ -1637,11 +1643,7 @@ export default async function IncidentDetailPage({
       : undefined
 
   return (
-    <OfflineRecordProvider
-      module="incidents"
-      recordId={id}
-      editable={!locked && can(ctx, 'incidents.update')}
-    >
+    <OfflineRecordProvider module="incidents" recordId={id} editable={!reportingReadOnly}>
       <DetailPageLayout
         header={
           <DetailHeader
@@ -1759,6 +1761,14 @@ export default async function IncidentDetailPage({
           <GeneratedValue
             value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
           />
+          <header>
+            <h2 className="text-xl font-semibold">
+              <GeneratedText id="m_06e75603508223" />
+            </h2>
+            <p className="text-sm text-slate-500">
+              <GeneratedText id="m_1cc4c700a65b60" />
+            </p>
+          </header>
           {/* ===================== OVERVIEW ===================== */}
           <section id="section-overview" className="scroll-mt-2 space-y-5">
             {/* Hero — investigation progress ring */}
@@ -1843,7 +1853,7 @@ export default async function IncidentDetailPage({
                   initialValue={incident.type}
                   allowEmpty={false}
                   options={TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ') }))}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveSelect
                   field="severity"
@@ -1851,68 +1861,68 @@ export default async function IncidentDetailPage({
                   initialValue={incident.severity}
                   allowEmpty={false}
                   options={SEVERITIES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <div className="sm:col-span-2">
                   <LiveField
                     field="title"
                     label={tGenerated('m_0decefd558c355')}
                     initialValue={incident.title}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                 </div>
                 <LiveDateTime
                   field="occurredAt"
                   label={tGenerated('m_03f174df92cf82')}
                   initialValue={datetimeLocalValue(incident.occurredAt, ctx.timezone)}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveRemoteSelect
                   field="siteOrgUnitId"
                   label={tGenerated('m_020146dd3d3d5a')}
                   initialValue={incident.siteOrgUnitId}
                   lookup="incident-sites"
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveRemoteSelect
                   field="departmentId"
                   label={tGenerated('m_1af68228b8305a')}
                   initialValue={incident.departmentId}
                   lookup="incident-departments"
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveRemoteSelect
                   field="classificationId"
                   label={tGenerated('m_08405fc4ea6181')}
                   initialValue={incident.classificationId}
                   lookup="incident-classifications"
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveField
                   field="location"
                   label={tGenerated('m_0300804afcc3bb')}
                   initialValue={incident.location}
                   placeholder={tGenerated('m_09265e43b4c31c')}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveField
                   field="weather"
                   label={tGenerated('m_0ac9b805dc5093')}
                   initialValue={incident.weather}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveRemoteSelect
                   field="supervisorPersonId"
                   label={tGenerated('m_0ccb8e5b917b17')}
                   initialValue={incident.supervisorPersonId}
                   lookup="incident-people"
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveField
                   field="foremanText"
                   label={tGenerated('m_184fa8d9234543')}
                   initialValue={incident.foremanText}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
               </div>
             </Section>
@@ -1928,39 +1938,39 @@ export default async function IncidentDetailPage({
                   field="eventsLeadingUp"
                   label={tGenerated('m_19b47bcc915bf0')}
                   initialValue={incident.eventsLeadingUp}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveRichText
                   field="description"
                   label={tGenerated('m_0f069fc711163d')}
                   initialValue={incident.description}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <LiveRichText
                   field="immediateActionTaken"
                   label={tGenerated('m_1ea890e56aa6ae')}
                   initialValue={incident.immediateActionTaken}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <LiveRichText
                     field="witnesses"
                     label={tGenerated('m_0c5ffecfcfc329')}
                     initialValue={incident.witnesses}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveRichText
                     field="externalPeopleInvolved"
                     label={tGenerated('m_03283bb876874a')}
                     initialValue={incident.externalPeopleInvolved}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                 </div>
                 <LiveField
                   field="ppeWorn"
                   label={tGenerated('m_1bb5a963312ef4')}
                   initialValue={incident.ppeWorn}
-                  disabled={locked}
+                  disabled={reportingReadOnly}
                 />
               </div>
             </Section>
@@ -1974,7 +1984,7 @@ export default async function IncidentDetailPage({
               icon={<Users size={20} />}
               tone="teal"
               actions={
-                !locked ? (
+                !locked && canUpdate ? (
                   <Link href={drawerHref('add-person') as any} scroll={false}>
                     <Button type="button" size="sm">
                       <Plus size={14} /> <GeneratedText id="m_12634c941f2fb6" />
@@ -2028,7 +2038,7 @@ export default async function IncidentDetailPage({
                             </div>
                             <GeneratedValue
                               value={
-                                !locked ? (
+                                !locked && canUpdate ? (
                                   <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                     <Link
                                       href={
@@ -2079,7 +2089,7 @@ export default async function IncidentDetailPage({
                     field="criticalInjury"
                     label={tGenerated('m_145ad4ecccb8ca')}
                     initialValue={incident.criticalInjury}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveToggle
                     field="ministryOfLabourNotified"
@@ -2087,49 +2097,49 @@ export default async function IncidentDetailPage({
                       authority: regulatory.authorityName,
                     })}
                     initialValue={incident.ministryOfLabourNotified}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveToggle
                     field="emsCalled"
                     label={tGenerated('m_09081dea5ec5bb')}
                     initialValue={incident.emsCalled}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveToggle
                     field="firstAidGiven"
                     label={tGenerated('m_0d7228f1689c59')}
                     initialValue={incident.firstAidGiven}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveToggle
                     field="medicalAttentionReceived"
                     label={tGenerated('m_1916246f33213b')}
                     initialValue={incident.medicalAttentionReceived}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveToggle
                     field="lostTime"
                     label={tGenerated('m_07762fdb1dad26')}
                     initialValue={incident.lostTime}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveToggle
                     field="modifiedDuty"
                     label={tGenerated('m_18f9bcad979f3b')}
                     initialValue={incident.modifiedDuty}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveToggle
                     field="externallyReportable"
                     label={tGenerated('m_0ace4bcf5de488')}
                     initialValue={incident.externallyReportable}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                   <LiveToggle
                     field="policeNotified"
                     label={tGenerated('m_1fec1e8f5877cf')}
                     initialValue={incident.policeNotified}
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                 </div>
 
@@ -2145,7 +2155,7 @@ export default async function IncidentDetailPage({
                               ? datetimeLocalValue(incident.emsArrivedAt, ctx.timezone)
                               : ''
                           }
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                       </SubBlock>
                     ) : null
@@ -2160,7 +2170,7 @@ export default async function IncidentDetailPage({
                           field="firstAidProvider"
                           label={tGenerated('m_03ec9dccb4df6b')}
                           initialValue={incident.firstAidProvider}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="firstAidNotes"
@@ -2168,7 +2178,7 @@ export default async function IncidentDetailPage({
                           initialValue={incident.firstAidNotes}
                           multiline
                           rows={2}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                       </SubBlock>
                     ) : null
@@ -2183,25 +2193,25 @@ export default async function IncidentDetailPage({
                           field="hospitalName"
                           label={tGenerated('m_14ed8013ab807e')}
                           initialValue={incident.hospitalName}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="treatedInCity"
                           label={tGenerated('m_0f8706f757eeb9')}
                           initialValue={incident.treatedInCity}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="transportation"
                           label={tGenerated('m_02abf0d6ea0266')}
                           initialValue={incident.transportation}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="attendingPhysician"
                           label={tGenerated('m_14695b7ef536e2')}
                           initialValue={incident.attendingPhysician}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveDateTime
                           field="hospitalArrivedAt"
@@ -2211,7 +2221,7 @@ export default async function IncidentDetailPage({
                               ? datetimeLocalValue(incident.hospitalArrivedAt, ctx.timezone)
                               : ''
                           }
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveDateTime
                           field="dischargedAt"
@@ -2221,7 +2231,7 @@ export default async function IncidentDetailPage({
                               ? datetimeLocalValue(incident.dischargedAt, ctx.timezone)
                               : ''
                           }
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                       </SubBlock>
                     ) : null
@@ -2242,7 +2252,7 @@ export default async function IncidentDetailPage({
                               ? datetimeLocalValue(incident.molNotifiedAt, ctx.timezone)
                               : ''
                           }
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="molReportNumber"
@@ -2250,7 +2260,7 @@ export default async function IncidentDetailPage({
                             abbreviation: regulatory.authorityAbbreviation,
                           })}
                           initialValue={incident.molReportNumber}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                       </SubBlock>
                     ) : null
@@ -2265,13 +2275,13 @@ export default async function IncidentDetailPage({
                           field="policeReportNumber"
                           label={tGenerated('m_13f7c5b2973809')}
                           initialValue={incident.policeReportNumber}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="insuranceClaimNumber"
                           label={tGenerated('m_1db0cce6a15bdd')}
                           initialValue={incident.insuranceClaimNumber}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                       </SubBlock>
                     ) : null
@@ -2287,14 +2297,14 @@ export default async function IncidentDetailPage({
                           label={tGenerated('m_1c40d052f5b2b3')}
                           type="date"
                           initialValue={incident.lostTimeFirstDay}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="lostTimeLastDay"
                           label={tGenerated('m_141b64436c5327')}
                           type="date"
                           initialValue={incident.lostTimeLastDay}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="lostTimeDays"
@@ -2303,7 +2313,7 @@ export default async function IncidentDetailPage({
                           initialValue={
                             incident.lostTimeDays != null ? String(incident.lostTimeDays) : null
                           }
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                       </SubBlock>
                     ) : null
@@ -2319,14 +2329,14 @@ export default async function IncidentDetailPage({
                           label={tGenerated('m_15f5f067da4642')}
                           type="date"
                           initialValue={incident.modifiedDutyFirstDay}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="modifiedDutyLastDay"
                           label={tGenerated('m_089d5dcb2ef99f')}
                           type="date"
                           initialValue={incident.modifiedDutyLastDay}
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                         <LiveField
                           field="modifiedDutyDays"
@@ -2337,7 +2347,7 @@ export default async function IncidentDetailPage({
                               ? String(incident.modifiedDutyDays)
                               : null
                           }
-                          disabled={locked}
+                          disabled={reportingReadOnly}
                         />
                       </SubBlock>
                     ) : null
@@ -2352,7 +2362,7 @@ export default async function IncidentDetailPage({
                     initialValue={
                       incident.damageEstimate != null ? String(incident.damageEstimate) : null
                     }
-                    disabled={locked}
+                    disabled={reportingReadOnly}
                   />
                 </SubBlock>
               </div>
@@ -2367,7 +2377,7 @@ export default async function IncidentDetailPage({
               icon={<Activity size={20} />}
               tone="rose"
               actions={
-                !locked ? (
+                !locked && canUpdate ? (
                   <Link href={drawerHref('add-injury') as any} scroll={false}>
                     <Button type="button" size="sm">
                       <Plus size={14} /> <GeneratedText id="m_141cf443767ce4" />
@@ -2472,7 +2482,7 @@ export default async function IncidentDetailPage({
                             </div>
                             <GeneratedValue
                               value={
-                                !locked ? (
+                                !locked && canUpdate ? (
                                   <div className="flex items-start gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                                     <Link
                                       href={
@@ -2519,29 +2529,57 @@ export default async function IncidentDetailPage({
               icon={<Gauge size={20} />}
               tone="amber"
             >
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <LiveSeverityRating
-                  field="actualSeverity"
-                  label={tGenerated('m_19cec370baaabb')}
-                  initialValue={incident.actualSeverity}
-                  disabled={locked}
-                />
-                <LiveSeverityRating
-                  field="potentialSeverity"
-                  label={tGenerated('m_04e65f97982772')}
-                  initialValue={incident.potentialSeverity}
-                  disabled={locked}
-                />
-                <LiveSeverityRating
-                  field="severityRating"
-                  label={tGenerated('m_06cdd9cd175160')}
-                  initialValue={incident.severityRating}
-                  disabled={locked}
-                />
+              <div className="space-y-8">
+                {INCIDENT_METRICS.map((metric) => (
+                  <div key={metric.field} className="space-y-3">
+                    {metric.field === 'processExperience' ? (
+                      <LiveField
+                        field="experiencePersonName"
+                        label={tGenerated('m_172a0a6f248697')}
+                        initialValue={incident.experiencePersonName}
+                        placeholder={tGenerated('m_0b61835e6ec722')}
+                        disabled={reportingReadOnly}
+                      />
+                    ) : null}
+                    <LiveMetricRating
+                      field={metric.field}
+                      label={metric.question}
+                      initialValue={incident[metric.field]}
+                      options={metric.options}
+                      help={metric.help}
+                      higherIsBetter={metric.higherIsBetter}
+                      disabled={reportingReadOnly}
+                    />
+                  </div>
+                ))}
               </div>
             </Section>
           </section>
 
+          <section id="section-root-cause" className="scroll-mt-2">
+            <Section
+              title={tGenerated('m_0e04308a7a3472')}
+              subtitle={tGenerated('m_179af3dcf74732')}
+              icon={<HelpCircle size={20} />}
+              tone="purple"
+            >
+              <LiveRichText
+                field="rootCause"
+                label={tGenerated('m_01ba4386c41f82')}
+                initialValue={incident.rootCause}
+                placeholder={tGenerated('m_0e0324f8834c87')}
+                disabled={reportingReadOnly}
+              />
+            </Section>
+          </section>
+          <header className="border-t border-slate-200 pt-6 dark:border-slate-800">
+            <h2 className="text-xl font-semibold">
+              <GeneratedText id="m_0909d0f0104f04" />
+            </h2>
+            <p className="text-sm text-slate-500">
+              <GeneratedText id="m_1f4c0b0a3c92d8" />
+            </p>
+          </header>
           {/* ===================== LOST TIME ===================== */}
           <section id="section-lost-time" className="scroll-mt-2">
             <Section
@@ -2550,9 +2588,9 @@ export default async function IncidentDetailPage({
               icon={<Clock size={20} />}
               tone="blue"
               actions={
-                !locked ? (
+                !locked && canUpdate ? (
                   <Link href={drawerHref('add-lost-time') as any} scroll={false}>
-                    <Button type="button" size="sm">
+                    <Button type="button" size="sm" variant="outline">
                       <Plus size={14} /> <GeneratedText id="m_1eabd71bbc0199" />
                     </Button>
                   </Link>
@@ -2614,7 +2652,7 @@ export default async function IncidentDetailPage({
                             </div>
                             <GeneratedValue
                               value={
-                                !locked ? (
+                                !locked && canUpdate ? (
                                   <form action={deleteLostTimeEvent} className="inline">
                                     <input type="hidden" name="id" value={e.id} />
                                     <input type="hidden" name="incidentId" value={id} />
@@ -2796,7 +2834,7 @@ export default async function IncidentDetailPage({
             </Section>
 
             <Section
-              title={tGenerated('m_1d618ba267da6f')}
+              title={tGenerated('m_06ad38ca267536')}
               subtitle={tGenerated('m_13e191dbfdde54', { value0: whys.length })}
               icon={<HelpCircle size={20} />}
               tone="purple"
@@ -2811,13 +2849,6 @@ export default async function IncidentDetailPage({
               }
             >
               <div className="space-y-5">
-                <LiveRichText
-                  field="rootCause"
-                  label={tGenerated('m_144853fbc930b0')}
-                  initialValue={incident.rootCause}
-                  placeholder={tGenerated('m_00cb435f0a2d5a')}
-                  disabled={locked}
-                />
                 <div>
                   <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
                     <GeneratedText id="m_13cb7d7cf77012" />
@@ -3044,14 +3075,14 @@ export default async function IncidentDetailPage({
               <div className="space-y-3">
                 <PhotoGallery
                   photos={galleryPhotos}
-                  editable={!locked}
+                  editable={!locked && canUpdate}
                   onUpdate={updateIncidentPhotoAction}
                   onRemove={removeIncidentPhotoAction}
                   onReorder={reorderIncidentPhotosAction}
                 />
                 <GeneratedValue
                   value={
-                    !locked ? (
+                    !locked && canUpdate ? (
                       <PhotoUploaderSection
                         attachAction={async (ids) => {
                           'use server'

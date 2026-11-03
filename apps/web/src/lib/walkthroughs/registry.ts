@@ -260,7 +260,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'What happens next',
-        body: 'Your safety team reviews it, may investigate, and can assign corrective actions so it does not happen again. You can check the status here any time.',
+        body: 'Complete the Reporting section, including Key metrics and your understanding of the Root cause. Your safety team uses Investigating for the timeline, cause analysis and corrective actions. You can check the status here any time.',
       },
     ],
   },

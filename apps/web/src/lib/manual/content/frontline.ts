@@ -482,6 +482,18 @@ Open **Incidents** in the left menu, or go to [Incidents](/incidents).
 
 The quick report captures the essentials. Photos, witness statements, and the full investigation happen on the incident's page after you submit. In **Photos**, tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. Tap the pencil button to add a caption or mark up a photo. The editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the photo order before the incident is locked.
 
+## Completing the reporting section
+
+On the incident page, **Reporting** contains Overview, People, Medical, Injuries, **Key metrics** and **Root cause**.
+
+1. In **Key metrics**, choose a rating from **1–5** for actual severity, potential severity, experience with the process, crew response and site conditions. All five descriptions are shown. Tap a selected number again to clear it.
+2. Name the **Person whose experience is being assessed**, especially when several people were involved.
+3. For severity, use the higher rating when injury and damage fall into different bands. Property damage of exactly $5,000 is rating **4**; $25,000 or more is rating **5**. Potential severity means what could reasonably have happened.
+4. Higher severity ratings mean a worse outcome. Higher experience, response and conditions ratings mean a stronger position. The five answers are not averaged.
+5. Under **Root cause**, the reporting employee writes what they think caused the incident. Leave it blank if the cause is not yet known. The investigator records their analysis separately.
+
+Changes save as you work. Existing reports retain their saved ratings; new questions are blank until answered. The questions appear in incident PDFs and exports.
+
 ## What happens after
 
 - The incident starts as **Reported**. The right people are notified automatically.
@@ -493,11 +505,11 @@ You can open your own reports any time from the [Incidents](/incidents) list to 
 
 ## Recording the investigation
 
-If your role can investigate incidents, open the incident's **Investigation** section.
+If your role can investigate incidents, open the incident's **Investigating** section. This contains Lost time, the investigation timeline, contributing factors, **Cause analysis**, preventative steps, corrective actions, photos and activity.
 
 1. Use **Add event** to rebuild the timeline in order.
 2. Use **Add factor** to record each contributing factor and its category, such as equipment, procedure, training, environment, or human.
-3. Record the root cause and add the **Why** steps that led to it.
+3. Under **Cause analysis**, add the **Why** steps that explain your findings. This is the investigator / H&S team's analysis, separate from the reporting employee's **Root cause**.
 4. Use **Add step** under **Preventative steps** for each change that will stop the incident from happening again. Assign an owner, target date, and status when known.
 5. Use the pencil and trash buttons to correct or remove investigation rows before the incident is locked.
 

@@ -1,4 +1,5 @@
 import 'server-only'
+import { INCIDENT_METRICS, incidentMetricAnswer } from '@beaconhs/db/incident-metrics'
 
 // Incidents FlowSubjectAdapter. Field-map keys mirror MODULE_FLOW_PROFILES.incidents.
 
@@ -16,6 +17,7 @@ import {
   incidentLostTimeEvents,
   incidentPeople,
   incidentPreventativeSteps,
+  incidentRootCauseWhys,
   incidents,
   orgUnits,
   people,
@@ -83,7 +85,7 @@ export function createIncidentFlowAdapter(
       if (!head) return {}
       const i = head.i
 
-      const [peopleInvolved, injuries, lostTimeEvents, events, factors, steps, photos] =
+      const [peopleInvolved, injuries, lostTimeEvents, events, factors, steps, photos, whys] =
         await Promise.all([
           ctx.db((tx) =>
             tx
@@ -206,6 +208,13 @@ export function createIncidentFlowAdapter(
                 asc(incidentAttachments.id),
               ),
           ),
+          ctx.db((tx) =>
+            tx
+              .select()
+              .from(incidentRootCauseWhys)
+              .where(eq(incidentRootCauseWhys.incidentId, incidentId))
+              .orderBy(asc(incidentRootCauseWhys.ordinal)),
+          ),
         ])
 
       return {
@@ -259,8 +268,14 @@ export function createIncidentFlowAdapter(
         modified_duty_days: i.modifiedDutyDays ?? null,
         externally_reportable: i.externallyReportable ?? false,
         // Key metrics (1–5 scales).
-        actual_severity: i.actualSeverity ?? null,
-        potential_severity: i.potentialSeverity ?? null,
+        ...Object.fromEntries(
+          INCIDENT_METRICS.flatMap((metric) => [
+            [metric.key, i[metric.field] ?? null],
+            [`${metric.key}_answer`, incidentMetricAnswer(metric, i[metric.field])],
+          ]),
+        ),
+        experience_person_name: i.experiencePersonName ?? '',
+        cause_analysis: whys.map((why) => ({ ordinal: why.ordinal, description: why.whyText })),
         site_name: head.siteName ?? '',
         department_name: head.deptName ?? '',
         supervisor_name: personName({

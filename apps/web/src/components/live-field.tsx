@@ -525,14 +525,6 @@ export function LiveToggle({
   )
 }
 
-const SEVERITY_LABELS: Record<number, string> = {
-  1: 'No first aid / no damage',
-  2: 'First aid / < $1k',
-  3: 'Medical aid / < $5k',
-  4: 'Critical / < $25k',
-  5: 'Fatality / > $25k',
-}
-
 const SEVERITY_ACTIVE: Record<number, string> = {
   1: 'border-emerald-400 bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-700',
   2: 'border-lime-400 bg-lime-100 text-lime-900 dark:bg-lime-950/50 dark:text-lime-200 dark:border-lime-700',
@@ -545,17 +537,24 @@ const SEVERITY_ACTIVE: Record<number, string> = {
  * Editable 1–5 severity picker. Tap a cell to set; tap the active cell again
  * to clear. Sends the number as a string (empty clears the column).
  */
-export function LiveSeverityRating({
+export function LiveMetricRating({
   field,
   label,
   initialValue,
   disabled,
+  options,
+  help,
+  higherIsBetter,
 }: {
   field: string
   label: string
   initialValue: number | null
   disabled?: boolean
+  options: readonly string[]
+  help: string
+  higherIsBetter: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
   const f = useRecordField(field, initialValue == null ? '' : String(initialValue))
   const value = f.value === '' ? null : Number(f.value)
@@ -584,12 +583,13 @@ export function LiveSeverityRating({
                 type="button"
                 disabled={off}
                 onClick={() => pick(n)}
-                title={tGeneratedValue(`${n} — ${SEVERITY_LABELS[n]}`)}
+                title={tGeneratedValue(`${n} — ${options[n - 1]}`)}
+                aria-label={`${tGeneratedValue(label)}: ${n} — ${tGeneratedValue(options[n - 1])}`}
                 aria-pressed={active}
                 className={cn(
                   'flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50 sm:h-9',
                   active
-                    ? SEVERITY_ACTIVE[n]
+                    ? SEVERITY_ACTIVE[higherIsBetter ? 6 - n : n]
                     : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500',
                 )}
               >
@@ -599,11 +599,28 @@ export function LiveSeverityRating({
           })}
         />
       </div>
-      <p className="text-xs text-slate-400 dark:text-slate-500">
-        <GeneratedValue
-          value={value ? SEVERITY_LABELS[value] : <GeneratedText id="m_13e61f4185333d" />}
-        />
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        <GeneratedValue value={help} />
       </p>
+      <ol
+        className="space-y-1 text-sm"
+        aria-label={tGenerated('m_1418d1b423bdc2', { value0: tGeneratedValue(label) })}
+      >
+        {options.map((description, index) => (
+          <li
+            key={index}
+            className={cn(
+              'rounded-md border border-transparent px-3 py-2',
+              value === index + 1
+                ? SEVERITY_ACTIVE[higherIsBetter ? 5 - index : index + 1]
+                : 'text-slate-600 dark:text-slate-400',
+            )}
+          >
+            <span className="font-semibold">{index + 1} — </span>
+            <GeneratedValue value={description} />
+          </li>
+        ))}
+      </ol>
       <RecordFieldError error={f.error} />
     </div>
   )

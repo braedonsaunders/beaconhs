@@ -9,7 +9,7 @@ import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 //
 // Shared primitive — used by the hazard-assessment and incident detail pages.
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 
@@ -18,6 +18,7 @@ export type SectionNavItem = {
   label: string
   count?: number
   done?: boolean
+  groupLabel?: string
 }
 
 export function SectionNav({ sections }: { sections: SectionNavItem[] }) {
@@ -90,48 +91,55 @@ export function SectionNav({ sections }: { sections: SectionNavItem[] }) {
         value={sections.map((s) => {
           const isActive = s.id === active
           return (
-            <button
-              key={s.id}
-              type="button"
-              data-section={s.id}
-              onClick={() => {
-                document
-                  .getElementById(`section-${s.id}`)
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                setActive(s.id)
-              }}
-              className={cn(
-                'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm whitespace-nowrap transition-colors sm:min-h-0 sm:px-3 sm:py-1 sm:text-xs',
-                isActive
-                  ? 'border-teal-700 bg-teal-700 font-medium text-white'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
-              )}
-            >
-              <GeneratedValue
-                value={
-                  s.done ? (
-                    <Check size={12} className={isActive ? 'text-white' : 'text-emerald-600'} />
-                  ) : null
-                }
-              />
-              <GeneratedValue value={s.label} />
-              <GeneratedValue
-                value={
-                  typeof s.count === 'number' ? (
-                    <span
-                      className={cn(
-                        'rounded-full px-1.5 py-0.5 text-[10px] leading-none',
-                        isActive
-                          ? 'bg-white/20 text-white'
-                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-                      )}
-                    >
-                      <GeneratedValue value={s.count} />
-                    </span>
-                  ) : null
-                }
-              />
-            </button>
+            <Fragment key={s.id}>
+              {s.groupLabel ? (
+                <span className="mx-2 shrink-0 text-xs font-semibold text-slate-500 uppercase">
+                  <GeneratedValue value={s.groupLabel} />
+                </span>
+              ) : null}
+              <button
+                key={s.id}
+                type="button"
+                data-section={s.id}
+                onClick={() => {
+                  document
+                    .getElementById(`section-${s.id}`)
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  setActive(s.id)
+                }}
+                className={cn(
+                  'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm whitespace-nowrap transition-colors sm:min-h-0 sm:px-3 sm:py-1 sm:text-xs',
+                  isActive
+                    ? 'border-teal-700 bg-teal-700 font-medium text-white'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
+                )}
+              >
+                <GeneratedValue
+                  value={
+                    s.done ? (
+                      <Check size={12} className={isActive ? 'text-white' : 'text-emerald-600'} />
+                    ) : null
+                  }
+                />
+                <GeneratedValue value={s.label} />
+                <GeneratedValue
+                  value={
+                    typeof s.count === 'number' ? (
+                      <span
+                        className={cn(
+                          'rounded-full px-1.5 py-0.5 text-[10px] leading-none',
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+                        )}
+                      >
+                        <GeneratedValue value={s.count} />
+                      </span>
+                    ) : null
+                  }
+                />
+              </button>
+            </Fragment>
           )
         })}
       />

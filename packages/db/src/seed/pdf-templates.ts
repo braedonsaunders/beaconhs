@@ -14,6 +14,7 @@
 // (packages/db/src/seed.ts) for every tenant on every run, together with
 // seedFormPdfTemplates below (generated per-Builder-app documents).
 
+import { INCIDENT_METRICS } from '../incident-metrics'
 import { sql } from 'drizzle-orm'
 import { generateFormPdfTemplate, type FormSchemaV1 } from '@beaconhs/forms-core'
 import { expandRepeatMarkers } from '@beaconhs/email-render'
@@ -389,7 +390,7 @@ const HAZID_BLANK = wrap(
 const INCIDENT = wrap(
   letterhead('Incident Report', '{{title}}', 'Reference <strong>{{reference}}</strong>') +
     chips('{{severity_label}}', '{{status_label}}', '{{type_label}}') +
-    heading('General information') +
+    heading('Reporting — General information') +
     grid([
       p('Occurred', '{{occurred_at}}'),
       p('Reported', '{{reported_at}}'),
@@ -438,8 +439,6 @@ const INCIDENT = wrap(
         'Modified duty',
         '{{modified_duty_first_day}} → {{modified_duty_last_day}} ({{modified_duty_days}} days)',
       ),
-      p('Actual severity (1–5)', '{{actual_severity}}'),
-      p('Potential severity (1–5)', '{{potential_severity}}'),
     ]) +
     collection('Injuries', 'injuries', [
       ['Person', '{{person_name}}'],
@@ -450,6 +449,13 @@ const INCIDENT = wrap(
       ['Facility', '{{treated_at_facility}}'],
       ['Hours prior', '{{worked_hours_prior_to}}', RIGHT + 'width:8%;'],
     ]) +
+    heading('Key metrics') +
+    grid([
+      p('Person assessed', '{{experience_person_name}}'),
+      ...INCIDENT_METRICS.map((metric) => p(metric.label, `{{${metric.key}_answer}}`)),
+    ]) +
+    narrative('Root cause — reporting employee', '{{root_cause}}') +
+    heading('Investigating') +
     collection('Lost-time events', 'lost_time_events', [
       ['Status', '{{status}}', 'width:18%;'],
       ['From', '{{valid_from}}', 'width:16%;'],
@@ -461,7 +467,10 @@ const INCIDENT = wrap(
       ['Description', '{{description}}'],
       ['Recorded by', '{{recorded_by_name}}', 'width:18%;'],
     ]) +
-    narrative('Root cause', '{{root_cause}}') +
+    collection('Cause analysis — investigator / H&S (5 Whys)', 'cause_analysis', [
+      ['Why', '{{ordinal}}', 'width:8%;'],
+      ['Analysis', '{{description}}'],
+    ]) +
     collection('Contributing factors', 'contributing_factors', [
       ['Category', '{{category}}', 'width:24%;'],
       ['Description', '{{description}}'],

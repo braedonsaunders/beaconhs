@@ -1,7 +1,8 @@
 // The `incidents` record saver: inline field edits on an incident, queued on
 // the device by the record page and applied by /api/records/sync (see
 // lib/record-sync). Same rules the inline editor has always had — the
-// `incidents.update` permission, record visibility (read.all / site / own),
+// `incidents.update` permission (or reporting fields on the creator’s own record),
+// record visibility (read.all / site / own),
 // locked incidents are read-only, one audit entry per changed field — plus a
 // compare-and-set against the value the device last saw.
 
@@ -28,8 +29,10 @@ import {
   auditFieldChanges,
   defineRecordSaver,
   recordLocked,
+  recordForbidden,
   recordNotFound,
 } from '@/lib/record-sync/edits'
+import { canEditIncidentReporting } from './_reporting-access'
 import { INCIDENT_SEVERITIES, INCIDENT_TYPES } from './_options'
 
 type IncidentRow = typeof incidents.$inferSelect
@@ -89,13 +92,17 @@ function incidentCodecs(timeZone: string): { [K in keyof IncidentRow]?: Codec<In
     modifiedDutyDays: days('Modified duty days'),
     actualSeverity: rating('Actual severity'),
     potentialSeverity: rating('Potential severity'),
+    processExperience: rating('Experience with the process'),
+    experiencePersonName: optionalText({ label: 'Person assessed', maxLength: 200 }),
+    crewResponse: rating('Crew response'),
+    siteConditions: rating('Site conditions'),
     severityRating: rating('Severity rating'),
     damageEstimate: optionalDecimal({ label: 'Damage estimate', min: 0, maxScale: 2 }),
   }
 }
 
 export const incidentRecordSaver = defineRecordSaver<IncidentRow>('incidents', {
-  authorize: (ctx) => can(ctx, 'incidents.update'),
+  authorize: (ctx) => can(ctx, 'incidents.update') || can(ctx, 'incidents.create'),
   async load(tx, ctx, incidentId) {
     const [row] = await tx
       .select()
@@ -117,16 +124,19 @@ export const incidentRecordSaver = defineRecordSaver<IncidentRow>('incidents', {
       siteId: row.siteOrgUnitId,
     })
     if (!visible) throw recordNotFound()
+    if (!canEditIncidentReporting(ctx, row.reportedByTenantUserId)) throw recordForbidden()
     if (row.locked) throw recordLocked('Incident is locked')
     return row
   },
-  resolve: (tx, ctx, row, op) =>
-    columnOps(row, incidentCodecs(ctx.timezone), (patch) =>
+  resolve: (tx, ctx, row, op) => {
+    if (op === 'severityRating' && !can(ctx, 'incidents.update')) throw recordForbidden()
+    return columnOps(row, incidentCodecs(ctx.timezone), (patch) =>
       tx
         .update(incidents)
         .set(patch)
         .where(and(eq(incidents.id, row.id), eq(incidents.tenantId, ctx.tenantId))),
-    )(op),
+    )(op)
+  },
   afterWrites: (tx, ctx, row, changes) =>
     auditFieldChanges(tx, ctx, { entityType: 'incident', entityId: row.id }, changes),
   revalidate: (incidentId) => [`/incidents/${incidentId}`, '/incidents'],

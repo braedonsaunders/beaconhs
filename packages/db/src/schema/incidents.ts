@@ -7,9 +7,10 @@
 //
 // Investigation is itself a form_response (sourceEntityType='incident').
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   date,
   foreignKey,
   index,
@@ -139,9 +140,12 @@ export const incidents = pgTable(
     // Key metrics — actual vs potential severity (1-5 scales, matches legacy radio buttons)
     actualSeverity: integer('actual_severity'),
     potentialSeverity: integer('potential_severity'),
-    // Wave-4: blended 1-5 "incident severity rating" used by the
-    // severity-trend report.  Distinct from the per-event actual/potential
-    // pair so we can roll up across an entire incident family.
+    processExperience: integer('process_experience'),
+    experiencePersonName: text('experience_person_name'),
+    crewResponse: integer('crew_response'),
+    siteConditions: integer('site_conditions'),
+    // Historical overall ratings remain stored for evidence and API consumers.
+    // Reporting uses separate metrics; never derive this value from their average.
     severityRating: integer('severity_rating'),
     // Wave-4: dollar cost of property/asset damage (USD).  Drives the
     // financial line on the incident-cost report.  Stored as numeric to
@@ -179,6 +183,18 @@ export const incidents = pgTable(
   },
   (t) => ({
     tenantIdx: index('incidents_tenant_idx').on(t.tenantId),
+    processExperienceCheck: check(
+      'incidents_process_experience_check',
+      sql`${t.processExperience} BETWEEN 1 AND 5`,
+    ),
+    crewResponseCheck: check(
+      'incidents_crew_response_check',
+      sql`${t.crewResponse} BETWEEN 1 AND 5`,
+    ),
+    siteConditionsCheck: check(
+      'incidents_site_conditions_check',
+      sql`${t.siteConditions} BETWEEN 1 AND 5`,
+    ),
     tenantIdIdUx: uniqueIndex('incidents_tenant_id_id_ux').on(t.tenantId, t.id),
     referenceIdx: index('incidents_reference_idx').on(t.tenantId, t.reference),
     statusIdx: index('incidents_status_idx').on(t.tenantId, t.status),

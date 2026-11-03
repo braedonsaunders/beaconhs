@@ -4,6 +4,7 @@
 // body carries injury, hospital, and insurance details, so the sender must
 // name who receives it (matches the hazard-assessment / document senders).
 
+import { INCIDENT_METRICS, incidentMetricAnswer } from '@beaconhs/db/incident-metrics'
 import { and, eq, inArray } from 'drizzle-orm'
 import {
   departments,
@@ -139,7 +140,10 @@ export async function sendIncidentEmail(
     `  Police notified: ${yn(data.i.policeNotified)}${data.i.policeReportNumber ? ` (${data.i.policeReportNumber})` : ''}`,
     `  Insurance claim: ${data.i.insuranceClaimNumber ?? '—'}`,
     ``,
-    `Severity (1-5): actual=${data.i.actualSeverity ?? '—'} · potential=${data.i.potentialSeverity ?? '—'}`,
+    `Person assessed: ${data.i.experiencePersonName ?? '—'}`,
+    ...INCIDENT_METRICS.map(
+      (metric) => `${metric.label}: ${incidentMetricAnswer(metric, data.i[metric.field]) || '—'}`,
+    ),
     `Damage estimate: ${data.i.damageEstimate ? `$${Number(data.i.damageEstimate).toLocaleString()}` : '—'}`,
   ]
     .filter((line) => line !== '')

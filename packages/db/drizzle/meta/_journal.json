@@ -666,6 +666,13 @@
       "when": 1793721600000,
       "tag": "0095_vehicle_log_month_pdf",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793732400000,
+      "tag": "0096_incident_reporting_metrics",
+      "breakpoints": true
     }
   ]
 }

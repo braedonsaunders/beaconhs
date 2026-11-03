@@ -225,7 +225,11 @@ const incidentCreate = z.object({
   medicalAttentionReceived: z.boolean().default(false),
   hospitalName: z.string().max(300).nullish(),
   actualSeverity: z.number().int().min(1).max(5).nullish(),
+  processExperience: z.number().int().min(1).max(5).nullish(),
+  crewResponse: z.number().int().min(1).max(5).nullish(),
+  siteConditions: z.number().int().min(1).max(5).nullish(),
   potentialSeverity: z.number().int().min(1).max(5).nullish(),
+  experiencePersonName: z.string().max(200).nullish(),
   severityRating: z.number().int().min(1).max(5).nullish(),
 })
 
@@ -281,7 +285,11 @@ async function createIncident(ctx: RequestContext, raw: unknown): Promise<WriteR
         medicalAttentionReceived: b.medicalAttentionReceived,
         hospitalName: stripEmpty(b.hospitalName),
         actualSeverity: b.actualSeverity ?? null,
+        processExperience: b.processExperience ?? null,
+        crewResponse: b.crewResponse ?? null,
+        siteConditions: b.siteConditions ?? null,
         potentialSeverity: b.potentialSeverity ?? null,
+        experiencePersonName: stripEmpty(b.experiencePersonName),
         severityRating: b.severityRating ?? null,
       })
       .returning()
@@ -346,6 +354,10 @@ function incidentResult(row: typeof incidents.$inferSelect): WriteResult {
     site_org_unit_id: row.siteOrgUnitId,
     department_id: row.departmentId,
     actual_severity: row.actualSeverity,
+    process_experience: row.processExperience,
+    crew_response: row.crewResponse,
+    site_conditions: row.siteConditions,
+    experience_person_name: row.experiencePersonName,
     potential_severity: row.potentialSeverity,
   }
 }
@@ -413,7 +425,12 @@ async function updateIncident(ctx: RequestContext, id: string, raw: unknown): Pr
     }
     if (hasOwn(b, 'hospitalName')) patch.hospitalName = stripEmpty(b.hospitalName)
     if (hasOwn(b, 'actualSeverity')) patch.actualSeverity = b.actualSeverity ?? null
+    if (hasOwn(b, 'processExperience')) patch.processExperience = b.processExperience ?? null
+    if (hasOwn(b, 'crewResponse')) patch.crewResponse = b.crewResponse ?? null
+    if (hasOwn(b, 'siteConditions')) patch.siteConditions = b.siteConditions ?? null
     if (hasOwn(b, 'potentialSeverity')) patch.potentialSeverity = b.potentialSeverity ?? null
+    if (hasOwn(b, 'experiencePersonName'))
+      patch.experiencePersonName = stripEmpty(b.experiencePersonName)
     if (hasOwn(b, 'severityRating')) patch.severityRating = b.severityRating ?? null
     assertPatchNotEmpty(patch)
 
@@ -497,7 +514,11 @@ const INCIDENT_BODY: Json = {
     medicalAttentionReceived: { type: 'boolean', default: false },
     hospitalName: { type: 'string' },
     actualSeverity: { type: 'integer', minimum: 1, maximum: 5 },
+    processExperience: { type: 'integer', minimum: 1, maximum: 5 },
+    crewResponse: { type: 'integer', minimum: 1, maximum: 5 },
+    siteConditions: { type: 'integer', minimum: 1, maximum: 5 },
     potentialSeverity: { type: 'integer', minimum: 1, maximum: 5 },
+    experiencePersonName: { type: 'string', maxLength: 200 },
     severityRating: { type: 'integer', minimum: 1, maximum: 5 },
   },
 }
