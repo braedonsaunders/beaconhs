@@ -1,0 +1,113 @@
+diff --git a/custom-query.d.ts b/custom-query.d.ts
+index d1cf1017068f2c4263f17af436a950343fdb0053..ad84c1d1d9a87367e91d2caaa26b876e47439212 100644
+--- a/custom-query.d.ts
++++ b/custom-query.d.ts
+@@ -32,6 +32,8 @@ export type ReportCustomQuery = {
+         direction: 'asc' | 'desc';
+     }[] | null;
+     columnLabels?: Record<string, string> | null;
++    /** Preferred pixel widths (40–1200), scaled together to fit the page. */
++    columnWidths?: Record<string, number> | null;
+     limit?: number | null;
+     /** Sectioned-summarize totals: per-section subtotal rows at the first
+      *  non-section breakout level, and/or a final Grand totals group across all
+diff --git a/custom-query.js b/custom-query.js
+index 106274c91a9c0376e71d0db294c51aaccbf2c1b6..992761a7a59734a29e687f80ca3b4327357c88cf 100644
+--- a/custom-query.js
++++ b/custom-query.js
+@@ -9,6 +9,12 @@ export function compileCustomReport(query, tenantId, catalog, options = {}) {
+     const entity = catalog.entities.find((item) => item.key === query.entity);
+     if (!entity)
+         throw new Error(`Unknown report entity "${query.entity}"`);
++    if (query.columnWidths != null) {
++        if (typeof query.columnWidths !== 'object' || Array.isArray(query.columnWidths)) throw new Error('Column widths must be a map.');
++        for (const width of Object.values(query.columnWidths)) {
++            if (typeof width !== 'number' || !Number.isInteger(width) || width < 40 || width > 1200) throw new Error('Column width must be a whole number from 40 to 1200 pixels.');
++        }
++    }
+     assertVisibleQueryColumns(entity, query);
+     return query.mode === 'summarize'
+         ? compileSummary(entity, query, tenantId, options)
+@@ -32,7 +38,7 @@ function compileRows(entity, query, tenantId, options) {
+         .flatMap((sort) => { const expression = reportColumnExpression(entity, sort.column); return expression ? [`${expression} ${sort.direction.toUpperCase()} NULLS LAST`] : []; }).slice(0, 3);
+     const limit = resolveLimit(query.limit, options.maxRows);
+     const sql = [`SELECT ${selectKeys.map((key) => `${reportColumnExpression(entity, key)} AS "${key}"`).join(', ')}`, `FROM ${reportEntityFrom(entity)}`, `WHERE ${where.join(' AND ')}`, sorts.length ? `ORDER BY ${sorts.join(', ')}` : '', `LIMIT ${limit + 1}`].filter(Boolean).join('\n');
+-    const columns = keys.map((key) => toOutputColumn(entity, key, query.columnLabels?.[key]));
++    const columns = keys.map((key) => ({ ...toOutputColumn(entity, key, query.columnLabels?.[key]), ...(query.columnWidths?.[key] == null ? {} : { width: query.columnWidths[key] }) }));
+     return { sql, params: parameters.values, mode: 'rows', columns, groupBy, limit };
+ }
+ function compileSummary(entity, query, tenantId, options) {
+diff --git a/document-render.js b/document-render.js
+index 81fe46e896f586dfdfd76870232560fcd9cf04d8..c3b73d53dbeed665a160f17c51970af4a42aacc8 100644
+--- a/document-render.js
++++ b/document-render.js
+@@ -288,6 +288,10 @@ export function renderReportDocumentBodyHtml(input) {
+           <div class="empty">${escapeHtml(translate('No data.'))}</div>
+         </section>`;
+         }
++        const hasWidths = g.columns.some((column) => typeof column !== 'string' && Number.isInteger(column.width) && column.width >= 40 && column.width <= 1200);
++        const widths = g.columns.map((column) => typeof column !== 'string' && Number.isInteger(column.width) && column.width >= 40 && column.width <= 1200 ? column.width : 160);
++        const totalWidth = widths.reduce((sum, width) => sum + width, 0);
++        const colgroup = hasWidths ? `<colgroup>${widths.map((width) => `<col style="width:${100 * width / totalWidth}%">`).join('')}</colgroup>` : '';
+         const columnAlign = g.columns.map((column) => {
+             if (typeof column === 'string')
+                 return 'left';
+@@ -314,7 +318,8 @@ export function renderReportDocumentBodyHtml(input) {
+             .join('');
+         return `<section class="group">
+         ${titleHtml}
+-        <table>
++        <table${hasWidths ? ' style="table-layout:fixed"' : ''}>
++          ${colgroup}
+           <thead><tr>${head}</tr></thead>
+           <tbody>${body}</tbody>
+         </table>
+diff --git a/report-studio.js b/report-studio.js
+index 6509c87d8f14829edba14974e9f4959bb8220ca2..3af144f98b6b0351434e527802c9de114234fb34 100644
+--- a/report-studio.js
++++ b/report-studio.js
+@@ -160,17 +160,30 @@ function RowsBuilder({ entity, query, onChange }) {
+     const [columnSearch, setColumnSearch] = React.useState('');
+     const selected = query.columns;
+     const labels = query.columnLabels ?? {};
++    const widths = query.columnWidths ?? {};
+     const search = columnSearch.trim().toLowerCase();
+     const columns = visibleReportColumns(entity);
+     const available = columns.filter((column) => !selected.includes(column.key) && (!search || `${column.label} ${column.key}`.toLowerCase().includes(search)));
+-    const setColumns = (columns) => onChange({ ...query, columns, columnLabels: Object.fromEntries(Object.entries(labels).filter(([key]) => columns.includes(key))) });
++    const setColumns = (columns) => onChange({ ...query, columns, columnWidths: Object.fromEntries(Object.entries(widths).filter(([key]) => columns.includes(key))), columnLabels: Object.fromEntries(Object.entries(labels).filter(([key]) => columns.includes(key))) });
+     const move = (index, delta) => { const target = index + delta; if (target < 0 || target >= selected.length)
+         return; const columns = [...selected]; [columns[index], columns[target]] = [columns[target], columns[index]]; setColumns(columns); };
+     const setLabel = (key, value) => { const next = { ...labels }; if (value.trim())
+         next[key] = value;
+     else
+         delete next[key]; onChange({ ...query, columnLabels: next }); };
+-    return _jsxs(BuilderSection, { title: "Columns", icon: _jsx(Columns3, {}), children: [_jsxs("div", { className: "relative", children: [_jsx(Search, { size: 13, className: "pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-fg-subtle" }), _jsx(Input, { value: columnSearch, onChange: (event) => setColumnSearch(event.target.value), placeholder: "Search columns", className: "h-8 pl-7 text-xs" })] }), _jsxs("div", { className: "flex flex-wrap gap-1.5", children: [_jsx(Button, { type: "button", variant: "outline", size: "sm", onClick: () => setColumns(defaultColumnsFor(entity)), children: "Defaults" }), _jsx(Button, { type: "button", variant: "outline", size: "sm", onClick: () => setColumns(columns.map((column) => column.key)), children: "All" }), _jsx(Button, { type: "button", variant: "ghost", size: "sm", onClick: () => setColumns([]), children: "Clear" })] }), selected.length === 0 ? _jsx("p", { className: "text-xs text-danger", children: "Select at least one column." }) : _jsx("ul", { className: "space-y-1", children: selected.map((key, index) => { const column = reportColumn(entity, key); return _jsxs("li", { className: "flex items-center gap-1.5", children: [_jsx("span", { className: "min-w-0 flex-1 truncate rounded-md border border-border bg-bg-subtle px-2 py-1 text-xs text-fg", children: column?.label ?? key }), _jsx(Input, { className: "h-7 w-32 text-xs", value: labels[key] ?? '', onChange: (event) => setLabel(key, event.target.value), placeholder: "Label override" }), _jsx("button", { type: "button", onClick: () => move(index, -1), disabled: index === 0, "aria-label": "Move column up", className: "rounded p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg disabled:opacity-30", children: _jsx(ChevronUp, { size: 14 }) }), _jsx("button", { type: "button", onClick: () => move(index, 1), disabled: index === selected.length - 1, "aria-label": "Move column down", className: "rounded p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg disabled:opacity-30", children: _jsx(ChevronDown, { size: 14 }) }), _jsx("button", { type: "button", onClick: () => setColumns(selected.filter((columnKey) => columnKey !== key)), "aria-label": "Remove column", className: "rounded p-1 text-fg-subtle hover:bg-danger-subtle hover:text-danger", children: _jsx(X, { size: 14 }) })] }, key); }) }), available.length ? _jsx("div", { className: "flex max-h-48 flex-wrap gap-1.5 overflow-y-auto pt-1", children: available.map((column) => _jsx("button", { type: "button", onClick: () => setColumns([...selected, column.key]), className: "rounded-full border border-border px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-primary hover:text-primary", children: _jsxs("span", { className: "inline-flex items-center gap-1", children: [_jsx(Plus, { size: 11 }), column.label] }) }, column.key)) }) : search ? _jsx("p", { className: "text-xs text-fg-subtle", children: "No columns match." }) : null, _jsx(Field, { label: "Group rows into sections", children: _jsx(SearchSelect, { value: query.groupBy ?? '', onChange: (groupBy) => onChange({ ...query, groupBy: groupBy || null }), options: [{ value: '', label: 'No grouping' }, ...columns.map((column) => ({ value: column.key, label: column.label }))] }) })] });
++    return _jsxs(BuilderSection, { title: "Columns", icon: _jsx(Columns3, {}), children: [_jsxs("div", { className: "relative", children: [_jsx(Search, { size: 13, className: "pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-fg-subtle" }), _jsx(Input, { value: columnSearch, onChange: (event) => setColumnSearch(event.target.value), placeholder: "Search columns", className: "h-8 pl-7 text-xs" })] }), _jsxs("div", { className: "flex flex-wrap gap-1.5", children: [_jsx(Button, { type: "button", variant: "outline", size: "sm", onClick: () => setColumns(defaultColumnsFor(entity)), children: "Defaults" }), _jsx(Button, { type: "button", variant: "outline", size: "sm", onClick: () => setColumns(columns.map((column) => column.key)), children: "All" }), _jsx(Button, { type: "button", variant: "ghost", size: "sm", onClick: () => setColumns([]), children: "Clear" })] }), selected.length === 0 ? _jsx("p", { className: "text-xs text-danger", children: "Select at least one column." }) : _jsx("ul", { className: "space-y-1", children: selected.map((key, index) => { const column = reportColumn(entity, key); return _jsxs("li", { className: "flex flex-wrap items-end gap-1.5", children: [_jsx("span", { className: "min-w-0 basis-full truncate rounded-md border border-border bg-bg-subtle px-2 py-1 text-xs text-fg", children: column?.label ?? key }), _jsx(Input, { className: "h-7 min-w-0 flex-1 text-xs", "aria-label": `Label override for ${column?.label ?? key}`, value: labels[key] ?? '', onChange: (event) => setLabel(key, event.target.value), placeholder: "Label override" }), _jsx(ColumnWidthInput, { columnKey: key, label: column?.label ?? key, value: widths[key], onChange: (width) => { const next = { ...widths }; if (width == null) delete next[key]; else next[key] = width; onChange({ ...query, columnWidths: next }); } }), _jsx("button", { type: "button", onClick: () => move(index, -1), disabled: index === 0, "aria-label": "Move column up", className: "rounded p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg disabled:opacity-30", children: _jsx(ChevronUp, { size: 14 }) }), _jsx("button", { type: "button", onClick: () => move(index, 1), disabled: index === selected.length - 1, "aria-label": "Move column down", className: "rounded p-1 text-fg-subtle hover:bg-surface-hover hover:text-fg disabled:opacity-30", children: _jsx(ChevronDown, { size: 14 }) }), _jsx("button", { type: "button", onClick: () => setColumns(selected.filter((columnKey) => columnKey !== key)), "aria-label": "Remove column", className: "rounded p-1 text-fg-subtle hover:bg-danger-subtle hover:text-danger", children: _jsx(X, { size: 14 }) })] }, key); }) }), available.length ? _jsx("div", { className: "flex max-h-48 flex-wrap gap-1.5 overflow-y-auto pt-1", children: available.map((column) => _jsx("button", { type: "button", onClick: () => setColumns([...selected, column.key]), className: "rounded-full border border-border px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-primary hover:text-primary", children: _jsxs("span", { className: "inline-flex items-center gap-1", children: [_jsx(Plus, { size: 11 }), column.label] }) }, column.key)) }) : search ? _jsx("p", { className: "text-xs text-fg-subtle", children: "No columns match." }) : null, _jsx(Field, { label: "Group rows into sections", children: _jsx(SearchSelect, { value: query.groupBy ?? '', onChange: (groupBy) => onChange({ ...query, groupBy: groupBy || null }), options: [{ value: '', label: 'No grouping' }, ...columns.map((column) => ({ value: column.key, label: column.label }))] }) })] });
++}
++function ColumnWidthInput({ columnKey, label, value, onChange }) {
++    const [draft, setDraft] = React.useState(value == null ? '' : String(value));
++    React.useEffect(() => setDraft(value == null ? '' : String(value)), [value, columnKey]);
++    const valid = draft === '' || (Number.isInteger(Number(draft)) && Number(draft) >= 40 && Number(draft) <= 1200);
++    return _jsxs("label", { className: "shrink-0 text-[10px] text-fg-muted", children: ["Width (px)", _jsx(Input, {
++        type: "number", min: 40, max: 1200, step: 1, placeholder: "Auto", value: draft,
++        className: "h-7 w-16 text-xs", "aria-label": `Width (px) for ${label}`, "aria-invalid": !valid,
++        title: "40–1200 pixels. Blank uses Auto. Widths scale together to fit the page.",
++        onChange: (event) => { const next = event.target.value; setDraft(next); if (next === '') onChange(undefined); else if (Number.isInteger(Number(next)) && Number(next) >= 40 && Number(next) <= 1200) onChange(Number(next)); },
++        onBlur: () => { if (!valid) setDraft(value == null ? '' : String(value)); }
++    })] });
+ }
+ function SummaryBuilder({ entity, query, onChange }) {
+     const breakouts = query.breakouts ?? [], measures = query.measures ?? [];
+diff --git a/types.d.ts b/types.d.ts
+index c07278dc07b81dbf6ca59fab1ca7a3438e8ab30e..ebba9c88f14f5376d2d2ad517495a2bac4397f8b 100644
+--- a/types.d.ts
++++ b/types.d.ts
+@@ -13,6 +13,7 @@ export type ReportColumn = {
+     label: string;
+     semanticType: SemanticType;
+     align?: 'left' | 'center' | 'right';
++    width?: number;
+     /**
+      * Value → tone, matched case-insensitively against the cell's rendered text.
+      * Lets a status column read at a glance ("expired" red, "expiring" amber)

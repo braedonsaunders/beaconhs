@@ -346,7 +346,7 @@ Seeded and team-created reports use the same editable report definition. There i
 
 1. Open any report and click **Edit report**, or click **New report**.
 2. Choose the **Data source**. Reports and Insights use the same source catalogue, so every source available in the Insights Card editor is also available here.
-3. Select and order the columns. Relationship fields show names, references, courses, employees, and locations instead of database IDs. Internal API, credential, tenant, and storage tables are not report sources.
+3. On **Data**, select and order the **Columns**. Beside **Label override**, use **Width (px)** to enter a whole number from 40 to 1200. Clear it for **Auto**. Larger widths give a column more space; widths scale together to fit the preview and PDF page. Columns left on Auto use a standard share when another column has a width. Widths stay with the column when you reorder it and are removed when you remove the column. Relationship fields show names, references, courses, employees, and locations instead of database IDs. Internal API, credential, tenant, and storage tables are not report sources.
 4. Set the saved filters, grouping, and sorting.
 5. Under **Page setup**, choose **Letter**, **A4**, or **Legal**, **Portrait** or **Landscape**, the page margin, row density, and whether to show summary cards.
 6. Check the live paper preview.

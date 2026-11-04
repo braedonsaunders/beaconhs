@@ -28,6 +28,9 @@ patchedDependencies:
   '@braedonsaunders/appkit-pdf@0.7.0':
     hash: 62cbd29812e95ab92842223be06c4fc358fc46b95c27376e9a6bc35365303403
     path: patches/@braedonsaunders__appkit-pdf@0.7.0.patch
+  '@braedonsaunders/appkit-reports@2.0.1':
+    hash: ee5ac421e642a58a3af5806ef4dafb1e1f6994d6e3b7644cf3d6186a3a25c351
+    path: patches/@braedonsaunders__appkit-reports@2.0.1.patch
   next@16.4.1:
     hash: c7ea536d227a9bdc8f0e0c7cab2dd6dd458c0ab68e48f4275b78f711da6444e0
     path: patches/next@16.4.1.patch
@@ -963,7 +966,7 @@ importers:
         version: link:../db
       '@braedonsaunders/appkit-reports':
         specifier: ^2.0.1
-        version: 2.0.1(@braedonsaunders/appkit-ui@0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
+        version: 2.0.1(patch_hash=ee5ac421e642a58a3af5806ef4dafb1e1f6994d6e3b7644cf3d6186a3a25c351)(@braedonsaunders/appkit-ui@0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
       '@braedonsaunders/appkit-ui':
         specifier: ^0.3.0
         version: 0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)
@@ -9470,7 +9473,7 @@ snapshots:
       lucide-react: 1.24.0(react@19.2.7)
       react: 19.2.7
 
-  '@braedonsaunders/appkit-reports@2.0.1(@braedonsaunders/appkit-ui@0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)':
+  '@braedonsaunders/appkit-reports@2.0.1(patch_hash=ee5ac421e642a58a3af5806ef4dafb1e1f6994d6e3b7644cf3d6186a3a25c351)(@braedonsaunders/appkit-ui@0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@braedonsaunders/appkit-analytics': 0.2.0
     optionalDependencies:

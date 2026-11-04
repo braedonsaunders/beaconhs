@@ -71,6 +71,8 @@ peerDependencyRules:
     '@radix-ui/react-presence@1.0.0>react-dom': '19.2.7'
 
 patchedDependencies:
+  # Persist column widths in the shared report studio and canonical preview/PDF renderer.
+  '@braedonsaunders/appkit-reports@2.0.1': patches/@braedonsaunders__appkit-reports@2.0.1.patch
   # Preserve clockwise PDF page rotation when composing books.
   '@braedonsaunders/appkit-pdf@0.7.0': patches/@braedonsaunders__appkit-pdf@0.7.0.patch
   # Compression redirects drain registrations to Gzip; removals must follow
