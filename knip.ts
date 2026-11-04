@@ -4,7 +4,7 @@ const config: KnipConfig = {
   $schema: 'https://unpkg.com/knip@5/schema.json',
   workspaces: {
     '.': {
-      entry: ['deploy/collabora-branding.js'],
+      entry: ['deploy/collabora-branding.js', 'scripts/ci/verify-worker-report-runtime.mjs'],
     },
     'apps/web': {
       entry: [

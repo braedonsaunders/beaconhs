@@ -670,8 +670,8 @@ importers:
         specifier: workspace:*
         version: link:../forms-core
       '@braedonsaunders/appkit-reports':
-        specifier: ^1.2.0
-        version: 1.2.0(@braedonsaunders/appkit-ui@0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
+        specifier: ^2.0.1
+        version: 2.0.1(patch_hash=ee5ac421e642a58a3af5806ef4dafb1e1f6994d6e3b7644cf3d6186a3a25c351)(@braedonsaunders/appkit-ui@0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.28.17)(mysql2@3.24.4(@types/node@24.13.3))(pg@8.22.0)(postgres@3.4.9)
@@ -1534,21 +1534,6 @@ packages:
       puppeteer-core:
         optional: true
 
-  '@braedonsaunders/appkit-reports@1.2.0':
-    resolution: {integrity: sha512-8laOhBj1rSMSkV/VaDi8Brx5G+5iRoP6hm8jwLrfZBoRlreM0KTcIijS0rlRzSVSETI/UUsrnDBE0fMV5kowTQ==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      '@braedonsaunders/appkit-ui': ^0.2.1
-      lucide-react: ^1.24.0
-      react: ^19.0.0
-    peerDependenciesMeta:
-      '@braedonsaunders/appkit-ui':
-        optional: true
-      lucide-react:
-        optional: true
-      react:
-        optional: true
-
   '@braedonsaunders/appkit-reports@2.0.1':
     resolution: {integrity: sha512-So8SXv3CRbL/6rXb7mcGYu+SFRSPhoOlOveDYb/omj0Tm+KUE3/WyV3ZXkaxTRM4X6KWSilAj7JG81/1nbK7SA==}
     engines: {node: '>=22'}
@@ -1569,13 +1554,6 @@ packages:
     engines: {node: '>=22'}
     peerDependencies:
       tailwindcss: ^4.0.0
-
-  '@braedonsaunders/appkit-ui@0.2.1':
-    resolution: {integrity: sha512-M4MLSkyVRhR7iq+J1xeFtXBZESD0HLrDQlrh7hj6SVRir4K+vteLWHhjoII2v0SdKjR7EFyFEZMGwv8WBuaa7Q==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      react: ^19.0.0
-      react-dom: ^19.0.0
 
   '@braedonsaunders/appkit-ui@0.3.0':
     resolution: {integrity: sha512-FqNS1ZnLWgY2M7i4iYiRVeYWUdK67Lz+YWBlZm4JoitAQynPaz+uljOhx+ArDrGEhavjoWmkOJaE25QIhM9jrw==}
@@ -6049,20 +6027,6 @@ packages:
       react-dom:
         optional: true
 
-  framer-motion@12.43.0:
-    resolution: {integrity: sha512-1eaL3RvR/kAlbG7UYcpMptEyzPoENO0c6w7ZnB3/hh2vSAz/6uGAFn6fdoqTBguNstf3MsFhJHsD/0DHiclG+g==}
-    peerDependencies:
-      '@emotion/is-prop-valid': '*'
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@emotion/is-prop-valid':
-        optional: true
-      react:
-        optional: true
-      react-dom:
-        optional: true
-
   framer-motion@14.1.0:
     resolution: {integrity: sha512-QsdZSdWoyQfUmgi+GZfow8Du5COG6VRYEo9FlgKUPgH87/Le/fYekHCAKwLdYKHdCZcZfWHg4iOxlD6RoqXciQ==}
     peerDependencies:
@@ -7154,9 +7118,6 @@ packages:
   motion-dom@12.42.2:
     resolution: {integrity: sha512-5gIMWLp/PycBtJRJWRgjxke5n8dlvkSn2DrYW+tr3XcqAZY1xZh6BJyooJXCM8wdfM7wfMjkBJNLge1CKPUIRA==}
 
-  motion-dom@12.43.0:
-    resolution: {integrity: sha512-azKON4d9S65PEoFUiQTMTgPheEmzf2QngdRc50AKfJp9Q9mmcBVw22c8eMq9k8kxOFHdL7+WZY7N/5F/lwiDag==}
-
   motion-dom@14.1.0:
     resolution: {integrity: sha512-FyFLkNUAAETzCvf851mZcl+v+kaZrKq+UM+XmkY4G8n+ny/WYfiWh9j0fhSQ1KOKVQrM9/cLO11THO2k71HJlg==}
 
@@ -8226,9 +8187,6 @@ packages:
 
   tailwind-merge@3.6.0:
     resolution: {integrity: sha512-uxL7qAVQriqRQPAyK3pj66VqskWqoZ37PW94jwOTwNfq/z9oyu1V+eqrZqtR2+fCiXdYOZe/Modt8GtvqNzu+w==}
-
-  tailwind-merge@3.7.0:
-    resolution: {integrity: sha512-XPPUyAc+cvspz3lHTcR/QgPfW2A0lv/xQNIjX3HGhLR+Nq2lHaLq5MtTesHn8GUr3W3DguT2KT5x3NVgRtYwmA==}
 
   tailwindcss@4.3.2:
     resolution: {integrity: sha512-WtctNNSH8A9jlMIqxzuYumOHU5uGZyRv0Q5svQl+oEPy5w84YpBxdb7MdqyiSPQge5jTJ6zFQLq0PFygdccSBA==}
@@ -9465,14 +9423,6 @@ snapshots:
     transitivePeerDependencies:
       - tailwindcss
 
-  '@braedonsaunders/appkit-reports@1.2.0(@braedonsaunders/appkit-ui@0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@braedonsaunders/appkit-analytics': 0.2.0
-    optionalDependencies:
-      '@braedonsaunders/appkit-ui': 0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)
-      lucide-react: 1.24.0(react@19.2.7)
-      react: 19.2.7
-
   '@braedonsaunders/appkit-reports@2.0.1(patch_hash=ee5ac421e642a58a3af5806ef4dafb1e1f6994d6e3b7644cf3d6186a3a25c351)(@braedonsaunders/appkit-ui@0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@braedonsaunders/appkit-analytics': 0.2.0
@@ -9484,21 +9434,6 @@ snapshots:
   '@braedonsaunders/appkit-tokens@0.1.2(tailwindcss@4.3.2)':
     dependencies:
       tailwindcss: 4.3.2
-
-  '@braedonsaunders/appkit-ui@0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)':
-    dependencies:
-      '@braedonsaunders/appkit-tokens': 0.1.2(tailwindcss@4.3.2)
-      class-variance-authority: 0.7.1
-      clsx: 2.1.1
-      framer-motion: 12.43.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      lucide-react: 1.24.0(react@19.2.7)
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-      tailwind-merge: 3.7.0
-    transitivePeerDependencies:
-      - '@emotion/is-prop-valid'
-      - tailwindcss
-    optional: true
 
   '@braedonsaunders/appkit-ui@0.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)':
     dependencies:
@@ -13728,16 +13663,6 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  framer-motion@12.43.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
-    dependencies:
-      motion-dom: 12.43.0
-      motion-utils: 12.39.0
-      tslib: 2.8.1
-    optionalDependencies:
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-    optional: true
-
   framer-motion@14.1.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       motion-dom: 14.1.0
@@ -15064,11 +14989,6 @@ snapshots:
     dependencies:
       motion-utils: 12.39.0
 
-  motion-dom@12.43.0:
-    dependencies:
-      motion-utils: 12.39.0
-    optional: true
-
   motion-dom@14.1.0:
     dependencies:
       motion-utils: 14.1.0
@@ -16337,9 +16257,6 @@ snapshots:
   symbol-tree@3.2.4: {}
 
   tailwind-merge@3.6.0: {}
-
-  tailwind-merge@3.7.0:
-    optional: true
 
   tailwindcss@4.3.2: {}
 

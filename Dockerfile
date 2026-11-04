@@ -52,6 +52,9 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     npm_config_node_linker=hoisted \
     pnpm --filter=@beaconhs/worker --config.inject-workspace-packages=true \
     deploy --prod --offline /prod/worker
+# Workspace bundling leaves npm imports external. Verify the library selected
+# by the packaged worker, not just the version tested inside the workspace.
+RUN node scripts/ci/verify-worker-report-runtime.mjs /prod/worker
 
 # --- Runtime ---
 FROM base AS runner

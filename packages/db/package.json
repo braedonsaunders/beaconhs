@@ -30,7 +30,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@braedonsaunders/appkit-reports": "^1.2.0",
+    "@braedonsaunders/appkit-reports": "^2.0.1",
     "@beaconhs/forms-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9",
