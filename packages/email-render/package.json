@@ -16,7 +16,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "isomorphic-dompurify": "^3.18.0"
+    "isomorphic-dompurify": "^4.6.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

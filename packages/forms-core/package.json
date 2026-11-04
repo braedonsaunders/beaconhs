@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@beaconhs/i18n": "workspace:*",
-    "isomorphic-dompurify": "^3.18.0",
+    "isomorphic-dompurify": "^4.6.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
