@@ -1,3 +1,4 @@
+import { appBaseUrl } from '@/lib/app-base-url'
 // GET /apps/by-key/:key/fill
 //
 // Stable deep-link for a built-in form by its per-tenant key (e.g.
@@ -16,7 +17,7 @@ import { templateAccessWhere } from '@/app/(app)/apps/_lib/access'
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ key: string }> },
 ): Promise<Response> {
   const { key } = await params
@@ -41,5 +42,7 @@ export async function GET(
   if (!id) {
     return NextResponse.json({ error: `No form template with key "${key}"` }, { status: 404 })
   }
-  return NextResponse.redirect(new URL(`/apps/templates/${id}/records`, req.url), { status: 307 })
+  return NextResponse.redirect(new URL(`/apps/templates/${id}/records`, appBaseUrl()), {
+    status: 307,
+  })
 }

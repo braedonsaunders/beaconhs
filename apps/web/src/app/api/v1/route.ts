@@ -1,3 +1,4 @@
+import { appBaseUrl } from '@/lib/app-base-url'
 // GET /api/v1 — unauthenticated service discovery: version, where the docs and
 // spec live, and the list of readable entities with their endpoints + permissions.
 
@@ -31,7 +32,7 @@ export const runtime = 'nodejs'
 
 export async function GET(req: Request): Promise<NextResponse> {
   try {
-    const origin = new URL(req.url).origin
+    const origin = appBaseUrl()
     const authHeader = req.headers.get('authorization') ?? req.headers.get('Authorization')
     let builderApps = null
     let rateLimitHeaders: Record<string, string> = {}

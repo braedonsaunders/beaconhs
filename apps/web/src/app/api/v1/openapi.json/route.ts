@@ -1,3 +1,4 @@
+import { appBaseUrl } from '@/lib/app-base-url'
 // GET /api/v1/openapi.json — the generated OpenAPI 3.1 document. Without auth
 // it serves the static API surface plus generic Builder app paths. With a valid
 // Bearer token it enriches the spec with that tenant's concrete published
@@ -17,7 +18,7 @@ export const runtime = 'nodejs'
 
 export async function GET(req: Request): Promise<NextResponse> {
   try {
-    const origin = new URL(req.url).origin
+    const origin = appBaseUrl()
     const authHeader = req.headers.get('authorization') ?? req.headers.get('Authorization')
     if (!authHeader) {
       return NextResponse.json(buildOpenApiDocument(origin), {

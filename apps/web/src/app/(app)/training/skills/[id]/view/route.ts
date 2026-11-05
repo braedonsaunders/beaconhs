@@ -1,3 +1,4 @@
+import { appBaseUrl } from '@/lib/app-base-url'
 import { and, desc, eq, isNull, ilike, or } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import {
@@ -84,5 +85,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       summary: 'Viewed uploaded skill credential',
       metadata: { attachmentId: result.attachmentId },
     })
-  return NextResponse.redirect(new URL(result.href, request.url))
+  return NextResponse.redirect(new URL(result.href, appBaseUrl()))
 }

@@ -1,3 +1,4 @@
+import { appBaseUrl } from '@/lib/app-base-url'
 // Card studio "Preview PDF" — renders the POSTed (possibly unsaved) design
 // through the same renderer the live credential routes use, with sample data
 // and the tenant's real name/logo, and streams the PDF back inline.
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
     return row ?? null
   })
 
-  const verifyUrl = `${new URL(request.url).origin}/verify/sample`
+  const verifyUrl = `${appBaseUrl()}/verify/sample`
   const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
     errorCorrectionLevel: 'M',
     margin: 2,

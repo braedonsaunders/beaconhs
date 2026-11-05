@@ -1,3 +1,6 @@
-export function GET(request: Request): Response {
-  return Response.redirect(new URL('/icon0.svg', request.url), 308)
+import { appBaseUrl } from '@/lib/app-base-url'
+
+export const dynamic = 'force-dynamic'
+export function GET(): Response {
+  return Response.redirect(new URL('/icon0.svg', appBaseUrl()), 308)
 }
