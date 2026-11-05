@@ -155,12 +155,13 @@ export async function checkInEquipmentInTx(
     itemId: string
     expectedCheckoutId?: string
     actorTenantUserId: string | null
-    actorPersonId: string | null
-    canManage: boolean
+    canCheckIn: boolean
     condition: 'good' | 'fair' | 'damaged' | 'unusable'
     notes: string | null
   },
 ) {
+  if (!args.canCheckIn)
+    throw new EquipmentCustodyError('Forbidden: equipment check-in permission required')
   const [item] = await lockEquipmentCustodyRows(tx, [args.itemId])
   if (!item || item.deletedAt) throw new EquipmentCustodyError('Equipment item not found')
   const [checkout] = await tx
@@ -172,12 +173,6 @@ export async function checkInEquipmentInTx(
     .limit(1)
     .for('update')
   if (args.expectedCheckoutId && checkout?.id !== args.expectedCheckoutId) return null
-  if (
-    !args.canManage &&
-    (!args.actorPersonId ||
-      (checkout?.holderPersonId ?? item.currentHolderPersonId) !== args.actorPersonId)
-  )
-    throw new EquipmentCustodyError('Forbidden: you can only check in equipment issued to you')
   if (!item.isCheckedOut) return null
   const [home] = await tx
     .select({ id: orgUnits.id, name: orgUnits.name })

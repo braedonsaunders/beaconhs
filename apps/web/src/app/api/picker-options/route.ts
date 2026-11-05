@@ -347,8 +347,10 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'vehicle-drivers':
       return canAny('equipment.manage', 'equipment.vehicle-log.update.own')
     case 'equipment-custody-holders':
+      return canAny('equipment.custody', 'equipment.manage')
     case 'equipment-station-holders':
     case 'equipment-station-locations':
+      return can(ctx, 'equipment.custody')
     case 'equipment-reminder-assignees':
     case 'equipment-reminder-items':
       return can(ctx, 'equipment.manage')

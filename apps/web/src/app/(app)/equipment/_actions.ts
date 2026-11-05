@@ -24,7 +24,7 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
-import { assertCan, can } from '@beaconhs/tenant'
+import { assertCan } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireExportContext, requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
@@ -447,15 +447,14 @@ export async function bulkExportEquipmentCsv(args: {
 // available (when it's still in service). Condition defaults to "good" when the
 // caller doesn't supply one (the dashboard one-tap case).
 //
-// Permission model: equipment.manage may close any checkout; everyone else may
-// only check in equipment currently checked out to their own person record —
-// the dashboard widget's entire audience.
+// Check-in and check-out use the dedicated equipment.custody permission.
+// This does not grant equipment editing or management.
 
 const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
 
 export async function checkInEquipment(formData: FormData) {
   const ctx = await requireRequestContext()
-  const canManage = ctx.isSuperAdmin || can(ctx, 'equipment.manage')
+  assertCan(ctx, 'equipment.custody')
   const checkoutId = optionalUuidInput(formData.get('id'), 'Check-out')
   const requestedItemId = optionalUuidInput(formData.get('itemId'), 'Equipment item')
   if (!checkoutId && !requestedItemId) throw new Error('Select equipment to check in')
@@ -484,8 +483,7 @@ export async function checkInEquipment(formData: FormData) {
       itemId,
       expectedCheckoutId: checkoutId ?? undefined,
       actorTenantUserId: ctx.membership?.id ?? null,
-      actorPersonId: ctx.personId,
-      canManage,
+      canCheckIn: true,
       condition,
       notes,
     })

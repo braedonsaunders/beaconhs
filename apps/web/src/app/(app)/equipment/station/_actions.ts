@@ -24,7 +24,7 @@ export async function searchStation(
   match: 'search' | 'code' = 'search',
 ): Promise<StationSearchResults> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
+  assertCan(ctx, 'equipment.custody')
   return ctx.db((tx) =>
     searchStationCore(
       tx,
@@ -37,7 +37,7 @@ export async function searchStation(
 
 export async function performStationScan(input: StationScanInput): Promise<StationScanResult> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
+  assertCan(ctx, 'equipment.custody')
   const parsed = parseStationScanInput(input)
   if (!parsed) return { ok: false, error: 'Invalid station scan' }
 

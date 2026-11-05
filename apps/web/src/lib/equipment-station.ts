@@ -434,8 +434,7 @@ export async function stationScanCore(
       tenantId: args.tenantId,
       itemId: item.id,
       actorTenantUserId: args.actorTenantUserId,
-      actorPersonId: null,
-      canManage: true,
+      canCheckIn: true,
       condition: args.condition ?? 'good',
       notes: args.returnedNotes ?? null,
     })

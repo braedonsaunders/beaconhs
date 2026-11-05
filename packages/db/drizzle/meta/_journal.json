@@ -687,6 +687,13 @@
       "when": 1793876460000,
       "tag": "0098_incident_create_shortcuts",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793898000000,
+      "tag": "0099_equipment_custody_permission",
+      "breakpoints": true
     }
   ]
 }

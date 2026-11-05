@@ -55,8 +55,8 @@ const args = {
   tenantId: 'tenant-a',
   itemId: item.id,
   actorTenantUserId: 'member-a',
-  actorPersonId: null,
-  canManage: true,
+
+  canCheckIn: true,
   condition: 'good' as const,
   notes: 'Returned to the shop',
 }
@@ -138,8 +138,8 @@ describe('equipment check-in', () => {
     await checkInEquipmentInTx(tx, {
       ...args,
       expectedCheckoutId: 'checkout-a',
-      canManage: false,
-      actorPersonId: 'person-a',
+      canCheckIn: true,
+
       condition: 'damaged',
     })
     expect(writes.find((w) => w.table === equipmentCheckouts)?.values).toMatchObject({
@@ -153,23 +153,23 @@ describe('equipment check-in', () => {
     })
   })
 
-  it('lets the current holder return equipment without a checkout ledger row', async () => {
+  it('returns equipment without a checkout ledger row', async () => {
     const { tx } = transaction([
       [{ ...item, currentHolderPersonId: 'person-a' }],
       [],
       [{ id: 'home', name: 'Shop' }],
       [{ ...item, isCheckedOut: false }],
     ])
-    await expect(
-      checkInEquipmentInTx(tx, { ...args, canManage: false, actorPersonId: 'person-a' }),
-    ).resolves.toMatchObject({ itemId: item.id })
+    await expect(checkInEquipmentInTx(tx, { ...args, canCheckIn: true })).resolves.toMatchObject({
+      itemId: item.id,
+    })
   })
 
-  it('rejects other workers before any mutation', async () => {
+  it('rejects an unauthorized return before any mutation', async () => {
     const { tx, writes } = transaction([[{ ...item, currentHolderPersonId: 'person-a' }], []])
-    await expect(
-      checkInEquipmentInTx(tx, { ...args, canManage: false, actorPersonId: 'person-b' }),
-    ).rejects.toThrow('Forbidden')
+    await expect(checkInEquipmentInTx(tx, { ...args, canCheckIn: false })).rejects.toThrow(
+      'Forbidden',
+    )
     expect(writes).toEqual([])
   })
 

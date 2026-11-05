@@ -113,3 +113,34 @@ describe('My PPE assigned gear', () => {
     expect(render([], null, false)).not.toContain('drawer=inspect-other')
   })
 })
+
+describe('My equipment custody permission', () => {
+  it('shows the station and return action only with the standard custody permission', () => {
+    const equipment: DashboardMetrics['myEquipment'] = [
+      {
+        id: 'unit',
+        checkoutId: 'loan',
+        name: 'Drill',
+        assetTag: 'UNIT-1',
+        typeName: 'Tool',
+        status: 'in_service',
+        nextInspectionDue: null,
+        expectedReturnOn: null,
+      },
+    ]
+    const renderEquipment = (allowed: boolean) =>
+      renderToStaticMarkup(
+        <WidgetCard
+          widgetId="personal-my-equipment"
+          data={{ myEquipment: equipment, canCheckEquipmentInOut: allowed } as DashboardMetrics}
+          todayIso="2026-11-05"
+        />,
+      )
+    const denied = renderEquipment(false)
+    expect(denied).not.toContain('/equipment/station')
+    expect(denied).not.toContain('value="loan"')
+    const allowed = renderEquipment(true)
+    expect(allowed).toContain('/equipment/station')
+    expect(allowed).toContain('value="loan"')
+  })
+})

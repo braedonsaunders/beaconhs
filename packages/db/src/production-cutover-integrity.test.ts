@@ -148,6 +148,7 @@ describe('production cutover migration integrity', () => {
       '0096_incident_reporting_metrics.sql',
       '0097_training_skill_type_files.sql',
       '0098_incident_create_shortcuts.sql',
+      '0099_equipment_custody_permission.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -252,6 +253,7 @@ describe('production cutover migration integrity', () => {
       { idx: 95, tag: '0096_incident_reporting_metrics' },
       { idx: 96, tag: '0097_training_skill_type_files' },
       { idx: 97, tag: '0098_incident_create_shortcuts' },
+      { idx: 98, tag: '0099_equipment_custody_permission' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)

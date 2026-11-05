@@ -77,6 +77,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'equipment.read.all': 'View all equipment',
   'equipment.read.site': 'View site equipment',
   'equipment.manage': 'Manage equipment',
+  'equipment.custody': 'Check equipment in/out',
   'equipment.vehicle-log.update.own': 'Edit own vehicle log',
   'equipment.inspect': 'Inspect equipment',
   'equipment.workorder.create': 'Open work orders',

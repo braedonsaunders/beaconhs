@@ -52,6 +52,7 @@ import {
 type MonthlySeries = ReadonlyArray<number | null>
 
 export type DashboardMetrics = {
+  canCheckEquipmentInOut: boolean
   // Headline tiles
   incidents30: number
   incidentsPrev30: number
@@ -1150,6 +1151,7 @@ export async function loadDashboardMetrics(
       myPpe,
       canInspectOtherPpe: can(ctx, 'ppe.inspect'),
       myEquipment,
+      canCheckEquipmentInOut: can(ctx, 'equipment.custody'),
       myCompliance,
       inProgressEntries,
     }

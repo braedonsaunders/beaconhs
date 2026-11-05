@@ -1,6 +1,6 @@
 import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
 import { setEquipmentDeleted } from '../_lifecycle-actions'
-import { transferLocation } from './_custody-actions'
+import { transferLocation, checkOutFromItem } from './_custody-actions'
 import { EquipmentTelemetryPanel } from '@/components/equipment-telemetry-panel'
 import { activePeopleWhere } from '@beaconhs/db'
 import { CompleteSchedule } from '../_complete-schedule'
@@ -151,11 +151,7 @@ import {
   type ScheduleEditing,
 } from '../_maintenance-drawers'
 import { createEquipmentWorkOrder } from '../work-orders/_lib'
-import {
-  equipmentIsCheckedOutSql,
-  lockEquipmentCustodyRows,
-  refreshEquipmentAvailability,
-} from '@/lib/equipment-custody'
+import { equipmentIsCheckedOutSql, refreshEquipmentAvailability } from '@/lib/equipment-custody'
 
 export const dynamic = 'force-dynamic'
 
@@ -292,103 +288,6 @@ async function reportFound(formData: FormData) {
   })
   revalidatePath(`/equipment/${id}`)
   redirect(`/equipment/${id}`)
-}
-
-async function checkOutFromItem(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
-  const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
-  const holderPersonId = optionalUuidInput(formData.get('holderPersonId'), 'Holder')
-  const destinationOrgUnitId = optionalUuidInput(
-    formData.get('destinationOrgUnitId'),
-    'Check-out destination',
-  )
-  if (!holderPersonId && !destinationOrgUnitId) {
-    throw new Error('Select a holder or a check-out destination')
-  }
-  const expectedReturnOn = optionalDateInput(
-    formData.get('expectedReturnOn'),
-    'Expected return date',
-  )
-  const notes = optionalTextInput(formData.get('notes'), 'Check-out notes', 2_000)
-
-  const coId = await ctx.db(async (tx) => {
-    // Serialize every checkout decision on the equipment row. The database
-    // partial-unique index is the final backstop; this lock gives the operator
-    // a useful domain error instead of a constraint error under normal races.
-    const [item] = await lockEquipmentCustodyRows(tx, [itemId])
-    if (!item || item.deletedAt) throw new Error('Equipment item not found')
-    if (item.status !== 'in_service') {
-      throw new Error(`Cannot check out: item is ${item.status.replace(/_/g, ' ')}`)
-    }
-    if (item.isMissing) throw new Error('Report this item found before checking it out')
-    if (item.isCheckedOut) throw new Error('Check this item in before checking it out again')
-    if (destinationOrgUnitId) {
-      const [destination] = await tx
-        .select({ id: orgUnits.id })
-        .from(orgUnits)
-        .where(and(eq(orgUnits.id, destinationOrgUnitId), isNull(orgUnits.deletedAt)))
-        .limit(1)
-      if (!destination) throw new Error('Select an active check-out destination')
-    }
-    if (holderPersonId) {
-      const [person] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.id, holderPersonId), activePeopleWhere()))
-        .limit(1)
-      if (!person) throw new Error('Select an active holder')
-    }
-
-    const now = new Date()
-    const [row] = await tx
-      .insert(equipmentCheckouts)
-      .values({
-        tenantId: ctx.tenantId,
-        equipmentItemId: itemId,
-        holderPersonId,
-        destinationOrgUnitId,
-        expectedReturnOn,
-        notes,
-        checkedOutByTenantUserId: ctx.membership?.id,
-      })
-      .returning({ id: equipmentCheckouts.id })
-    await tx
-      .update(equipmentItems)
-      .set({
-        currentHolderPersonId: holderPersonId,
-        currentSiteOrgUnitId: destinationOrgUnitId,
-        lastSeenHolderPersonId: holderPersonId,
-        lastSeenSiteOrgUnitId: destinationOrgUnitId,
-        lastSeenAt: now,
-        isAvailableForCheckout: false,
-      })
-      .where(eq(equipmentItems.id, itemId))
-    await tx.insert(equipmentLocationHistory).values({
-      tenantId: ctx.tenantId,
-      itemId,
-      siteOrgUnitId: destinationOrgUnitId,
-      holderPersonId,
-      recordedByTenantUserId: ctx.membership?.id,
-      recordedAt: now,
-      movementKind: 'check_out',
-      note: notes,
-    })
-    return row?.id
-  })
-  await recordAudit(ctx, {
-    entityType: 'equipment_checkout',
-    entityId: coId ?? undefined,
-    action: 'create',
-    summary: 'Checked equipment out',
-    after: { itemId, holderPersonId, destinationOrgUnitId, expectedReturnOn },
-  })
-  revalidatePath(`/equipment/${itemId}`)
-  revalidatePath('/equipment')
-  revalidatePath('/equipment/station')
-  revalidatePath('/dashboard')
-  redirect(`/equipment/${itemId}?tab=location&locationView=custody`)
 }
 
 // Returns issued or imported equipment through the same custody operation as
@@ -1077,14 +976,10 @@ export default async function EquipmentDetailPage({
   const canManageEquipment = canAdminEquipment && !item.deletedAt
   const canCreateWorkOrder = can(ctx, 'equipment.workorder.create') && !item.deletedAt
   const locked = !canManageEquipment || Boolean(item.deletedAt)
-  const canCheckIn =
-    !item.deletedAt &&
-    isCheckedOut &&
-    (canManageEquipment ||
-      (ctx.personId !== null &&
-        (openCheckout?.co.holderPersonId ?? item.currentHolderPersonId) === ctx.personId))
+  const canHandleCustody = can(ctx, 'equipment.custody') && !item.deletedAt
+  const canCheckIn = canHandleCustody && isCheckedOut
   const canTransferCustody = canManageEquipment && !openCheckout
-  const canCheckOut = canManageEquipment && !isCheckedOut && item.isAvailableForCheckout
+  const canCheckOut = canHandleCustody && !isCheckedOut && item.isAvailableForCheckout
 
   // Category-driven field groups + tenant custom fields. Custom fields that
   // target an enabled native group render inside it; the rest render in their

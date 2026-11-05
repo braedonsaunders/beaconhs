@@ -327,7 +327,13 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
         />
       )
     case 'personal-my-equipment':
-      return <MyEquipmentCard items={data.myEquipment} todayIso={todayIso} />
+      return (
+        <MyEquipmentCard
+          items={data.myEquipment}
+          todayIso={todayIso}
+          canCheckInOut={data.canCheckEquipmentInOut}
+        />
+      )
     case 'ai-briefs':
       return <LatestBriefsCard items={data.latestBriefs} />
     case 'personal-my-compliance':
@@ -1560,9 +1566,11 @@ function AnnualPpeInspectionBadge({ state }: { state: PpeInspectionState }) {
 function MyEquipmentCard({
   items,
   todayIso,
+  canCheckInOut,
 }: {
   items: DashboardMetrics['myEquipment']
   todayIso: string
+  canCheckInOut: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -1575,8 +1583,8 @@ function MyEquipmentCard({
           : tGenerated('m_057625dcf80ad9', { value0: items.length }),
       )}
       icon={Boxes}
-      href="/equipment/station"
-      hrefLabel="Check in / out"
+      href={canCheckInOut ? '/equipment/station' : '/equipment'}
+      hrefLabel={canCheckInOut ? 'Check in / out' : 'Equipment'}
       accent="sky"
     >
       <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
@@ -1640,7 +1648,7 @@ function MyEquipmentCard({
                           href={`/equipment/inspections/new?itemId=${e.id}`}
                           tone="sky"
                         />
-                        <CheckInButton checkoutId={e.checkoutId} />
+                        {canCheckInOut ? <CheckInButton checkoutId={e.checkoutId} /> : null}
                       </div>
                     </motion.li>
                   )

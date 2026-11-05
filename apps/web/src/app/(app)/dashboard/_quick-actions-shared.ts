@@ -195,7 +195,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     iconKey: 'clipboard-check',
     tone: 'violet',
     hint: 'Action',
-    requiredPermission: 'equipment.manage',
+    requiredPermission: 'equipment.custody',
   },
   {
     id: 'd-report',

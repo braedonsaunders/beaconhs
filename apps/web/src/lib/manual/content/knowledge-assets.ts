@@ -865,12 +865,14 @@ The list starts with **In service** equipment. The top-bar search also shows onl
 
 To check a unit in or out yourself, use the station. See [Equipment check-in / check-out](/help/equipment-station).
 
-## Record a custody change (managers)
+## Record a custody change
+
+**Check equipment in/out** is a separate role permission. It allows check-in and check-out from the unit, station and dashboard. **Manage equipment** is still needed for **Transfer**, editing the unit, and changing its setup.
 
 1. Open the unit and select **Location & custody**.
 2. Select **Transfer** to change its site or holder. Add a note, then select **Record transfer**. When changing only the holder, you can leave the current location as it is, including an imported customer location. New locations can be active customers, projects, sites, or areas. New holders must be active people. The movement is added to **Custody history**, and the drawer closes after saving.
 3. Select **Check out** to issue an available unit. Select a person or a **Destination site**. For a truck that stays with an employee, select the person and leave the destination and expected return date blank. The open checkout stays with that person until an explicit check-in, even across multiple job sites. GPS and last-known positions do not change the holder.
-4. Select **Check in** to return equipment that has an open check-out, a holder, or a location away from base. This also works for imported equipment without a check-out record. Choose its condition and add a note. The unit returns to the default check-in location configured for the station and its holder is cleared. A worker can return equipment issued to them; managers can return any unit they manage.
+4. Select **Check in** to return equipment that has an open check-out, a holder, or a location away from base. This also works for imported equipment without a check-out record. Choose its condition and add a note. The unit returns to the default check-in location configured for the station and its holder is cleared. You need **Check equipment in/out** to return a unit, including equipment issued to you.
 
 An open check-out must be checked in before you can use **Transfer** or a bulk site/holder change. Every check-in, check-out, and transfer appears in the same **Custody history** table. Equipment at a base or the default check-in location, without a holder or open check-out, is checked in. Repair, missing, and retired statuses prevent check-out but do not by themselves mean a unit is checked out.
 
@@ -1000,6 +1002,10 @@ When you take a unit, scan it out under your name. When you bring it back, scan 
 ## Where to find it
 
 Open **Equipment** in the left menu, then go to the **Check-in / out station** at [the station page](/equipment/station). It works with a USB scan gun, your phone camera, or by typing a tag. To search without a scan, type a name, licence plate, VIN, or other equipment detail; select the correct unit from the results.
+
+## Permission
+
+Your role needs **Check equipment in/out** to use the station. An administrator can enable it under **Admin → Roles → your role → Permissions → Equipment**. It is separate from **Manage equipment** and is not automatically granted to all employees. Existing equipment managers keep their check-in/out access.
 
 ## Check a unit out
 

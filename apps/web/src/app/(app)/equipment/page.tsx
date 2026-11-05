@@ -61,6 +61,12 @@ export default async function EquipmentPage({
     !can(ctx, 'equipment.manage')
   )
     redirect('/equipment/vehicle-log')
+  if (
+    can(ctx, 'equipment.custody') &&
+    !can(ctx, 'equipment.read.self') &&
+    !can(ctx, 'equipment.manage')
+  )
+    redirect('/equipment/station')
   const canManageEquipment = can(ctx, 'equipment.manage')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'equipment.read.site')
 

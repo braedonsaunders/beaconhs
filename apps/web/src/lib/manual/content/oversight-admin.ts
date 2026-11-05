@@ -835,6 +835,8 @@ On **Users**, use the search box to find a name, email address, tenant display n
 
 On **Roles**, search by role name or description and use **Type** to show built-in or custom roles. The list shows each role's permission and active-member counts.
 
+To allow equipment check-in and check-out without equipment editing, open the role’s **Permissions** tab. Under **Equipment**, enable **Check equipment in/out**, then save. Leave **Manage equipment** off when the role should not edit equipment or its setup. This is a standard role permission; it is not granted to all employees by default.
+
 ## Resend an expired invitation
 
 1. Open the invited member from [Users](/admin/users).

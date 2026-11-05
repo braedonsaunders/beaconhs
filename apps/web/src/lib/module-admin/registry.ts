@@ -271,7 +271,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         key: 'station',
         label: 'Check in / out',
         href: '/equipment/station',
-        permission: 'equipment.manage',
+        permission: 'equipment.custody',
       },
       {
         key: 'work-orders',

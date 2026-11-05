@@ -35,11 +35,11 @@ export default async function StationPage({
 }) {
   const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
-  if (!can(ctx, 'equipment.manage')) redirect('/equipment')
+  if (!can(ctx, 'equipment.custody')) redirect('/equipment')
   const sp = await searchParams
   const initialScanCode = typeof sp.code === 'string' ? sp.code : null
   // The settings page is gated by the module-admin permission, not
-  // equipment.manage — only show the button to users who can actually open it.
+  // equipment.custody — only show the button to users who can actually open it.
   const canManage = canManageModule(ctx, 'equipment')
 
   const data = await ctx.db(async (tx) => {
