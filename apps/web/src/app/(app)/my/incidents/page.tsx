@@ -1,3 +1,4 @@
+import { StartIncidentForm } from '@/app/(app)/incidents/_start-button'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -194,11 +195,11 @@ export default async function MyIncidentsPage({
                     <GeneratedText id="m_17e7d54f75218e" />
                   </Button>
                 </Link>
-                <Link href="/incidents/new">
-                  <Button>
+                <StartIncidentForm>
+                  <Button type="submit">
                     <GeneratedText id="m_0f2b150c1cc651" />
                   </Button>
-                </Link>
+                </StartIncidentForm>
               </div>
             }
           />
@@ -234,11 +235,11 @@ export default async function MyIncidentsPage({
               )}
               description={tGenerated('m_0c0af94fc675d9')}
               action={
-                <Link href="/incidents/new">
-                  <Button>
+                <StartIncidentForm>
+                  <Button type="submit">
                     <GeneratedText id="m_0f672c0489dd6d" />
                   </Button>
-                </Link>
+                </StartIncidentForm>
               }
             />
           ) : (

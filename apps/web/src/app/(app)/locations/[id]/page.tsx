@@ -1,3 +1,4 @@
+import { StartIncidentForm } from '@/app/(app)/incidents/_start-button'
 import { recordSearchWhere, recordSearchTerm } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -2031,11 +2032,11 @@ function IncidentsTab({
         title={tGenerated('m_177f8be6c7aad5')}
         description={tGenerated('m_01f410d09c88d5')}
         action={
-          <Link href={`/incidents/new`}>
-            <Button variant="outline" size="sm">
+          <StartIncidentForm>
+            <Button type="submit" variant="outline" size="sm">
               <GeneratedText id="m_1e6299ac4979b3" />
             </Button>
-          </Link>
+          </StartIncidentForm>
         }
       />
     )

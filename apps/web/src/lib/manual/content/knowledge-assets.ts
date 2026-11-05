@@ -139,7 +139,9 @@ Course completions use their configured card designs. Skill types generate only 
 
 ## Review skill authorities and holders (managers)
 
-Open **Training** → **Skill types** to create or open a type. Managers can edit its name, code, validity and description, turn **Active** off, or **Delete** it. Move active compliance obligations before retiring a type. Existing ticket history is retained.
+Open **Training** → **Skill types**. Tap **Add skill type** to open the drawer, enter its name and authority, then tap **Create** to open the new record. From an authority’s **Skill types** tab, **Add skill type** opens the same drawer with that authority selected. Managers can edit its name, code, validity and description, turn **Active** off, or **Delete** it. Move active compliance obligations before retiring a type. Existing ticket history is retained.
+
+Open a skill type’s **Files** tab to store reference documents on the type itself. Tap **Upload file**, choose a file kind, upload a file and tap **Save file**. Search by label or filename, filter by kind, or open a file to view or download it. **Remove** detaches a file from this type. These files are separate from each employee’s certificate or skill evidence.
 
 On the type, select which **Cards and certificates to generate**. Set **View opens** to **Uploaded credential** to make the main Skills list open the attached PDF or image. Choose **Generated credential** to open a selected design instead. Use **Use as credential** on a ticket's Files tab to choose the uploaded file.
 

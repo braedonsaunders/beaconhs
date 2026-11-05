@@ -85,7 +85,8 @@ import {
   revokeSkillAssignment,
 } from '../_actions'
 import { SkillDetailFields } from './_fields'
-import { SkillFilesDrawer } from './_files-drawer'
+import { TrainingFilesDrawer } from '../../_components/files-drawer'
+import { attachSkillFile } from '../_actions'
 import { ConfirmButton } from '@/components/confirm-button'
 
 export const dynamic = 'force-dynamic'
@@ -599,8 +600,9 @@ export default async function SkillAssignmentPage({
         <GeneratedValue
           value={
             canManage ? (
-              <SkillFilesDrawer
-                assignmentId={id}
+              <TrainingFilesDrawer
+                recordId={id}
+                addFileAction={attachSkillFile}
                 open={drawer === 'upload-file'}
                 closeHref={filesCloseHref}
               />

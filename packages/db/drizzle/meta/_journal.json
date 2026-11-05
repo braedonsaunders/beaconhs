@@ -673,6 +673,20 @@
       "when": 1793732400000,
       "tag": "0096_incident_reporting_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1793876400000,
+      "tag": "0097_training_skill_type_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1793876460000,
+      "tag": "0098_incident_create_shortcuts",
+      "breakpoints": true
     }
   ]
 }

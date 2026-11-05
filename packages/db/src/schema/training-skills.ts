@@ -297,3 +297,48 @@ export const trainingSkillAssignmentsRelations = relations(trainingSkillAssignme
     references: [attachments.id],
   }),
 }))
+
+export const trainingSkillTypeFiles = pgTable(
+  'training_skill_type_files',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    skillTypeId: uuid('skill_type_id').notNull(),
+    attachmentId: uuid('attachment_id').notNull(),
+    label: text('label').notNull(),
+    kind: text('kind').notNull(),
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).defaultNow().notNull(),
+    uploadedBy: text('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => ({
+    attachmentIdRefIdx: index('training_skill_type_files_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
+    tenantIdx: index('training_skill_type_files_tenant_idx').on(t.tenantId),
+    skillTypeIdx: index('training_skill_type_files_skill_type_idx').on(t.tenantId, t.skillTypeId),
+    kindIdx: index('training_skill_type_files_kind_idx').on(t.tenantId, t.kind),
+    attachmentUx: uniqueIndex('training_skill_type_files_attachment_ux').on(
+      t.tenantId,
+      t.skillTypeId,
+      t.attachmentId,
+    ),
+    recordFk: foreignKey({
+      name: 'training_skill_type_files_tenant_type_fk',
+      columns: [t.tenantId, t.skillTypeId],
+      foreignColumns: [trainingSkillTypes.tenantId, trainingSkillTypes.id],
+    }).onDelete('cascade'),
+    attachmentFk: foreignKey({
+      name: 'training_skill_type_files_tenant_attachment_fk',
+      columns: [t.tenantId, t.attachmentId],
+      foreignColumns: [attachments.tenantId, attachments.id],
+    }).onDelete('cascade'),
+    kindCheck: check(
+      'training_skill_type_files_kind_ck',
+      sql`${t.kind} IN ('certificate', 'evidence', 'photo', 'other')`,
+    ),
+  }),
+)

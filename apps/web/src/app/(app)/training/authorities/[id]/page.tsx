@@ -1,4 +1,3 @@
-import { createSkillType } from '../../skills/types/_actions'
 import { LiveField } from '@/components/live-field'
 import {
   OfflineRecordProvider,
@@ -22,14 +21,12 @@ import {
   DetailHeader,
   EmptyState,
   Input,
-  Label,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
 } from '@beaconhs/ui'
 import {
   trainingExtraFields,
@@ -373,59 +370,12 @@ export default async function AuthorityDetailPage({
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <GeneratedText id="m_0af680c2c0e3dd" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <form action={createSkillType} className="space-y-3">
-                      <input type="hidden" name="authorityId" value={id} />
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <Label>
-                            <GeneratedText id="m_02b18d5c7f6f2d" />{' '}
-                            <span className="text-red-600 dark:text-red-400">*</span>
-                          </Label>
-                          <Input
-                            name="name"
-                            required
-                            placeholder={tGenerated('m_1718ebed63ad83')}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>
-                            <GeneratedText id="m_0570e24c85cf95" />
-                          </Label>
-                          <Input name="code" placeholder={tGenerated('m_07d838807d109b')} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>
-                            <GeneratedText id="m_0e5ba68fcd28f2" />
-                          </Label>
-                          <Input
-                            name="validForMonths"
-                            type="number"
-                            min={1}
-                            placeholder={tGenerated('m_056a47a6cd2d44')}
-                          />
-                        </div>
-                        <div className="space-y-1.5 sm:col-span-3">
-                          <Label>
-                            <GeneratedText id="m_14d923495cf14c" />
-                          </Label>
-                          <Textarea name="description" rows={2} />
-                        </div>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button type="submit">
-                          <ListChecks size={14} /> <GeneratedText id="m_0af680c2c0e3dd" />
-                        </Button>
-                      </div>
-                    </form>
-                  </CardContent>
-                </Card>
+                <Link href={`/training/skills/types?drawer=new&authority=${id}`}>
+                  <Button>
+                    <ListChecks size={14} />
+                    <GeneratedText id="m_0af680c2c0e3dd" />
+                  </Button>
+                </Link>
               </div>
             ) : null
           }

@@ -70,10 +70,8 @@ export const incidents = pgTable(
     type: incidentType('type').notNull(),
     severity: incidentSeverity('severity').notNull(),
     status: incidentStatus('status').default('reported').notNull(),
-    // Draft-first: instant-created incidents start as a HIDDEN draft — excluded
-    // from lists, dashboards, compliance counts, the feed, and notifications
-    // until committed (required fields filled). A worker sweeps drafts untouched
-    // > 48h. Existing rows default to false (committed).
+    // Retained evidence flag for imported drafts. Native incidents are reported
+    // immediately and edited on their full record page.
     isDraft: boolean('is_draft').default(false).notNull(),
     // Brief
     title: text('title').notNull(),

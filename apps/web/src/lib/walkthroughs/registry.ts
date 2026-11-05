@@ -250,7 +250,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         path: '/incidents',
-        target: 'a[href="/incidents/new"]',
+        target: '[data-walkthrough="start-incident"]',
         title: 'Start a report',
         body: 'Tap Report incident. Do it as soon as you safely can — details fade fast.',
       },

@@ -241,8 +241,8 @@ export async function revokeSkillAssignment(formData: FormData): Promise<void> {
 // Files
 // ---------------------------------------------------------------------------
 
-export async function addSkillAssignmentFile(args: {
-  assignmentId: string
+export async function attachSkillFile(args: {
+  recordId: string
   attachmentId: string
   label: string
   kind: string
@@ -251,7 +251,7 @@ export async function addSkillAssignmentFile(args: {
   assertCanManageModule(ctx, 'training')
   let input: ReturnType<typeof parseSkillFileInput>
   try {
-    input = parseSkillFileInput(args)
+    input = parseSkillFileInput({ ...args, assignmentId: args.recordId })
   } catch (error) {
     return {
       ok: false,

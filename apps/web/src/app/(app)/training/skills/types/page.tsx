@@ -10,6 +10,7 @@ import {
   Input,
   Select,
   PageHeader,
+  UrlDrawer,
   Table,
   TableBody,
   TableCell,
@@ -23,13 +24,14 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { OnlineActionForm } from '@/components/online-action-form'
 import { createSkillType } from './_actions'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
 
@@ -131,27 +133,36 @@ export default async function TrainingSkillsPage({
             title={tGenerated('m_1a286702b9eafe')}
             description={tGenerated('m_02a1574f4abe4e')}
             actions={
-              <Link
-                href="/training/authorities"
-                className="text-sm text-teal-700 hover:underline dark:text-teal-400"
-              >
-                <GeneratedText id="m_01dad3205b5848" />
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link href={mergeHref('/training/skills/types', sp, { drawer: 'new' })}>
+                  <Button>
+                    <GeneratedText id="m_0af680c2c0e3dd" />
+                  </Button>
+                </Link>
+                <Link
+                  href="/training/authorities"
+                  className="text-sm text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  <GeneratedText id="m_01dad3205b5848" />
+                </Link>
+              </div>
             }
           />
           <TrainingSubNav active="skill-types" />
-          <details className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <summary className="cursor-pointer text-sm font-medium">
-              <GeneratedText id="m_0af680c2c0e3dd" />
-            </summary>
-            <form action={createSkillType} className="mt-3 flex flex-wrap items-end gap-3">
-              <label className="min-w-48 flex-1 text-sm">
+          <UrlDrawer
+            open={pickString(sp.drawer) === 'new'}
+            closeHref={mergeHref('/training/skills/types', sp, { drawer: undefined })}
+            title={tGenerated('m_0af680c2c0e3dd')}
+            size="sm"
+          >
+            <OnlineActionForm action={createSkillType} purpose="start" className="space-y-4">
+              <label className="block space-y-1.5 text-sm">
                 <GeneratedText id="m_02b18d5c7f6f2d" />
                 <Input name="name" required maxLength={200} />
               </label>
-              <label className="min-w-48 flex-1 text-sm">
+              <label className="block space-y-1.5 text-sm">
                 <GeneratedText id="m_012397255c5bd0" />
-                <Select name="authorityId" required>
+                <Select name="authorityId" required defaultValue={pickString(sp.authority) ?? ''}>
                   <option value="">Choose authority</option>
                   {authorities.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -163,8 +174,8 @@ export default async function TrainingSkillsPage({
               <Button type="submit">
                 <GeneratedText id="m_017309f0f9f564" />
               </Button>
-            </form>
-          </details>
+            </OnlineActionForm>
+          </UrlDrawer>
           <TableToolbar>
             <SearchInput placeholder={tGenerated('m_19fafa6e6f6775')} />
             <GeneratedValue

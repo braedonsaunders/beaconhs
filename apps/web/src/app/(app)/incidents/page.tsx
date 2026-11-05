@@ -1,3 +1,4 @@
+import { StartIncidentForm } from '@/app/(app)/incidents/_start-button'
 import { recordStatusWhere } from '@/lib/active-record-query'
 import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
@@ -197,11 +198,11 @@ export default async function IncidentsPage({
                     ) : null
                   }
                 />
-                <Link href="/incidents/new">
-                  <Button>
+                <StartIncidentForm>
+                  <Button type="submit" data-walkthrough="start-incident">
                     <GeneratedText id="m_0f2b150c1cc651" />
                   </Button>
-                </Link>
+                </StartIncidentForm>
               </div>
             }
           />
@@ -239,11 +240,11 @@ export default async function IncidentsPage({
               )}
               description={tGenerated('m_1bc0139c722216')}
               action={
-                <Link href="/incidents/new">
-                  <Button>
+                <StartIncidentForm>
+                  <Button type="submit">
                     <GeneratedText id="m_0f672c0489dd6d" />
                   </Button>
-                </Link>
+                </StartIncidentForm>
               }
             />
           ) : (

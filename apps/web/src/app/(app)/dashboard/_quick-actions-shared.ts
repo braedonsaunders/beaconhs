@@ -164,7 +164,7 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   {
     id: 'd-incident',
     label: 'Report incident',
-    href: '/incidents/new',
+    href: '/incidents',
     iconKey: 'alert',
     tone: 'rose',
     hint: 'Create',

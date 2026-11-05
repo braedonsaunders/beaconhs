@@ -7,8 +7,8 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 
-// URL-drawer for attaching a supporting file to a skill assignment:
-// FileUploader → label + kind → addSkillAssignmentFile. Opens via
+// URL-drawer for attaching a supporting file to a skill or skill type record:
+// FileUploader → label + kind → the record’s attachment action. Opens via
 // `?drawer=upload-file` so the URL is shareable and survives refresh.
 
 import { useState, useTransition } from 'react'
@@ -18,7 +18,6 @@ import { Button, FileUploader, Input, Label, Select, UrlDrawer } from '@beaconhs
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
-import { addSkillAssignmentFile } from '../_actions'
 
 const FILE_KINDS = [
   { value: 'certificate', label: 'Certificate scan' },
@@ -27,14 +26,21 @@ const FILE_KINDS = [
   { value: 'other', label: 'Other' },
 ] as const
 
-export function SkillFilesDrawer({
-  assignmentId,
+export function TrainingFilesDrawer({
+  recordId,
   open,
   closeHref,
+  addFileAction,
 }: {
-  assignmentId: string
+  recordId: string
   open: boolean
   closeHref: string
+  addFileAction: (input: {
+    recordId: string
+    attachmentId: string
+    label: string
+    kind: string
+  }) => Promise<{ ok: true } | { ok: false; error: string }>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -62,8 +68,8 @@ export function SkillFilesDrawer({
     const labelTrimmed = label.trim() || uploaded.filename
     startTransition(async () => {
       await runOnline('finish', async () => {
-        const res = await addSkillAssignmentFile({
-          assignmentId,
+        const res = await addFileAction({
+          recordId,
           attachmentId: uploaded.attachmentId,
           label: labelTrimmed,
           kind,
@@ -129,6 +135,7 @@ export function SkillFilesDrawer({
           </Label>
           <Input
             id="label"
+            maxLength={300}
             value={label}
             onChange={(e) => setLabel(e.currentTarget.value)}
             placeholder={tGeneratedValue(uploaded?.filename ?? tGenerated('m_0e74909700b040'))}

@@ -202,6 +202,7 @@ export const TENANT_SCOPED_TABLES = [
   'training_skill_assignments',
   'training_skill_certificates',
   'training_skill_assignment_files',
+  'training_skill_type_files',
   'training_assessment_types',
   'training_assessment_type_questions',
   'training_assessments',

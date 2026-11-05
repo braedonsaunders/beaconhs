@@ -471,16 +471,16 @@ Open **Incidents** in the left menu, or go to [Incidents](/incidents).
 
 ## Reporting an incident
 
-1. Tap **Report incident**.
+1. Tap **Report incident**. This creates the record and opens the full incident form immediately.
 2. Pick the **Type**: injury, illness, near miss, property damage, environmental, or security.
 3. Pick the **Severity**. For a near miss with no one hurt, pick no injury.
 4. Set **Occurred at** (date and time) and the **Location**.
 5. Give it a short **Title**, like "Slip on wet floor near pump 3".
 6. In **Description**, write what happened: who was there, what equipment was involved, what you saw.
 7. Fill in **Immediate action taken** — first aid given, area barricaded, equipment locked out, and so on.
-8. Tap **Submit report**.
+8. Complete **Key metrics** and **Root cause** in the reporting section. Fields save automatically; check the sync badge before leaving.
 
-The quick report captures the essentials. Photos, witness statements, and the full investigation happen on the incident's page after you submit. In **Photos**, tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. Tap the pencil button to add a caption or mark up a photo. The editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the photo order before the incident is locked.
+Photos, witness statements, and investigation sections are on the same incident page. The reporting employee fills in **Root cause**. The investigator or H&S team completes **Timeline** and **Cause analysis**. In **Photos**, tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. Tap the pencil button to add a caption or mark up a photo. The editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the photo order before the incident is locked.
 
 ## Completing the reporting section
 

@@ -27,7 +27,7 @@ import { roles } from './iam'
  * user's personal shortcuts travel with their dashboard. `tone`/`iconKey` are
  * loose strings (resolved + fallback-mapped client-side) so adding new colours
  * or icons never invalidates a persisted row. `href` is an internal path
- * ("/incidents/new") or an absolute http(s) URL.
+ * ("/incidents") or an absolute http(s) URL.
  */
 export type DashboardQuickAction = {
   id: string

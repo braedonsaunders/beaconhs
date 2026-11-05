@@ -1,4 +1,5 @@
 'use client'
+import { StartIncidentForm } from '@/app/(app)/incidents/_start-button'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 
@@ -150,7 +151,13 @@ function ActionTile({ action, index }: { action: QuickAction; index: number }) {
     >
       <GeneratedValue
         value={
-          external ? (
+          action.id === 'd-incident' && action.href === '/incidents' ? (
+            <StartIncidentForm className="h-full">
+              <button type="submit" className={className}>
+                {inner}
+              </button>
+            </StartIncidentForm>
+          ) : external ? (
             <a href={action.href} target="_blank" rel="noopener noreferrer" className={className}>
               <GeneratedValue value={inner} />
             </a>

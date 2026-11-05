@@ -53,6 +53,7 @@ import {
 } from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
 import { SkillTypeFields } from './_fields'
+import { SkillTypeFiles } from './_files'
 import {
   OfflineRecordProvider,
   RecordSyncBanner,
@@ -73,7 +74,7 @@ import { loadTrainingExtraFieldPage } from '../../../_lib/extra-field-query'
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['overview', 'holders', 'extras'] as const
+const TABS = ['overview', 'holders', 'files', 'extras'] as const
 type Tab = (typeof TABS)[number]
 const SORTS = ['expiry'] as const
 const EXTRA_SORTS = ['order'] as const
@@ -305,11 +306,13 @@ export default async function SkillTypeDetailPage({
             tabs={[
               { key: 'overview', label: 'Overview' },
               { key: 'holders', label: 'Holders', count: holderCount },
+              { key: 'files', label: 'Files' },
               { key: 'extras', label: 'Additional fields', count: extras.total },
             ]}
           />
         }
       >
+        {active === 'files' ? <SkillTypeFiles id={id} searchParams={sp} /> : null}
         <GeneratedValue
           value={
             active === 'overview' ? (
