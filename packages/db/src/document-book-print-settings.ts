@@ -42,8 +42,9 @@ export function resolveBookPrintSettings(
 /**
  * The tokens a designed book cover can reference.
  *
- * Kept flat and few on purpose: these are facts about the book itself, and
- * anything richer belongs in the body rather than the cover sheet.
+ * Kept flat and few on purpose: these are facts about the book itself and the
+ * tenant branding shown on the default cover, while anything richer belongs in
+ * the body rather than the cover sheet.
  *
  * Shared so the three places that must agree cannot drift — the worker that
  * supplies the values, the designer palette that offers them, and the subject
@@ -55,6 +56,8 @@ export const DOCUMENT_BOOK_COVER_TOKENS = [
   { key: 'book_title', label: 'Book title' },
   { key: 'book_description', label: 'Book description' },
   { key: 'tenant_name', label: 'Company name' },
+  { key: 'tenant_logo_url', label: 'Company logo URL' },
+  { key: 'issued_month_year', label: 'Issued month & year' },
   { key: 'published_at', label: 'Published on' },
   { key: 'document_count', label: 'Document count' },
   { key: 'chapter_count', label: 'Chapter count' },

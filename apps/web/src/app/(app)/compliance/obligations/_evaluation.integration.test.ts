@@ -816,12 +816,13 @@ it('preserves ended-period targets and people while reconstructing older periods
     expect(current[0]?.expected).toBe(10)
     expect(current[0]?.periodStart).toBe('2026-10-19')
   })
+  vi.useFakeTimers({ toFake: ['Date'], now: clock.now })
   const self = await loadComplianceHistory(
     { ...ctx, isSuperAdmin: false, permissions: new Set() },
     id,
     3,
     blair,
-  )
+  ).finally(() => vi.useRealTimers())
   expect(self?.personId).toBe(alex)
   expect(self?.history.length).toBeGreaterThan(0)
   expect(self?.history.every((row) => row.personId === alex)).toBe(true)

@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import type { PDFOptions } from 'puppeteer-core'
 import { getBrowser } from './util'
-import { renderReportPdf } from './index'
+import { renderPivotMatrixPdf, renderReportPdf } from './index'
+import { buildPivotMatrixDocumentHtml } from './pivot-matrix'
 
 // A cold Chromium launch and full document print can exceed Vitest's default
 // timeout on shared CI runners. The package runs test files serially so the
@@ -111,6 +112,69 @@ describe('AppKit report PDF document', () => {
       } finally {
         newPage.mockRestore()
       }
+    },
+    RENDER_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'prints a UI-faithful landscape pivot matrix PDF with RAG cells, legend, and wide horizontal bands',
+    async () => {
+      const columns = Array.from({ length: 16 }, (_, index) => `Course ${index + 1}`)
+      const input = {
+        tenantName: 'Rassaun Services Inc.',
+        primaryColor: '#0d9488',
+        reportName: 'Training — Certificate Matrix',
+        subtitle: 'Active employees by course, with current certificate coverage status.',
+        summary: [
+          { label: 'Rows', value: 2 },
+          { label: 'Columns', value: columns.length },
+        ],
+        sections: [
+          {
+            rowHeaderLabel: 'Employee',
+            columns,
+            legend: [
+              { label: 'Valid', token: 'green' as const },
+              { label: 'Expiring', token: 'amber' as const },
+              { label: 'Expired', token: 'red' as const },
+            ],
+            rows: [
+              {
+                label: 'Bennett, David',
+                cells: columns.map((_, index) =>
+                  index === 0
+                    ? { value: '2027-10-01', token: 'green' as const }
+                    : index === 1
+                      ? { value: '2026-11-30', token: 'amber' as const }
+                      : index === 2
+                        ? { value: '2025-05-01', token: 'red' as const }
+                        : { value: '', token: 'grey' as const },
+                ),
+              },
+              {
+                label: 'Parker, Jamie',
+                cells: columns.map(() => ({ value: 'No expiry', token: 'green' as const })),
+              },
+            ],
+          },
+        ],
+        generatedAt: new Date('2026-07-24T14:00:00Z'),
+        timezone: 'America/Toronto',
+        locale: 'en-CA',
+      }
+
+      const html = buildPivotMatrixDocumentHtml(input)
+      expect(html).toContain('Columns 1–12 of 16')
+      expect(html).toContain('Columns 13–16 of 16')
+      expect(html).toContain('legend-pill cf-green')
+      expect(html).toContain('matrix-cell cf-amber cell-nowrap')
+      expect(html).toContain('matrix-cell cf-red cell-nowrap')
+
+      const pdf = await renderPivotMatrixPdf(input)
+      expect(pdf.subarray(0, 4).toString('ascii')).toBe('%PDF')
+      expect(pdf.toString('latin1')).toMatch(/\/MediaBox\s*\[\s*0\s+0\s+792\s+612\s*\]/)
+      expect(pdf.toString('latin1')).toMatch(/Geist-(?:Regular|SemiBold)/)
+      expect(pdf.toString('latin1').match(/\/Type \/Page\b/g)!.length).toBe(2)
     },
     RENDER_TEST_TIMEOUT_MS,
   )

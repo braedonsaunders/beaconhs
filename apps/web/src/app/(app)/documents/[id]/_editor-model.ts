@@ -6,7 +6,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiSettings } from '@/lib/ai-config'
 import { isUuid } from '@/lib/list-params'
-import { canPublishDocument } from '@/lib/document-authoring-policy'
+import { canPublishDocument, defaultDocumentWorkspaceMode } from '@/lib/document-authoring-policy'
 import type { DocumentMode } from './_mode-switch'
 
 export type DocumentEditorModel = {
@@ -14,7 +14,13 @@ export type DocumentEditorModel = {
   canPublish: boolean
   defaultMode: DocumentMode
   master: { attachmentId: string; filename: string } | null
-  latestPublished: { version: number; renderStatus: string | null } | null
+  latestPublished: {
+    id: string
+    version: number
+    renderStatus: string | null
+    docxAttachmentId: string | null
+    docxFilename: string | null
+  } | null
   aiEnabled: boolean
   pdfRevision: string
 }
@@ -42,8 +48,10 @@ export async function loadDocumentEditorModel(
 
     const [published] = await tx
       .select({
+        id: documentVersions.id,
         version: documentVersions.version,
         renderStatus: documentVersions.renderStatus,
+        docxAttachmentId: documentVersions.docxAttachmentId,
       })
       .from(documentVersions)
       .where(
@@ -51,6 +59,14 @@ export async function loadDocumentEditorModel(
       )
       .orderBy(desc(documentVersions.version))
       .limit(1)
+
+    const [publishedDocx] = published?.docxAttachmentId
+      ? await tx
+          .select({ filename: attachments.filename })
+          .from(attachments)
+          .where(eq(attachments.id, published.docxAttachmentId))
+          .limit(1)
+      : []
 
     const [current] = await tx
       .select({ contentAttachmentId: documentVersions.contentAttachmentId })
@@ -71,7 +87,12 @@ export async function loadDocumentEditorModel(
       canPublish: canPublishDocument(doc.status),
       pdfRevision: doc.updatedAt.toISOString(),
       sourceAttachmentId: doc.sourceAttachmentId,
-      published: published ?? null,
+      published: published
+        ? {
+            ...published,
+            docxFilename: publishedDocx?.filename ?? null,
+          }
+        : null,
       contentAttachmentId: current?.contentAttachmentId ?? null,
       master: master ?? null,
     }
@@ -79,15 +100,24 @@ export async function loadDocumentEditorModel(
   if (!data) return null
 
   const ai = await getTenantAiSettings(ctx)
-  const isFileDoc = !data.sourceAttachmentId && Boolean(data.contentAttachmentId)
   return {
     documentId,
     canPublish: data.canPublish,
     pdfRevision: data.pdfRevision,
-    defaultMode: isFileDoc ? 'pdf' : 'write',
+    defaultMode: defaultDocumentWorkspaceMode({
+      canPublish: data.canPublish,
+      hasWorkingMaster: Boolean(data.sourceAttachmentId),
+      hasUploadedPdf: Boolean(data.contentAttachmentId),
+    }),
     master: data.master ? { attachmentId: data.master.id, filename: data.master.filename } : null,
     latestPublished: data.published
-      ? { version: data.published.version, renderStatus: data.published.renderStatus }
+      ? {
+          id: data.published.id,
+          version: data.published.version,
+          renderStatus: data.published.renderStatus,
+          docxAttachmentId: data.published.docxAttachmentId,
+          docxFilename: data.published.docxFilename,
+        }
       : null,
     aiEnabled: ai.enabled && ai.hasKey,
   }

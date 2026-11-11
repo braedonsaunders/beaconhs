@@ -24,6 +24,38 @@ export type BeaconReportRunOptions = {
   runtimeFilters?: ReportRuleGroup | null
 }
 
+/**
+ * Grouped row reports bucket rows in SQL result order (`Map` insertion order)
+ * and slice at `LIMIT`. Keeping `groupBy` as the primary sort guarantees:
+ *  1. Group sections appear in deterministic order instead of first-seen row order.
+ *  2. All rows belonging to a group stay contiguous so a `NULLS LAST` secondary
+ *     sort (e.g. `expires_on ASC` on missing certificates) can never split a
+ *     person's group across a preview row cap.
+ * If the caller explicitly sorts by `groupBy` first (`asc` or `desc`), their
+ * direction is preserved.
+ */
+export function normalizeGroupedRowSorts(query: ReportCustomQuery): ReportCustomQuery {
+  if ((query.mode ?? 'rows') !== 'rows' || !query.groupBy) return query
+  const configured = query.sorts?.length ? query.sorts : query.sort ? [query.sort] : []
+  const primary =
+    configured[0]?.column === query.groupBy
+      ? configured[0]
+      : { column: query.groupBy, direction: 'asc' as const }
+  const seen = new Set<string>([primary.column])
+  const merged = [primary]
+  for (const item of configured) {
+    if (seen.has(item.column)) continue
+    seen.add(item.column)
+    merged.push(item)
+    if (merged.length >= 3) break
+  }
+  return {
+    ...query,
+    sort: null,
+    sorts: merged,
+  }
+}
+
 export function normalizeReportRuntimeFilters(
   value: Record<string, unknown>,
 ): ReportRuleGroup | null {
@@ -41,7 +73,10 @@ export function validateBeaconReportRuntimeFilters(
   runtimeFilters: ReportRuleGroup | null,
 ): void {
   compileCustomReport(
-    { ...query, filters: mergeFilters(query.filters ?? null, runtimeFilters) },
+    normalizeGroupedRowSorts({
+      ...query,
+      filters: mergeFilters(query.filters ?? null, runtimeFilters),
+    }),
     tenantId,
     catalog,
     { maxRows: 1 },
@@ -61,12 +96,13 @@ export async function runBeaconReport(
   options: BeaconReportRunOptions = {},
 ): Promise<ReportRunResult> {
   const filters = mergeFilters(query.filters ?? null, options.runtimeFilters ?? null)
+  const normalizedQuery = normalizeGroupedRowSorts({ ...query, filters })
   const presentation = reportPresentationFromLayout(options.layout)
-  validateReportPresentation(presentation, query, catalog)
-  const identityProjection = distinctIdentityProjection({ ...query, filters }, catalog)
+  validateReportPresentation(presentation, normalizedQuery, catalog)
+  const identityProjection = distinctIdentityProjection(normalizedQuery, catalog)
   const { compiled, fields } = reportCountProjection(
     compileCustomReport(identityProjection.query, tenantId, identityProjection.catalog, options),
-    query.entity,
+    normalizedQuery.entity,
     catalog,
     presentation,
   )

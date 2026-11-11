@@ -7,11 +7,12 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 
-// The right pane: a Write ↔ PDF surface. Write is the inline Collabora Writer
-// on the document's DOCX master (page setup, comments and track changes live
-// in the file) with a docked AI panel and a fullscreen mode; PDF renders the
-// current draft for managers (file-only documents show their uploaded PDF as
-// the primary view). Read-only users get the published PDF, nothing else.
+// The right pane: a Write ↔ PDF surface. When a document is editable (draft or
+// under review), Write opens Collabora Writer on the working DOCX master with
+// AI and Publish controls, and PDF renders the current working draft. When a
+// document is published or archived, PDF is the default and renders the exact
+// published version of record, while Write opens that published snapshot
+// read-only until a manager clicks Unpublish.
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
@@ -19,6 +20,7 @@ import {
   Download,
   FileUp,
   Loader2,
+  Lock,
   Maximize2,
   Minimize2,
   Plus,
@@ -30,7 +32,10 @@ import { Button, FileUploader, Textarea, cn } from '@beaconhs/ui'
 import { MAX_DOCX_CONVERSION_BYTES } from '@beaconhs/office/limits'
 import { toast } from '@/lib/toast'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
-import { MAX_DOCUMENT_VERSION_NOTE_CHARS } from '@/lib/document-authoring-policy'
+import {
+  MAX_DOCUMENT_VERSION_NOTE_CHARS,
+  nextDocumentMajorVersion,
+} from '@/lib/document-authoring-policy'
 import { CollaboraEmbed, type CollaboraHandle } from '@/components/collabora-embed'
 import { DownloadLink } from '@/components/download-link'
 import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
@@ -60,7 +65,13 @@ export function DocumentPane({
   defaultMode: DocumentMode
   /** The DOCX working master, when the document is authored in-app. */
   master: { attachmentId: string; filename: string } | null
-  latestPublished: { version: number; renderStatus: string | null } | null
+  latestPublished: {
+    id: string
+    version: number
+    renderStatus: string | null
+    docxAttachmentId: string | null
+    docxFilename: string | null
+  } | null
   aiEnabled?: boolean
   pdfRevision: string
 }) {
@@ -78,6 +89,18 @@ export function DocumentPane({
   // back — remounting the embed makes Writer load the new file.
   const [editorEpoch, setEditorEpoch] = useState(0)
   const editorRef = useRef<CollaboraHandle | null>(null)
+  const previousDefaultMode = useRef(defaultMode)
+
+  // Sync the active pane when Publish / Unpublish flips the document's
+  // lifecycle state while the portal stays mounted in the layout.
+  useEffect(() => {
+    if (previousDefaultMode.current === defaultMode) return
+    previousDefaultMode.current = defaultMode
+    setMode(defaultMode)
+    setAiOpen(false)
+    setShowReplace(false)
+    setShowPublish(false)
+  }, [defaultMode])
 
   // Refresh while a published version's PDF is still rendering so the PDF
   // pane and version badges catch up without a manual reload.
@@ -161,6 +184,10 @@ export function DocumentPane({
     </div>
   )
 
+  const editableMaster = canPublish ? master : null
+  const publishedDocx = !canPublish && latestPublished?.docxAttachmentId ? latestPublished : null
+  const displayedFilename = editableMaster?.filename ?? publishedDocx?.docxFilename ?? null
+
   let content: React.ReactNode
   if (!canManage) {
     content = <DocumentPdfPane documentId={documentId} readOnly />
@@ -170,7 +197,8 @@ export function DocumentPane({
         documentId={documentId}
         mode={mode}
         onModeChange={setMode}
-        draft={!!master}
+        draft={canPublish && !!master}
+        canReplace={canPublish}
         revision={pdfRevision}
       />
     )
@@ -181,14 +209,14 @@ export function DocumentPane({
           <ModeSwitch mode={mode} onChange={setMode} />
           <GeneratedValue
             value={
-              master ? (
+              displayedFilename ? (
                 <span
                   className="hidden min-w-0 items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 sm:inline-flex dark:bg-slate-800 dark:text-slate-300"
-                  title={tGeneratedValue(master.filename)}
+                  title={tGeneratedValue(displayedFilename)}
                 >
                   <FileUp size={11} />
                   <span className="max-w-[12rem] truncate">
-                    <GeneratedValue value={master.filename} />
+                    <GeneratedValue value={displayedFilename} />
                   </span>
                 </span>
               ) : null
@@ -208,6 +236,12 @@ export function DocumentPane({
               }
             />
           </span>
+          {!canPublish ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              <Lock size={11} />
+              <GeneratedValue value="Read-only · click Unpublish to edit" />
+            </span>
+          ) : null}
           <GeneratedValue
             value={
               rendering ? (
@@ -221,7 +255,7 @@ export function DocumentPane({
           <div className="ml-auto flex items-center gap-1.5">
             <GeneratedValue
               value={
-                master ? (
+                editableMaster ? (
                   <>
                     <GeneratedValue
                       value={
@@ -250,12 +284,18 @@ export function DocumentPane({
                     >
                       <UploadCloud size={13} /> <GeneratedText id="m_05b540acc16fd1" />
                     </Button>
-                    {canPublish ? (
-                      <Button type="button" size="sm" onClick={() => setShowPublish((v) => !v)}>
-                        <GeneratedText id="m_0c072fb8baf115" />
-                      </Button>
-                    ) : null}
+                    <Button type="button" size="sm" onClick={() => setShowPublish((v) => !v)}>
+                      <GeneratedText id="m_0c072fb8baf115" />
+                    </Button>
                   </>
+                ) : publishedDocx ? (
+                  <Button asChild variant="outline" size="sm">
+                    <DownloadLink
+                      href={`/documents/${documentId}/versions/${publishedDocx.id}/download?kind=docx`}
+                    >
+                      <Download size={13} /> <GeneratedText id="m_18c2e68821b0cd" />
+                    </DownloadLink>
+                  </Button>
                 ) : null
               }
             />
@@ -273,11 +313,11 @@ export function DocumentPane({
           </div>
         </div>
 
-        <GeneratedValue value={showReplace ? importPanel : null} />
+        <GeneratedValue value={canPublish && showReplace ? importPanel : null} />
 
         <GeneratedValue
           value={
-            showPublish && master && canPublish ? (
+            showPublish && editableMaster && canPublish ? (
               <div className="flex items-start gap-2 border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                 <Textarea
                   rows={2}
@@ -293,7 +333,7 @@ export function DocumentPane({
                       value={busy ? <Loader2 size={13} className="animate-spin" /> : null}
                     />{' '}
                     <GeneratedText id="m_01b66d9dba6889" />
-                    <GeneratedValue value={(latestPublished?.version ?? 0) + 1} />
+                    <GeneratedValue value={nextDocumentMajorVersion(latestPublished?.version)} />
                   </Button>
                   <Button
                     type="button"
@@ -309,13 +349,18 @@ export function DocumentPane({
           }
         />
 
-        <div className={cn('flex min-h-0 flex-1', master ? '' : 'app-scroll overflow-y-auto')}>
+        <div
+          className={cn(
+            'flex min-h-0 flex-1',
+            editableMaster || publishedDocx ? '' : 'app-scroll overflow-y-auto',
+          )}
+        >
           <GeneratedValue
             value={
-              master ? (
+              editableMaster ? (
                 <>
                   <CollaboraEmbed
-                    key={`${master.attachmentId}:${editorEpoch}`}
+                    key={`${editableMaster.attachmentId}:${editorEpoch}`}
                     ref={editorRef}
                     frameName={documentId}
                     fetchSession={() => getDocumentWriterSession(documentId)}
@@ -338,6 +383,24 @@ export function DocumentPane({
                     }
                   />
                 </>
+              ) : publishedDocx ? (
+                <CollaboraEmbed
+                  key={`published:${publishedDocx.id}`}
+                  frameName={`${documentId}:${publishedDocx.id}`}
+                  fetchSession={() => getDocumentWriterSession(documentId, publishedDocx.id)}
+                  className="h-full min-w-0 flex-1"
+                />
+              ) : !canPublish ? (
+                <div className="mx-auto w-full max-w-xl px-5 py-10">
+                  <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value="Published PDF document" />
+                    </h3>
+                    <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value="This document is published from an uploaded PDF. Switch to PDF to read it, or click Unpublish at the top of the page before uploading a revised version." />
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <div className="mx-auto w-full max-w-xl px-5 py-10">
                   <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">

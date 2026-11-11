@@ -29,6 +29,8 @@ export type CfRule =
   | { type: 'discrete'; column: string; map: Record<string, CfColorToken> }
 
 export type CfStyle = {
+  /** Named palette token when a discrete or threshold rule matched. */
+  token?: CfColorToken
   /** Tailwind classes for background + text (light + dark). */
   className?: string
   /** Inline background (color-scale interpolation only). */
@@ -105,7 +107,7 @@ export function resolveCellStyle(value: unknown, column: string, rules: CfRule[]
     if (rule.column !== column) continue
     if (rule.type === 'discrete') {
       const token = rule.map[String(value)]
-      if (token) return { className: TOKEN_CLASS[token] }
+      if (token) return { token, className: TOKEN_CLASS[token] }
       continue
     }
     const n = Number(value)
@@ -123,7 +125,7 @@ export function resolveCellStyle(value: unknown, column: string, rules: CfRule[]
                 : rule.op === 'eq'
                   ? n === rule.value
                   : n >= rule.value && n <= (rule.value2 ?? rule.value)
-      if (hit) return { className: TOKEN_CLASS[rule.color] }
+      if (hit) return { token: rule.color, className: TOKEN_CLASS[rule.color] }
       continue
     }
     // colorScale

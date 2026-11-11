@@ -8,6 +8,23 @@ export function canPublishDocument(status: (typeof documentStatus.enumValues)[nu
 }
 
 /**
+ * Resolve the initial workspace tab on `/documents/[id]`.
+ *
+ * Published and archived documents must open on their immutable published PDF
+ * rather than the working DOCX master so `/documents/[id]`, `/read`, and
+ * published document books always display the exact same version of record.
+ */
+export function defaultDocumentWorkspaceMode(input: {
+  canPublish: boolean
+  hasWorkingMaster: boolean
+  hasUploadedPdf: boolean
+}): 'write' | 'pdf' {
+  if (!input.canPublish) return 'pdf'
+  if (!input.hasWorkingMaster && input.hasUploadedPdf) return 'pdf'
+  return 'write'
+}
+
+/**
  * Allocate a new native publication as the next whole major revision.
  * Imported decimal revisions remain immutable history: publishing after 1.9
  * produces 2, never the misleading floating-point sequence 2.9.

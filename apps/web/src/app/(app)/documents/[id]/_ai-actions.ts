@@ -21,6 +21,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { documentReadFilter } from '@/lib/assistant/doc-access'
+import { canPublishDocument } from '@/lib/document-authoring-policy'
 import { isUuid } from '@/lib/list-params'
 
 const SCOPE = 'documents.editor'
@@ -204,6 +205,7 @@ export async function runDocumentAiTurn(
     return ctx.db(async (tx) => {
       const [doc] = await tx
         .select({
+          status: documents.status,
           key: documents.key,
           title: documents.title,
           sourceAttachmentId: documents.sourceAttachmentId,
@@ -222,6 +224,11 @@ export async function runDocumentAiTurn(
     })
   }
 
+  const initial = await loadMaster()
+  if (!canPublishDocument(initial.doc.status)) {
+    return { ok: false, error: 'Unpublish this document before editing it with AI.' }
+  }
+
   const readMasterDocx = async (): Promise<Buffer | null> => {
     const { attachment } = await loadMaster()
     if (!attachment) return null
@@ -230,6 +237,9 @@ export async function runDocumentAiTurn(
 
   const saveMasterDocx = async (docx: Buffer, summary: string) => {
     const { doc, attachment } = await loadMaster()
+    if (!canPublishDocument(doc.status)) {
+      throw new Error('Unpublish this document before editing it with AI.')
+    }
     if (attachment) {
       // Overwrite in place (S3 PUT is atomic) + bump the WOPI version stamp so
       // the open editor session can never clobber this change.

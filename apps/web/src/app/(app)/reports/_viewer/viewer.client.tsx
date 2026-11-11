@@ -6,6 +6,7 @@ import { Download, Filter, Pencil, RotateCcw } from 'lucide-react'
 import { DownloadLink } from '@/components/download-link'
 import {
   reportEntity,
+  type ReportCustomQuery,
   type ReportEntityCatalog,
   type ReportLayout,
   type ReportRuleGroup,
@@ -17,6 +18,21 @@ import { GeneratedText, useGeneratedTranslations } from '@/i18n/generated'
 import { runReportWithControls } from './actions'
 
 const EMPTY_FILTERS: ReportRuleGroup = { combinator: 'and', rules: [] }
+
+function resolveInitialViewerSort(query: Pick<ReportCustomQuery, 'groupBy' | 'sort' | 'sorts'>): {
+  column: string
+  direction: 'asc' | 'desc'
+} {
+  const configured = query.sorts?.length ? query.sorts : query.sort ? [query.sort] : []
+  const withinGroup = query.groupBy
+    ? configured.find((entry) => entry.column !== query.groupBy)
+    : undefined
+  const picked = withinGroup ?? configured[0]
+  return {
+    column: picked?.column ?? '',
+    direction: picked?.direction === 'desc' ? 'desc' : 'asc',
+  }
+}
 
 export function BeaconReportViewer({
   definition,
@@ -35,8 +51,11 @@ export function BeaconReportViewer({
     description: string | null
     query: {
       entity: string
+      mode?: 'rows' | 'summarize'
       filters?: ReportRuleGroup | null
       groupBy?: string | null
+      sort?: { column: string; direction: 'asc' | 'desc' } | null
+      sorts?: { column: string; direction: 'asc' | 'desc' }[] | null
     }
     layout: ReportLayout
   }
@@ -52,25 +71,42 @@ export function BeaconReportViewer({
   const tGenerated = useGeneratedTranslations()
   const savedFilters = definition.query.filters ?? EMPTY_FILTERS
   const savedGroupBy = definition.query.groupBy ?? ''
+  const savedSort = resolveInitialViewerSort(definition.query)
+  const isRowReport = (definition.query.mode ?? 'rows') === 'rows'
   const [filters, setFilters] = useState<ReportRuleGroup>(() => structuredClone(savedFilters))
   const [groupBy, setGroupBy] = useState(savedGroupBy)
+  const [sortColumn, setSortColumn] = useState(savedSort.column)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(savedSort.direction)
   const [result, setResult] = useState(initialResult)
   const [error, setError] = useState(initialError)
   const [pending, startTransition] = useTransition()
   const entity = reportEntity(catalog, definition.query.entity)
+  const visibleColumns = useMemo(
+    () => (entity ? entity.columns.filter((column) => !column.hidden) : []),
+    [entity],
+  )
   const activeFilters = filters.rules.length ? filters : null
+  const activeSort = useMemo(
+    () => (isRowReport && sortColumn ? { column: sortColumn, direction: sortDirection } : null),
+    [isRowReport, sortColumn, sortDirection],
+  )
   const exportQuery = useMemo(() => {
     const params = new URLSearchParams()
     params.set('filters', JSON.stringify(activeFilters))
     params.set('groupBy', groupBy)
+    if (activeSort) {
+      params.set('sortColumn', activeSort.column)
+      params.set('sortDirection', activeSort.direction)
+    }
     return params
-  }, [activeFilters, groupBy])
+  }, [activeFilters, activeSort, groupBy])
 
   const run = () => {
     startTransition(async () => {
       const next = await runReportWithControls(definition.id, {
         filters: activeFilters,
         groupBy: groupBy || null,
+        sort: activeSort,
       })
       if (!next.ok) {
         setError(next.error)
@@ -83,6 +119,8 @@ export function BeaconReportViewer({
   const reset = () => {
     setFilters(structuredClone(savedFilters))
     setGroupBy(savedGroupBy)
+    setSortColumn(savedSort.column)
+    setSortDirection(savedSort.direction)
   }
   const href = (format: 'csv' | 'xlsx' | 'pdf') => {
     const params = new URLSearchParams(exportQuery)
@@ -150,18 +188,59 @@ export function BeaconReportViewer({
                   <option value="">
                     <GeneratedText id="m_023e5c19efd4cc" />
                   </option>
-                  {entity.columns
-                    .filter((column) => !column.hidden)
-                    .map((column) => (
-                      <option key={column.key} value={column.key}>
-                        {column.label}
-                      </option>
-                    ))}
+                  {visibleColumns.map((column) => (
+                    <option key={column.key} value={column.key}>
+                      {column.label}
+                    </option>
+                  ))}
                 </Select>
                 <p className="text-fg-muted text-xs">
                   <GeneratedText id="m_176a68ad690d1e" />
                 </p>
               </div>
+              {isRowReport ? (
+                <div className="space-y-1">
+                  <label htmlFor="report-runtime-sort" className="text-sm font-medium">
+                    <GeneratedText id="m_16242051249005" />
+                  </label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="sm:col-span-2">
+                      <Select
+                        id="report-runtime-sort"
+                        value={sortColumn}
+                        onChange={(event) => setSortColumn(event.target.value)}
+                      >
+                        <option value="">
+                          <GeneratedText id="m_0be21d970819f1" />
+                        </option>
+                        {visibleColumns.map((column) => (
+                          <option key={column.key} value={column.key}>
+                            {column.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <Select
+                      aria-label={tGenerated('m_1a2f5ca545dec7')}
+                      value={sortDirection}
+                      disabled={!sortColumn}
+                      onChange={(event) =>
+                        setSortDirection(event.target.value === 'desc' ? 'desc' : 'asc')
+                      }
+                    >
+                      <option value="asc">
+                        <GeneratedText id="m_0027c5891082cf" />
+                      </option>
+                      <option value="desc">
+                        <GeneratedText id="m_14a3ccc633a056" />
+                      </option>
+                    </Select>
+                  </div>
+                  <p className="text-fg-muted text-xs">
+                    <GeneratedText id="m_017701ff251fc3" />
+                  </p>
+                </div>
+              ) : null}
               <ReportFilterTree entity={entity} group={filters} onChange={setFilters} />
               <div className="flex flex-wrap gap-2">
                 <Button type="button" onClick={run} disabled={pending}>
@@ -185,15 +264,28 @@ export function BeaconReportViewer({
               {error}
             </div>
           ) : (
-            <ReportResultView
-              organization={organization}
-              logoUrl={logoUrl}
-              primaryColor={primaryColor}
-              title={definition.name}
-              description={definition.description ?? undefined}
-              layout={definition.layout}
-              result={result}
-            />
+            <div className="space-y-3">
+              {result.truncated ? (
+                <div
+                  role="status"
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-200"
+                >
+                  <GeneratedText
+                    id="m_002b68d8bfe1f1"
+                    values={{ value0: result.rowCount.toLocaleString() }}
+                  />
+                </div>
+              ) : null}
+              <ReportResultView
+                organization={organization}
+                logoUrl={logoUrl}
+                primaryColor={primaryColor}
+                title={definition.name}
+                description={definition.description ?? undefined}
+                layout={definition.layout}
+                result={result}
+              />
+            </div>
           )}
         </div>
       </div>

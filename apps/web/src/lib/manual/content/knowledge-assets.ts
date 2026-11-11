@@ -554,8 +554,8 @@ Chapters and sections print as their own divider page and group the contents lis
 
 Open the **Cover** panel on the left. Every book picks its own cover, so a safety manual and a talks compendium can look different.
 
-1. Pick a design in **Cover design** and tap **Save cover**. **Built-in cover** is the plain title page with your company logo.
-2. To create or change a design, tap **Open the PDF template designer**, add a template for **Document book (cover)**, and drag in fields like **Book title** and **Company name**.
+1. Pick a design in **Cover design** and tap **Save cover**. Leaving it on **Default cover** uses your workspace's seeded **Document Book Cover (PDF)** template.
+2. To customize the default cover or create another design, tap **Open the PDF template designer** (or open **Admin → PDF templates**), edit **Document Book Cover (PDF)** or add a template for **Document book (cover)**, and arrange fields like **Book title**, **Company name**, and your company logo.
 
 ### Choosing how a book prints
 
@@ -619,10 +619,11 @@ Imported Word files must be .docx files and 100 MB or smaller.
 
 ## Edit the draft
 
-1. Open the document's **Write** tab. The Word editor opens in Editing mode with its ribbon visible. Use the Editing dropdown at the top right to switch to Viewing mode when you only want to read. The loading screen clears when the editor is ready to show its own progress. Publishing still waits until the document has finished loading and saving.
-2. Page size, headers, footers, images, tables — set them in the editor, exactly like Word.
-3. Use the editor's **Review** menu for track changes and comments while a document is being reviewed.
-4. **Download DOCX** saves the working file; **Replace** swaps in a different Word file.
+1. While a document is **Draft** or **Under review**, open its **Write** tab. The Word editor opens in Editing mode with its ribbon visible. Use the Editing dropdown at the top right to switch to Viewing mode when you only want to read. The loading screen clears when the editor is ready to show its own progress. Publishing still waits until the document has finished loading and saving.
+2. When a document is **Published** or **Archived**, opening it lands on the **PDF** tab showing the latest published PDF. Switching to **Write** opens that published Word snapshot read-only (**Read-only · click Unpublish to edit**), and **AI**, **Replace**, and **Publish** stay hidden until you click **Unpublish**.
+3. Page size, headers, footers, images, tables — set them in the editor, exactly like Word.
+4. Use the editor's **Review** menu for track changes and comments while a document is being reviewed.
+5. **Download DOCX** saves the current Word file (the working draft while unpublished, or the published snapshot while published); **Replace** swaps in a different Word file on a draft.
 
 ## Document header on individual PDFs
 

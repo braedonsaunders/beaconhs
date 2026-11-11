@@ -694,6 +694,13 @@
       "when": 1793898000000,
       "tag": "0099_equipment_custody_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1793984400000,
+      "tag": "0100_document_book_cover_and_report_sorts",
+      "breakpoints": true
     }
   ]
 }

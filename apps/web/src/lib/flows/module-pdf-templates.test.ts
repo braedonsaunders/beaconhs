@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { expandRepeatMarkers, renderTemplate } from '@beaconhs/email-render'
 import { MODULE_PDF_TEMPLATE_SEEDS } from '@beaconhs/db/seed/pdf-templates'
+import { compileBuilderHtml } from '../template-builder-compile'
+import { COMPONENT_SUBJECT_FIELDS } from './component-subjects'
 import { MODULE_FLOW_PROFILES } from './module-profiles'
 
 // CONTRACT TEST: every {{token}}, data-if gate, and data-each collection in the
 // seeded per-module PDF documents must resolve against that module's flow
-// profile — the exact keys its adapter's loadValues() returns. A template
-// referencing a key the profile doesn't declare would silently print blanks.
+// profile (or component subject field list) — the exact keys its renderer
+// supplies. A template referencing a key the profile doesn't declare would
+// silently print blanks.
 
 const LOOP_META = new Set(['@index', '@number', '@first', '@last', 'this'])
 const BLOCK_RE = /\{\{\{?\s*(\/?#?[\w@./-]+)(?:\s+([\w@./-]+))?\s*\}?\}\}/g
@@ -15,13 +18,22 @@ type Scope = { fields: Set<string>; collections: Map<string, Set<string>> }
 
 function profileScope(subjectKey: string): Scope {
   const profile = MODULE_FLOW_PROFILES[subjectKey]
-  if (!profile) throw new Error(`No flow profile for module '${subjectKey}'`)
-  return {
-    fields: new Set(profile.fields.map((f) => f.key)),
-    collections: new Map(
-      (profile.collections ?? []).map((c) => [c.key, new Set(c.fields.map((f) => f.key))]),
-    ),
+  if (profile) {
+    return {
+      fields: new Set(profile.fields.map((f) => f.key)),
+      collections: new Map(
+        (profile.collections ?? []).map((c) => [c.key, new Set(c.fields.map((f) => f.key))]),
+      ),
+    }
   }
+  const componentFields = COMPONENT_SUBJECT_FIELDS[subjectKey]
+  if (componentFields) {
+    return {
+      fields: new Set(componentFields.map((f) => f.key)),
+      collections: new Map(),
+    }
+  }
+  throw new Error(`No flow profile or component subject for module '${subjectKey}'`)
 }
 
 /** Walk tokens with an #each scope stack; return the unresolvable ones. */
@@ -82,10 +94,13 @@ describe('seeded module PDF templates', () => {
     })
     expect(currentAdapter).toContain('2 — First aid treatment required. No property damage.')
   })
-  it('covers every templatable module subject', () => {
+  it('covers every templatable module and component subject', () => {
     const seeded = new Set(MODULE_PDF_TEMPLATE_SEEDS.map((t) => t.subjectKey))
-    for (const key of Object.keys(MODULE_FLOW_PROFILES)) {
-      expect(seeded, `missing seeded PDF template for module '${key}'`).toContain(key)
+    for (const key of [
+      ...Object.keys(MODULE_FLOW_PROFILES),
+      ...Object.keys(COMPONENT_SUBJECT_FIELDS),
+    ]) {
+      expect(seeded, `missing seeded PDF template for subject '${key}'`).toContain(key)
     }
   })
 
@@ -94,15 +109,18 @@ describe('seeded module PDF templates', () => {
       const scope = profileScope(seed.subjectKey)
       const compiled = expandRepeatMarkers(seed.html)
 
-      it('expands all tr markers into blocks', () => {
+      it('expands all tr markers into blocks and round-trips through builder compilation', () => {
         expect(compiled).not.toContain('data-each=')
         expect(compiled).not.toContain('data-if=')
+        const builderCompiled = compileBuilderHtml(seed.html)
+        expect(builderCompiled.errors).toEqual([])
       })
 
       it('references only keys the module profile declares', () => {
         expect(unknownTokens(compiled, scope, new Set())).toEqual([])
         // header/footer merge with the record values + page counters
         expect(unknownTokens(seed.header, scope, new Set(['page', 'pages']))).toEqual([])
+        expect(unknownTokens(seed.footer ?? '', scope, new Set(['page', 'pages']))).toEqual([])
       })
 
       it('renders a full sample record without leftovers', () => {

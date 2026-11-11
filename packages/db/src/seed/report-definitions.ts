@@ -532,7 +532,10 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
         },
         columnLabels: { booking_coverage_status: 'Coverage' },
         groupBy: 'person_name',
-        sorts: [{ column: 'person_name', direction: 'asc' }],
+        sorts: [
+          { column: 'person_name', direction: 'asc' },
+          { column: 'course_name', direction: 'asc' },
+        ],
       },
     ),
   ),

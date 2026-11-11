@@ -9,10 +9,10 @@ import {
 
 // Right-pane PDF surface with two modes:
 //   • file-only documents — the uploaded PDF is the document; this pane is the
-//     primary view (managers can upload/replace the source here).
-//   • authored documents  — opening the pane generates a fresh PDF of the
-//     CURRENT working draft (worker render of the DOCX master) with download
-//     links. Readers always get the published version's PDF instead.
+//     primary view (managers can upload/replace the source while unpublished).
+//   • authored documents  — opening the pane while unpublished generates a
+//     fresh PDF of the CURRENT working draft; while published, it displays the
+//     published version's controlled PDF so it matches books and readers.
 // Rendering uses the app-themed pdf.js viewer so the chrome follows the
 // platform's light/dark theme.
 
@@ -34,6 +34,7 @@ export function DocumentPdfPane({
   onModeChange,
   readOnly = false,
   draft = false,
+  canReplace = false,
   revision = '',
 }: {
   documentId: string
@@ -43,6 +44,8 @@ export function DocumentPdfPane({
   readOnly?: boolean
   /** Authored document, manage surface: render the CURRENT working draft. */
   draft?: boolean
+  /** Whether an uploaded PDF may be replaced (only while draft / under review). */
+  canReplace?: boolean
   revision?: string
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
@@ -134,6 +137,8 @@ export function DocumentPdfPane({
     })()
   }
 
+  const allowFileUpload = !readOnly && !draft && canReplace
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-100 dark:bg-slate-950">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900">
@@ -173,7 +178,7 @@ export function DocumentPdfPane({
           />
           <GeneratedValue
             value={
-              !readOnly && !draft && url ? (
+              allowFileUpload && url ? (
                 <button
                   type="button"
                   onClick={() => setUploadOpen((v) => !v)}
@@ -217,7 +222,7 @@ export function DocumentPdfPane({
 
       <GeneratedValue
         value={
-          !readOnly && !draft && uploadOpen ? (
+          allowFileUpload && uploadOpen ? (
             <div className="border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
               <FileUploader
                 requestUploadAction={requestUpload}
@@ -237,7 +242,7 @@ export function DocumentPdfPane({
           value={
             status === 'ready' && url ? (
               <PdfViewer url={url} className="h-full" />
-            ) : status === 'error' && noSource && !readOnly && !draft ? (
+            ) : status === 'error' && noSource && allowFileUpload ? (
               // No PDF yet — the same centered card the Write tab uses for a new
               // document, with the uploader front and center.
               <div className="mx-auto w-full max-w-xl px-5 py-10">

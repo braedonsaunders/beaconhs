@@ -96,7 +96,11 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
     // Cover designs available to this book. Scoped to the document-book subject
     // so the picker cannot offer an incident report as a book cover.
     const covers = await tx
-      .select({ id: pdfTemplates.id, name: pdfTemplates.name })
+      .select({
+        id: pdfTemplates.id,
+        name: pdfTemplates.name,
+        isModuleDefault: pdfTemplates.isModuleDefault,
+      })
       .from(pdfTemplates)
       .where(
         and(
@@ -112,6 +116,7 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
 
   if (!data) notFound()
   const { book, items, categories, types, covers } = data
+  const defaultCover = covers.find((cover) => cover.isModuleDefault) ?? null
   const activity = await recentActivityForEntity(ctx, 'document_book', id, 50)
 
   const entries: BookEntry[] = items.map((row) => ({
@@ -176,7 +181,11 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
                         defaultValue={book.coverTemplateId ?? ''}
                         disabled={locked}
                       >
-                        <option value="">{tGenerated('m_1f5fff4b7b151c')}</option>
+                        <option value="">
+                          {defaultCover
+                            ? tGeneratedValue(`Default cover (${defaultCover.name})`)
+                            : tGenerated('m_1f5fff4b7b151c')}
+                        </option>
                         {covers.map((cover) => (
                           <option key={cover.id} value={cover.id}>
                             {cover.name}

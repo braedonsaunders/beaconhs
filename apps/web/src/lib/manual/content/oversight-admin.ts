@@ -299,8 +299,9 @@ Open [Reports](/reports) from the sidebar. It has the **Reports** and **Schedule
 3. The report opens with **Run filters and grouping** in the left third and the paper preview in the right two-thirds. On a phone, the controls appear before the preview.
 4. Add one or more filters. The field, operator, and value stay on one row, including on a phone. Every filter uses a field from that report's data source. Fields that draw from a list — people, courses, sites, statuses — show a searchable picker; free-form fields let you type values.
 5. Under **Group results by**, choose the field that should create the printed sections. For training reports, choose **Person** or **Course**.
-6. Click **Apply and run**. The paper preview and summary now use those exact controls.
-7. Click **Reset to saved report** to return to the report's saved filters and grouping.
+6. Under **Sort rows by** and **Sort direction**, choose the field and **Ascending** or **Descending** order for rows. When a report is grouped, BeaconHS keeps each group's rows together first and sorts rows inside each group by your chosen field. **Training — Missing** groups by **Person** and sorts courses alphabetically inside each person by default.
+7. Click **Apply and run**. The paper preview and summary now use those exact filters, grouping, and sort order. The on-screen preview shows up to 5,000 rows and displays a notice if more rows match; CSV and Excel exports include every matching row.
+8. Click **Reset to saved report** to return to the report's saved filters, grouping, and sorting.
 
 Training reports expose employee, course, course type, delivery type, department, employment status, and person-group fields — including those joined from the employee record. This lets the certificate, expired, and missing reports be filtered and grouped without a separate training-only reporting screen. **Training — Missing** defaults to active employees. It includes missing, expired, or expiring courses assigned through active compliance requirements, plus every upcoming class booking even when the course was never previously held or required. **Booked** takes priority over missing, expired, expiring, or current coverage until the class is completed or cancelled. You can change the employment-status filter in the report definition or when you run it.
 
@@ -317,7 +318,7 @@ Compliance reports can filter by **Requirement**, **Employee**, **Department**, 
 1. Open the report.
 2. Set the filters and grouping, then click **Apply and run**.
 3. Click **CSV**, **Excel**, or **PDF**. On **Training — Wallet cards**, **PDF** prints the designed CR80 card fronts (one card per page, printer size). The on-screen preview stays the filter table so you can pick who prints.
-4. The export uses the same filters and grouping shown in the preview. CSV and Excel are the table rows. Other reports' **PDF** uses the paper preview layout. Each report PDF page has a small footer with its page number and the date and time printed, in your account time zone. Scheduled report PDFs use the schedule owner's time zone.
+4. The export uses the same filters, grouping, and row sort order shown in the preview. CSV and Excel are the table rows. Other reports' **PDF** uses the paper preview layout. Each report PDF page has a small footer with its page number and the date and time printed, in your account time zone. Scheduled report PDFs use the schedule owner's time zone.
 
 ## Schedule a report by email
 
@@ -488,7 +489,7 @@ For a custom grouping or measure, open **ƒ Fields & functions**. If the data so
 2. Read the expiry date in each cell. Green means **Valid**, orange means **Expiring**, and red means **Expired**. **No expiry** means a valid ticket has no expiry date. A blank cell means there is no completed ticket.
 3. Click **Filters** to select **People**, **Departments / divisions**, **Groups**, **Courses** or **Skills**, and **Status**. You can choose several values in each filter. Click **Apply** or **Reset**. These filters only affect the current view and do not change the saved card.
 4. Use **Search people…** and the page controls to find employees. Hover over a column heading to read its full name. Use **Column width** to resize all ticket columns together.
-5. Click **Download CSV** or **PDF** to export all matching employees with the same filters and expiry dates. Exports include every matching page.
+5. Click **Download CSV** or **PDF** to export all matching employees with the same filters and expiry dates. **PDF** prints a landscape pivot matrix matching the on-screen grid, with **Valid**, **Expiring**, and **Expired** cell colours, the status legend, and clean multi-column pages when many courses or skills are included. Exports include every matching page.
 6. To put a matrix on a dashboard, click **Customise**, then **Add content** and choose the matrix card.
 
 Only active employees appear. Renewed skill tickets replace older tickets in the matrix. Missing tickets are blank; **Missing** in the status filter selects people with a missing requirement. Imported divisions use the **Departments / divisions** filter because BeaconHS maintains them as departments. To print wallet cards, use **Reports → Training — Wallet cards** and apply the matching people and course filters.
@@ -499,7 +500,7 @@ You need data-export permission to download card data.
 
 1. Open the [Library](/insights/library).
 2. Click the PDF icon on a card, or open the card and click **PDF**.
-3. BeaconHS downloads a branded snapshot using the card's current data. Wide matrices continue in readable column sections.
+3. BeaconHS downloads a branded snapshot using the card's current data. Pivot and heatmap cards print as landscape matrix grids with their cell formatting and legend, continuing across clean column bands when wide.
 
 Use **Download CSV** on the open card when you need the same live data in a spreadsheet. Exporting an AI card runs its saved analysis and puts the summary and key points in the PDF.
 
@@ -937,7 +938,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 - **Data export** — audited CSV exports across modules and Builder apps. Search and filter the source catalogue, then sort it by name, group, or sensitivity. Builder app sources follow the role you are currently using; template builders can also export records from draft and archived apps for review.
 - **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates drive record downloads: every module ships with an editable default document, and each Builder app gets its own generated one the first time it is published. On the **Module print defaults** tab you pick which template each module's **PDF** button renders, and press **Generate default template** for any app that lacks one. Records without a template get a clean field-summary PDF. To start from an existing template, use **Duplicate** on its row, or **Save as copy** in the builder to keep your edits as a new template.
 
-Every module that ships a template appears on that tab, and each one has a matching **Print / PDF** button on its record: incidents, hazard assessments, corrective actions, equipment work orders, equipment asset records, equipment checks, PPE inspections, PPE issue reports, journals, site inspections, training assessments, training classes, document sign-off sessions, management reviews, and the vehicle log month sheet.
+Every module that ships a template appears on that tab, and each one has a matching **Print / PDF** button on its record: incidents, hazard assessments, corrective actions, equipment work orders, equipment asset records, equipment checks, PPE inspections, PPE issue reports, journals, site inspections, training assessments, training classes, document sign-off sessions, management reviews, document book covers (**Document Book Cover (PDF)**), and the vehicle log month sheet.
 
 Tables in a PDF template keep the same column widths on every page, so a long list that runs over a page break does not change shape halfway down, and the column headings repeat at the top of each page.
 

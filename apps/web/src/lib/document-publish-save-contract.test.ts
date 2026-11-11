@@ -72,6 +72,13 @@ describe('document publish save contract', () => {
     expect(layout).toContain('<OfflineRecordProvider module="documents" recordId={id}>')
   })
 
+  it('renders the immutable published version instead of the working master when published', () => {
+    expect(pane).toContain('const editableMaster = canPublish ? master : null')
+    expect(pane).toContain('draft={canPublish && !!master}')
+    expect(pane).toContain('canReplace={canPublish}')
+    expect(pane).toContain('nextDocumentMajorVersion(latestPublished?.version)')
+  })
+
   it('keeps the document navigation rail from flex-shrinking during refresh', () => {
     expect(page).toMatch(/w-1\/3[^"\n]*shrink-0/u)
   })

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DOCX_MIME_TYPE, MAX_DOCX_CONVERSION_BYTES } from '@beaconhs/office/limits'
 import {
   canPublishDocument,
+  defaultDocumentWorkspaceMode,
   documentMasterMetadataError,
   nextDocumentMajorVersion,
 } from './document-authoring-policy'
@@ -20,6 +21,38 @@ describe('document authoring policy', () => {
     expect(canPublishDocument('published')).toBe(false)
     expect(canPublishDocument('archived')).toBe(false)
   })
+
+  it('defaults published and archived documents to their published PDF instead of the working master', () => {
+    expect(
+      defaultDocumentWorkspaceMode({
+        canPublish: false,
+        hasWorkingMaster: true,
+        hasUploadedPdf: false,
+      }),
+    ).toBe('pdf')
+    expect(
+      defaultDocumentWorkspaceMode({
+        canPublish: true,
+        hasWorkingMaster: true,
+        hasUploadedPdf: false,
+      }),
+    ).toBe('write')
+    expect(
+      defaultDocumentWorkspaceMode({
+        canPublish: true,
+        hasWorkingMaster: false,
+        hasUploadedPdf: true,
+      }),
+    ).toBe('pdf')
+    expect(
+      defaultDocumentWorkspaceMode({
+        canPublish: true,
+        hasWorkingMaster: false,
+        hasUploadedPdf: false,
+      }),
+    ).toBe('write')
+  })
+
   it('accepts a DOCX at the shared conversion ceiling', () => {
     expect(documentMasterMetadataError(VALID)).toBeNull()
   })

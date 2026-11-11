@@ -54,6 +54,7 @@ import { countPages, pdfUnite } from '@beaconhs/office'
 import { composeDocumentBook, type ComposeBookNode } from './document-book-compose'
 import { renderTemplate } from '@beaconhs/email-render'
 import { audit } from '@beaconhs/audit'
+import { documentAccentColor } from '../lib/document-control-header'
 import { assertEmailAttachmentSize } from '../lib/email-attachment-policy'
 import { commitExternalArtifact } from '../lib/external-artifact-commit'
 import {
@@ -135,46 +136,54 @@ type BookRenderEntry =
     }
 
 /**
- * The tenant's designed cover for document books, merged with this book's
- * values.
- *
- * Null when none is configured, which is the normal case — the generated cover
- * stays the default so a book looks finished without anyone opening the
- * designer.
+ * Resolve the PDF cover template for a document book:
+ *  1. The book's explicit `cover_template_id` override when configured.
+ *  2. The tenant's active default `document-books` cover template (`is_module_default = true`),
+ *     which ships seeded as `document-book-cover-pdf` and is editable in `/admin/pdf-templates`.
+ *  3. `null` if the tenant cleared or deleted the default — `composeDocumentBook` still
+ *     renders its built-in safety-net cover.
  */
-/**
- * The cover design this book prints.
- *
- * Chosen PER BOOK (`document_books.cover_template_id`): a safety manual and a
- * safety-talk compendium want different covers, so a single tenant-wide default
- * could never be right for both. A book that names no template falls back to
- * the generated cover rather than borrowing another book's.
- */
-async function loadDesignedBookCover(
+async function loadBookCoverTemplate(
   tx: Parameters<Parameters<typeof withTenant>[2]>[0],
   tenantId: string,
   coverTemplateId: string | null,
-  values: Record<string, unknown>,
-): Promise<{ html: string; marginMm: number } | null> {
-  if (!coverTemplateId) return null
-  const [tpl] = await tx
-    .select({
-      compiledHtml: pdfTemplates.compiledHtml,
-      marginMm: pdfTemplates.marginMm,
-    })
-    .from(pdfTemplates)
-    .where(
-      and(
-        eq(pdfTemplates.tenantId, tenantId),
-        eq(pdfTemplates.id, coverTemplateId),
-        eq(pdfTemplates.isActive, true),
-        isNull(pdfTemplates.deletedAt),
-      ),
-    )
-    .limit(1)
+): Promise<{ compiledHtml: string; marginMm: number } | null> {
+  const [tpl] = coverTemplateId
+    ? await tx
+        .select({
+          compiledHtml: pdfTemplates.compiledHtml,
+          marginMm: pdfTemplates.marginMm,
+        })
+        .from(pdfTemplates)
+        .where(
+          and(
+            eq(pdfTemplates.tenantId, tenantId),
+            eq(pdfTemplates.id, coverTemplateId),
+            eq(pdfTemplates.isActive, true),
+            isNull(pdfTemplates.deletedAt),
+          ),
+        )
+        .limit(1)
+    : await tx
+        .select({
+          compiledHtml: pdfTemplates.compiledHtml,
+          marginMm: pdfTemplates.marginMm,
+        })
+        .from(pdfTemplates)
+        .where(
+          and(
+            eq(pdfTemplates.tenantId, tenantId),
+            eq(pdfTemplates.recordSubjectType, 'module'),
+            eq(pdfTemplates.recordSubjectKey, 'document-books'),
+            eq(pdfTemplates.isModuleDefault, true),
+            eq(pdfTemplates.isActive, true),
+            isNull(pdfTemplates.deletedAt),
+          ),
+        )
+        .limit(1)
   if (!tpl?.compiledHtml?.trim()) return null
   return {
-    html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
+    compiledHtml: tpl.compiledHtml,
     marginMm: tpl.marginMm,
   }
 }
@@ -644,10 +653,6 @@ async function storeTransientPdfArtifact(args: PdfArtifactInput): Promise<Stored
 // published version. Missing pins, versions, attachment metadata, or PDF bytes
 // fail the render; a book must never silently omit part of its publication.
 
-function escapeBookHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
 async function renderDocumentBook(tenantId: string, bookId: string): Promise<StoredPdfResult> {
   const data = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
@@ -842,26 +847,9 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       ]
     })
 
-    // Every token the designer palette offers must be supplied here, or a
-    // dragged field prints blank. The record type pins that: the catalogue in
-    // @beaconhs/db is the one list both sides read.
-    const coverTokens: Record<DocumentBookCoverToken, string | number> = {
-      book_title: row.b.title,
-      book_description: row.b.description ?? '',
-      tenant_name: row.tenant.name,
-      published_at: row.b.publishedAt ? row.b.publishedAt.toISOString().slice(0, 10) : '',
-      document_count: entries.filter((entry) => entry.kind === 'document').length,
-      chapter_count: entries.filter((entry) => entry.kind === 'chapter').length,
-      section_count: entries.filter((entry) => entry.kind === 'section').length,
-    }
-    const designedCover = await loadDesignedBookCover(
-      tx,
-      tenantId,
-      row.b.coverTemplateId,
-      coverTokens,
-    )
+    const coverTemplate = await loadBookCoverTemplate(tx, tenantId, row.b.coverTemplateId)
 
-    return { ...row, entries, designedCover }
+    return { ...row, entries, coverTemplate }
   })
 
   if (!data) {
@@ -870,6 +858,39 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
 
   const b = data.b
   const title = b.title
+
+  // Inline the tenant's branding logo once and reuse it across both the cover
+  // template merge tokens and the safety-net generated cover.
+  const logoUrl = await loadBrandingLogoDataUrl(data.tenant.branding?.logoUrl)
+  const accentColor = documentAccentColor(data.tenant.branding?.primaryColor)
+  const issuedMonthYear = b.publishedAt
+    ? new Intl.DateTimeFormat('en-CA', {
+        month: 'long',
+        year: 'numeric',
+        timeZone: BOOK_PRINT_TIMEZONE,
+      }).format(b.publishedAt)
+    : ''
+
+  // Every token the designer palette offers must be supplied here, or a
+  // dragged field prints blank. The record type pins that: the catalogue in
+  // @beaconhs/db is the one list both sides read.
+  const coverTokens: Record<DocumentBookCoverToken, string | number> = {
+    book_title: b.title,
+    book_description: b.description ?? '',
+    tenant_name: data.tenant.name,
+    tenant_logo_url: logoUrl ?? '',
+    issued_month_year: issuedMonthYear,
+    published_at: b.publishedAt ? b.publishedAt.toISOString().slice(0, 10) : '',
+    document_count: data.entries.filter((entry) => entry.kind === 'document').length,
+    chapter_count: data.entries.filter((entry) => entry.kind === 'chapter').length,
+    section_count: data.entries.filter((entry) => entry.kind === 'section').length,
+  }
+  const designedCover = data.coverTemplate
+    ? {
+        html: renderTemplate(data.coverTemplate.compiledHtml, coverTokens, { escapeHtml: true }),
+        marginMm: data.coverTemplate.marginMm,
+      }
+    : null
 
   // Fetch every member in parallel. A 196-document book used to make 392
   // sequential round trips to object storage before a single page was drawn,
@@ -917,14 +938,14 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
     title,
     description: b.description,
     tenantName: data.tenant.name,
-    logoUrl: await loadBrandingLogoDataUrl(data.tenant.branding?.logoUrl),
+    logoUrl,
     accentColor: data.tenant.branding?.primaryColor ?? null,
     publishedAt: b.publishedAt,
     settings: b.printSettings,
     // Tenants carry no timezone of their own (it lives on users), and a
     // printed manual needs one stable local stamp rather than the reader's.
     timeZone: BOOK_PRINT_TIMEZONE,
-    designedCover: data.designedCover,
+    designedCover,
     entries: data.entries.flatMap((e): ComposeBookNode[] => {
       if (e.kind !== 'document') return [{ kind: e.kind, title: e.title }]
       const loaded = byKey.get(e.key)

@@ -47,8 +47,9 @@ function assertDocumentMasterAttachment(attachment: DocumentMasterAttachment): v
 
 /**
  * Mint a Writer session. Without `versionId` this opens the live master
- * (writable, documents.manage). With `versionId` it opens that immutable
- * published snapshot read-only (documents.read) — version history viewing.
+ * (writable, documents.manage, unpublished documents only). With `versionId` it
+ * opens that immutable published snapshot read-only (documents.read) — used by
+ * both version history viewing and the read-only Write view on published docs.
  */
 export async function getDocumentWriterSession(
   documentId: string,
@@ -79,11 +80,15 @@ export async function getDocumentWriterSession(
       return v?.docxAttachmentId ?? null
     }
     const [doc] = await tx
-      .select({ sourceAttachmentId: documents.sourceAttachmentId })
+      .select({
+        status: documents.status,
+        sourceAttachmentId: documents.sourceAttachmentId,
+      })
       .from(documents)
       .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
       .limit(1)
-    return doc?.sourceAttachmentId ?? null
+    if (!doc || !canPublishDocument(doc.status)) return null
+    return doc.sourceAttachmentId ?? null
   })
   if (!attachmentId) return { ok: false, error: 'no_master' }
 
@@ -126,6 +131,7 @@ export async function createBlankDocumentMaster(documentId: string) {
     await ctx.db(async (tx) => {
       const [doc] = await tx
         .select({
+          status: documents.status,
           title: documents.title,
           key: documents.key,
           sourceAttachmentId: documents.sourceAttachmentId,
@@ -135,6 +141,9 @@ export async function createBlankDocumentMaster(documentId: string) {
         .limit(1)
         .for('update')
       if (!doc) throw new Error('Document not found')
+      if (!canPublishDocument(doc.status)) {
+        throw new Error('Unpublish this document before starting a working file')
+      }
       if (doc.sourceAttachmentId) throw new Error('This document already has a working file')
 
       const base =
@@ -193,11 +202,15 @@ export async function importDocumentMaster(documentId: string, attachmentId: str
 
   await ctx.db(async (tx) => {
     const [doc] = await tx
-      .select({ id: documents.id })
+      .select({ id: documents.id, status: documents.status })
       .from(documents)
       .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
       .limit(1)
+      .for('update')
     if (!doc) throw new Error('Document not found')
+    if (!canPublishDocument(doc.status)) {
+      throw new Error('Unpublish this document before replacing its working file')
+    }
     const [att] = await tx
       .select({
         id: attachments.id,

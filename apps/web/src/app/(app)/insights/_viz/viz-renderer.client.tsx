@@ -10,9 +10,9 @@ import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/
 import dynamic from 'next/dynamic'
 import {
   buildChartSpec,
+  heatmapPivotSettings,
   validateRenderable,
   type BhqlResult,
-  type CfRule,
   type FlatResult,
   type PivotResult,
   type VizSettings,
@@ -43,35 +43,6 @@ const CHART_KEYS = new Set([
   'scatter',
 ])
 
-/** For a heatmap, derive a numeric color-scale across the value measure when the
- *  user hasn't configured one. */
-function heatmapSettings(result: PivotResult, settings: VizSettings): VizSettings {
-  if ((settings.conditionalFormats as CfRule[] | undefined)?.length) return settings
-  const value = result.valueMeasures[0]
-  if (!value || value.dataType !== 'number') return settings
-  let min = Infinity
-  let max = -Infinity
-  for (const row of result.cells) {
-    for (const cell of row) {
-      const n = cell ? Number(cell[value.key]) : NaN
-      if (Number.isFinite(n)) {
-        if (n < min) min = n
-        if (n > max) max = n
-      }
-    }
-  }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return settings
-  const rule: CfRule = {
-    type: 'colorScale',
-    column: value.key,
-    min,
-    max,
-    minColor: 'slate',
-    maxColor: 'teal',
-  }
-  return { ...settings, conditionalFormats: [rule] }
-}
-
 export function VizRenderer({
   vizType,
   result,
@@ -101,7 +72,11 @@ export function VizRenderer({
   if (vizType === 'heatmap') {
     const pivot = result as PivotResult
     return (
-      <PivotTable result={pivot} settings={heatmapSettings(pivot, settings)} tableKey={tableKey} />
+      <PivotTable
+        result={pivot}
+        settings={heatmapPivotSettings(pivot, settings)}
+        tableKey={tableKey}
+      />
     )
   }
   if (vizType === 'table') {

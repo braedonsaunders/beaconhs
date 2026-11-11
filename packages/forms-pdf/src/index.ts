@@ -68,6 +68,12 @@ export {
   type RenderedCredentialPrint,
 } from './training-credentials'
 export { renderWalletCardsForReport } from './report-wallet-cards'
+export {
+  renderPivotMatrixPdf,
+  type PivotMatrixDocumentInput,
+  type PivotMatrixLegendItem,
+  type PivotMatrixSection,
+} from './pivot-matrix'
 
 // --- Certificate and on-demand wallet-card PDFs --------------------------
 

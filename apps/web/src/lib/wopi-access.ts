@@ -12,6 +12,7 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
+import { canPublishDocument } from './document-authoring-policy'
 import { evaluateWopiPrincipal, type WopiGrant } from './wopi'
 import { resolveMembershipPerms } from './impersonation'
 
@@ -56,17 +57,22 @@ export async function wopiPrincipalIsAuthorized(grant: WopiGrant): Promise<boole
 /**
  * Re-authorize a signed editor grant against current tenant data. HMAC proves
  * who minted the token; this check ensures a 12-hour token stops working when
- * its document/deck is deleted or its master attachment is replaced.
+ * its document/deck is deleted, published, or its master attachment is replaced.
  */
 export async function wopiGrantCanAccessFile(tx: Database, grant: WopiGrant): Promise<boolean> {
   if (grant.target === 'document') {
     const [document] = await tx
-      .select({ sourceAttachmentId: documents.sourceAttachmentId })
+      .select({
+        status: documents.status,
+        sourceAttachmentId: documents.sourceAttachmentId,
+      })
       .from(documents)
       .where(and(eq(documents.id, grant.targetId), isNull(documents.deletedAt)))
       .limit(1)
     if (!document) return false
-    if (document.sourceAttachmentId === grant.attachmentId) return true
+    if (document.sourceAttachmentId === grant.attachmentId) {
+      return grant.canWrite ? canPublishDocument(document.status) : true
+    }
     if (grant.canWrite) return false
 
     // Read-only WOPI sessions may target an immutable published DOCX snapshot

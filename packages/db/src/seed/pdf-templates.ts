@@ -883,6 +883,16 @@ const EQUIPMENT_ASSET = wrap(
     narrative('Description', '{{description}}'),
 )
 
+const DOCUMENT_BOOK_COVER =
+  `<div style="${FONT}min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 12%;color:#0f172a;">` +
+  `{{#if tenant_logo_url}}<div style="margin-bottom:56px;"><img src="{{tenant_logo_url}}" alt="" style="max-height:150px;max-width:70%;object-fit:contain;" /></div>{{/if}}` +
+  `<div style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#64748b;">{{tenant_name}}</div>` +
+  `<h1 style="margin:14px 0 0;font-size:40px;line-height:1.15;font-weight:700;color:#0f172a;">{{book_title}}</h1>` +
+  `<div style="width:120px;height:3px;background:#0f172a;margin:26px auto;"></div>` +
+  `{{#if book_description}}<p style="margin:0;font-size:13px;line-height:1.6;color:#334155;max-width:80%;">{{book_description}}</p>{{/if}}` +
+  `{{#if issued_month_year}}<div style="margin-top:6px;font-size:12px;color:#64748b;">Issued {{issued_month_year}}</div>{{/if}}` +
+  `</div>`
+
 export type ModulePdfTemplateSeed = {
   key: string
   name: string
@@ -890,6 +900,8 @@ export type ModulePdfTemplateSeed = {
   html: string
   orientation: 'portrait' | 'landscape'
   header: string
+  footer?: string
+  marginMm?: number
   /**
    * Whether this is the template a module's record PDFs resolve to. Defaults to
    * true — a subject's ONE default. Purpose-built sheets (the blank
@@ -1032,6 +1044,16 @@ export const MODULE_PDF_TEMPLATE_SEEDS: ModulePdfTemplateSeed[] = [
     orientation: 'portrait',
     header: 'Asset {{reference}}',
   },
+  {
+    key: 'document-book-cover-pdf',
+    name: 'Document Book Cover (PDF)',
+    subjectKey: 'document-books',
+    html: DOCUMENT_BOOK_COVER,
+    orientation: 'portrait',
+    marginMm: 0,
+    header: '',
+    footer: '',
+  },
 ]
 
 type DrizzleTx = any
@@ -1055,7 +1077,8 @@ export async function seedPdfTemplates(tx: DrizzleTx, tenantId: string): Promise
   let updated = 0
   for (const tpl of MODULE_PDF_TEMPLATE_SEEDS) {
     const compiled = expandRepeatMarkers(tpl.html)
-    const footer = 'Page {{page}} of {{pages}}'
+    const footer = tpl.footer ?? 'Page {{page}} of {{pages}}'
+    const marginMm = tpl.marginMm ?? 14
     // The tenant-key unique index covers soft-deleted rows too — look the row
     // up regardless, and respect a tenant's deletion of a seeded template.
     const found = (await tx.execute(
@@ -1066,7 +1089,8 @@ export async function seedPdfTemplates(tx: DrizzleTx, tenantId: string): Promise
       await tx.execute(sql`
         update pdf_templates set name=${tpl.name},
           record_subject_type='module', record_subject_key=${tpl.subjectKey},
-          orientation=${tpl.orientation}, header_html=${tpl.header}, footer_html=${footer},
+          orientation=${tpl.orientation}, margin_mm=${marginMm},
+          header_html=${tpl.header}, footer_html=${footer},
           compiled_html=${compiled}, source_html=${tpl.html},
           is_active=true,
           is_module_default=${
@@ -1085,7 +1109,7 @@ export async function seedPdfTemplates(tx: DrizzleTx, tenantId: string): Promise
            is_active, is_module_default)
         values
           (${tenantId}, ${tpl.key}, ${tpl.name}, 'module', ${tpl.subjectKey}, 'letter',
-           ${tpl.orientation}, 14, ${tpl.header}, ${footer}, ${compiled}, ${tpl.html},
+           ${tpl.orientation}, ${marginMm}, ${tpl.header}, ${footer}, ${compiled}, ${tpl.html},
            true, ${
              tpl.isModuleDefault === false ? sql`false` : noDefaultExists(tenantId, tpl.subjectKey)
            })`)

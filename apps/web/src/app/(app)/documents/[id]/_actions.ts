@@ -3,8 +3,8 @@
 // Document PDF-source actions (the Overview metadata autosaves through the
 // `documents` record saver in ../_record-edits.ts). Authoring lives in Collabora Writer
 // (see _master-actions.ts): getDocumentPdfUrl resolves what the PDF pane shows
-// — a fresh render of the working master for managers (draft mode), the
-// selected version's controlled PDF for readers and uploaded-file documents.
+// — a fresh render of the working master for unpublished drafts, or the
+// published version's controlled PDF when published so every surface agrees.
 
 import { revalidatePath } from 'next/cache'
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
@@ -12,7 +12,7 @@ import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
-import { nextDocumentMajorVersion } from '@/lib/document-authoring-policy'
+import { canPublishDocument, nextDocumentMajorVersion } from '@/lib/document-authoring-policy'
 import {
   assertUploadedDocumentPdf,
   documentVersionVisibilityWhere,
@@ -38,8 +38,8 @@ export async function getDocumentPdfUrl(
   if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
   const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
 
-  // Managers previewing an authored document get a FRESH render of the
-  // current working master (the /pdf route dispatches the worker job).
+  // Managers previewing an unpublished authored document get a FRESH render of
+  // the current working master (the /pdf route dispatches the worker job).
   if (opts.versionId && !isUuid(opts.versionId))
     return { ok: false, error: 'Invalid document version.' }
   if (opts.draft && opts.versionId)
@@ -48,12 +48,18 @@ export async function getDocumentPdfUrl(
     if (!canManage) return { ok: false, error: 'Not allowed' }
     const [doc] = await ctx.db((tx) =>
       tx
-        .select({ sourceAttachmentId: documents.sourceAttachmentId })
+        .select({
+          status: documents.status,
+          sourceAttachmentId: documents.sourceAttachmentId,
+        })
         .from(documents)
         .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
         .limit(1),
     )
     if (!doc) return { ok: false, error: 'Document not found.' }
+    if (!canPublishDocument(doc.status)) {
+      return { ok: false, error: 'Unpublish this document before previewing a draft.' }
+    }
     if (!doc.sourceAttachmentId) {
       return { ok: false, error: 'This document has no Word file to render.' }
     }
@@ -74,10 +80,10 @@ export async function getDocumentPdfUrl(
     return { ok: false, error: 'This document is not published.' }
   }
 
-  // Resolve one version first. Managers may preview a replacement; readers
-  // stay on the last published version until the manager presses Publish.
-  // Selecting the version once also prevents an old uploaded PDF from
-  // shadowing a newer authored version.
+  // Resolve one version first. When a document is published (or archived),
+  // managers and readers alike view its published version; unpublished file
+  // versions are only shown while the document itself is in draft/review.
+  const includeUnpublished = opts.versionId ? false : canManage && canPublishDocument(doc.status)
   const [version] = await ctx.db((tx) =>
     tx
       .select({
@@ -90,7 +96,7 @@ export async function getDocumentPdfUrl(
       .from(documentVersions)
       .where(
         and(
-          documentVersionVisibilityWhere(documentId, opts.versionId ? false : canManage),
+          documentVersionVisibilityWhere(documentId, includeUnpublished),
           opts.versionId ? eq(documentVersions.id, opts.versionId) : undefined,
         ),
       )
@@ -155,12 +161,19 @@ export async function attachFileVersion(input: unknown): Promise<{ ok: boolean; 
     const attachmentId = requireUuidInput(values.attachmentId, 'PDF')
     await ctx.db(async (tx) => {
       const [doc] = await tx
-        .select({ id: documents.id, sourceAttachmentId: documents.sourceAttachmentId })
+        .select({
+          id: documents.id,
+          status: documents.status,
+          sourceAttachmentId: documents.sourceAttachmentId,
+        })
         .from(documents)
         .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
         .limit(1)
         .for('update')
       if (!doc) throw new Error('Document not found.')
+      if (!canPublishDocument(doc.status)) {
+        throw new Error('Unpublish this document before uploading a replacement PDF.')
+      }
       if (doc.sourceAttachmentId) {
         throw new Error('Authored documents publish from their Word working file.')
       }

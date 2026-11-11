@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { cn } from '@beaconhs/ui'
 import {
-  RAG_DISCRETE,
   pivotAxisLabel,
+  pivotConditionalRules,
   pivotDisplayValue,
   resolveCellStyle,
   type CfRule,
@@ -38,14 +38,7 @@ export function PivotTable({
   const pageKey = `${tableKey}_page`
   const query = (search.get(queryKey) ?? '').trim().toLocaleLowerCase()
   const value = result.valueMeasures[0]
-  const rules = useMemo<CfRule[]>(() => {
-    const configured = settings.conditionalFormats as CfRule[] | undefined
-    return configured?.length
-      ? configured
-      : value?.dataType === 'string'
-        ? [{ type: 'discrete', column: value.key, map: RAG_DISCRETE }]
-        : []
-  }, [settings.conditionalFormats, value])
+  const rules = useMemo<CfRule[]>(() => pivotConditionalRules(value, settings), [settings, value])
   const rows = result.rowKeys
     .map((axis, index) => ({
       index,

@@ -6,11 +6,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
-import type { Database } from '@beaconhs/db'
-import { pdfTemplates } from '@beaconhs/db/schema'
+import { db, withSuperAdmin, type Database, type DocumentBookCoverToken } from '@beaconhs/db'
+import { documentBookItems, documentBooks, pdfTemplates, tenants } from '@beaconhs/db/schema'
 import { sanitizeTokenizedEmailFragment } from '@beaconhs/email-render'
+import { resolveTenantLogoUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { slugifyTemplateKey } from '@/lib/email-templates'
@@ -206,6 +207,58 @@ export async function loadPdfPreviewData(
     !tpl.recordSubjectKey
   ) {
     return { values: null, sampleRef: null }
+  }
+
+  if (tpl.recordSubjectType === 'module' && tpl.recordSubjectKey === 'document-books') {
+    const [tenant] = await withSuperAdmin(db, (tx) =>
+      tx
+        .select({ name: tenants.name, branding: tenants.branding })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId!))
+        .limit(1),
+    )
+    const sampleBook = await ctx.db(async (tx) => {
+      const [book] = await tx
+        .select()
+        .from(documentBooks)
+        .where(eq(documentBooks.tenantId, ctx.tenantId))
+        .orderBy(desc(documentBooks.publishedAt), desc(documentBooks.updatedAt))
+        .limit(1)
+      if (!book) return null
+      const items = await tx
+        .select({ kind: documentBookItems.kind })
+        .from(documentBookItems)
+        .where(
+          and(eq(documentBookItems.tenantId, ctx.tenantId), eq(documentBookItems.bookId, book.id)),
+        )
+      return { book, items }
+    })
+    const logoUrl = await resolveTenantLogoUrl({
+      tenantId: ctx.tenantId!,
+      logoUrl: tenant?.branding?.logoUrl,
+    })
+    const publishedAt = sampleBook?.book.publishedAt ?? new Date()
+    const values: Record<DocumentBookCoverToken, string | number> = {
+      book_title: sampleBook?.book.title ?? 'Health & Safety Manual',
+      book_description:
+        sampleBook?.book.description ??
+        'Company policies, safe work procedures, and orientation reference documents.',
+      tenant_name: tenant?.name ?? 'BeaconHS',
+      tenant_logo_url: logoUrl ?? '',
+      issued_month_year: new Intl.DateTimeFormat('en-CA', {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'America/Toronto',
+      }).format(publishedAt),
+      published_at: publishedAt.toISOString().slice(0, 10),
+      document_count: sampleBook?.items.filter((item) => item.kind === 'document').length ?? 12,
+      chapter_count: sampleBook?.items.filter((item) => item.kind === 'chapter').length ?? 3,
+      section_count: sampleBook?.items.filter((item) => item.kind === 'section').length ?? 5,
+    }
+    return {
+      values,
+      sampleRef: sampleBook?.book.title ?? 'Sample book',
+    }
   }
 
   const sampleId = await findSampleSubjectId(ctx, tpl.recordSubjectType, tpl.recordSubjectKey)
@@ -430,8 +483,8 @@ export async function savePdfTemplateAsCopy(input: {
         description: source.description,
         recordSubjectType: source.recordSubjectType,
         recordSubjectKey: source.recordSubjectKey,
-        paperSize: parsePaperSize(input.paperSize),
-        orientation: parseOrientation(input.orientation),
+        paperSize: source.paperSize,
+        orientation: source.orientation,
         marginMm: clampMarginMm(input.marginMm),
         headerHtml,
         footerHtml,

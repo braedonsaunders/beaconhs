@@ -52,10 +52,22 @@ export async function GET(
   if (groupBy && groupBy.length > 128) {
     return NextResponse.json({ error: 'Report grouping is invalid.' }, { status: 400 })
   }
+  const sortColumnParam = request.nextUrl.searchParams.get('sortColumn')?.trim() ?? ''
+  if (sortColumnParam.length > 128) {
+    return NextResponse.json({ error: 'Report sort field is invalid.' }, { status: 400 })
+  }
+  const sortDirectionParam = request.nextUrl.searchParams.get('sortDirection')
+  const runtimeSort = sortColumnParam
+    ? {
+        column: sortColumnParam,
+        direction: sortDirectionParam === 'desc' ? ('desc' as const) : ('asc' as const),
+      }
+    : undefined
   const run = await runReportForViewer(ctx, definition, {
     maxRows: 10_000,
     filters,
     groupBy,
+    sort: runtimeSort,
   })
   if (run.error) return NextResponse.json({ error: run.error }, { status: 422 })
 
@@ -153,7 +165,7 @@ function toCsv(result: Result): string {
     }
     lines.push('')
   }
-  return `﻿${lines.join('\r\n')}`
+  return `\ufeff${lines.join('\r\n')}`
 }
 
 function csvRow(values: string[]): string {

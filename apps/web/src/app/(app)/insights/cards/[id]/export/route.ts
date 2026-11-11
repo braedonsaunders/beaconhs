@@ -1,6 +1,7 @@
-// CSV / PDF export of a Card's live result, under the caller's RLS. PDFs use
-// the same branded document renderer as reports and split wide pivots into
-// readable sections. AI-card PDFs run the stored analysis on demand.
+// CSV / PDF export of a Card's live result, under the caller's RLS. Pivot /
+// matrix cards print through the landscape matrix grid renderer (matching the
+// UI PivotTable with RAG cell colors and legend); flat and AI cards print
+// through the branded report document renderer.
 
 import {
   pivotAxisLabel,
@@ -8,7 +9,11 @@ import {
   type BhqlResult,
   type VizSettings,
 } from '@beaconhs/analytics'
-import { renderReportPdf } from '@beaconhs/forms-pdf'
+import {
+  renderPivotMatrixPdf,
+  renderReportPdf,
+  type PivotMatrixDocumentInput,
+} from '@beaconhs/forms-pdf'
 import { createSystemTranslator } from '@beaconhs/i18n/messages'
 import { resolveReportLayout } from '@beaconhs/reports'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -21,7 +26,12 @@ import { isTrustedSystemCard } from '../../../_system-cards'
 import { isUuid } from '@/lib/list-params'
 import { loadTenantBranding } from '../../../../reports/_run'
 import { runInsightAiCard } from '../../../_ai-actions'
-import { aiCardDocument, cardExportFilename, cardResultDocument } from './_document'
+import {
+  aiCardDocument,
+  cardExportFilename,
+  flatCardDocument,
+  pivotMatrixDocument,
+} from './_document'
 import { isRouterPrefetch } from '@/lib/router-prefetch'
 import {
   applyMatrixFilterRules,
@@ -38,11 +48,18 @@ function cell(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-function toCsv(result: BhqlResult, settings: VizSettings): string {
+function toCsv(
+  result: BhqlResult,
+  settings: VizSettings,
+  searchQuery = '',
+): {
+  csv: string
+  rowCount: number
+} {
   if (result.shape === 'flat') {
     const header = result.columns.map((c) => cell(c.label)).join(',')
     const rows = result.rows.map((r) => result.columns.map((c) => cell(r[c.key])).join(','))
-    return [header, ...rows].join('\n')
+    return { csv: [header, ...rows].join('\n'), rowCount: result.rows.length }
   }
   const valueKey = result.valueMeasures[0]?.key
   const header = [
@@ -56,23 +73,28 @@ function toCsv(result: BhqlResult, settings: VizSettings): string {
   ]
     .map(cell)
     .join(',')
-  const rows = result.rowKeys.map((rk, ri) => {
+  const q = searchQuery.trim().toLocaleLowerCase()
+  const matched = result.rowKeys
+    .map((rk, ri) => ({
+      rk,
+      ri,
+      label: pivotAxisLabel(rk, result.rowDimensions, settings.rowLabelField),
+    }))
+    .filter((row) => !q || row.label.toLocaleLowerCase().includes(q))
+  const rows = matched.map(({ rk, ri, label }) => {
     const cells = result.columnKeys.map((_ck, ci) =>
       cell(valueKey ? pivotDisplayValue(result.cells[ri]?.[ci] ?? null, valueKey, settings) : ''),
     )
     return [
-      ...(typeof settings.rowLabelField === 'string'
-        ? [pivotAxisLabel(rk, result.rowDimensions, settings.rowLabelField)]
-        : rk.labels
-      ).map(cell),
+      ...(typeof settings.rowLabelField === 'string' ? [label] : rk.labels).map(cell),
       ...cells,
     ].join(',')
   })
-  return [header, ...rows].join('\n')
+  return { csv: [header, ...rows].join('\n'), rowCount: matched.length }
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+  if (isRouterPrefetch(req)) return new Response(null, status204())
 
   const { id } = await params
   if (!isUuid(id)) return new Response('Not found', { status: 404 })
@@ -82,13 +104,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const card = await loadCard(ctx, id)
   if (!card) return new Response('Not found', { status: 404 })
 
+  const peopleSearch = req.nextUrl.searchParams.get(`matrix_${card.id}_q`) ?? ''
   let query = card.query
   if (matrixSource(query)) {
     try {
       query = applyMatrixFilterRules(
         query,
         parseMatrixFilters(req.nextUrl.searchParams.get(MATRIX_FILTER_PARAM)),
-        req.nextUrl.searchParams.get(`matrix_${card.id}_q`) ?? '',
+        peopleSearch,
       )
     } catch {
       return NextResponse.json({ error: 'Invalid matrix filters.' }, { status: 400 })
@@ -98,54 +121,98 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const filename = cardExportFilename(card.name)
 
   if (format === 'pdf') {
-    const document =
-      card.kind === 'ai'
-        ? await (async () => {
-            const analysis = await runInsightAiCard(card.id)
-            if (!analysis.ok) return analysis
-            return { ok: true as const, ...aiCardDocument(analysis.analysis, analysis.rowCount) }
-          })()
-        : {
-            ok: true as const,
-            ...cardResultDocument(
-              await runAuthorizedBhql(ctx, query, {
-                maxRows: 50_000,
-                trustedSystemCard: isTrustedSystemCard(card),
-              }),
-              card.vizSettings,
-            ),
-          }
+    const branding = await loadTenantBranding(ctx)
+    const translate = createSystemTranslator(ctx.locale)
 
-    if (!document.ok) {
-      return NextResponse.json({ error: document.error }, { status: 422 })
+    let pdf: Buffer
+    let rowCount: number
+
+    if (card.kind === 'ai') {
+      const analysis = await runInsightAiCard(card.id)
+      if (!analysis.ok) {
+        return NextResponse.json({ error: analysis.error }, { status: 422 })
+      }
+      const document = aiCardDocument(analysis.analysis, analysis.rowCount)
+      rowCount = document.rowCount
+      pdf = await renderReportPdf({
+        tenantName: branding.name,
+        tenantLogoUrl: branding.logoUrl,
+        primaryColor: branding.primaryColor,
+        reportName: card.name,
+        dateRangeLabel: 'Live data snapshot',
+        generatedAt: new Date(),
+        timezone: ctx.timezone,
+        locale: ctx.locale,
+        translate,
+        summary: document.summary,
+        groups: document.groups,
+        layout: resolveReportLayout({
+          paperSize: 'letter',
+          orientation: 'landscape',
+          marginMm: 10,
+          density: 'compact',
+        }),
+      })
+    } else {
+      const result = await runAuthorizedBhql(ctx, query, {
+        maxRows: 50_000,
+        trustedSystemCard: isTrustedSystemCard(card),
+      })
+      if (result.shape === 'pivot') {
+        const matrixDoc = pivotMatrixDocument(result, card.vizSettings, {
+          vizType: card.vizType,
+          searchQuery: peopleSearch,
+          translate,
+        })
+        rowCount = matrixDoc.rowCount
+        const matrixInput: PivotMatrixDocumentInput = {
+          tenantName: branding.name,
+          tenantLogoUrl: branding.logoUrl,
+          primaryColor: branding.primaryColor,
+          reportName: translate(card.name),
+          subtitle: card.description
+            ? translate(card.description)
+            : translate('Live data snapshot'),
+          truncatedNotice: matrixDoc.truncatedNotice,
+          summary: matrixDoc.summary,
+          sections: matrixDoc.sections,
+          generatedAt: new Date(),
+          timezone: ctx.timezone,
+          locale: ctx.locale,
+          translate,
+        }
+        pdf = await renderPivotMatrixPdf(matrixInput)
+      } else {
+        const document = flatCardDocument(result)
+        rowCount = document.rowCount
+        pdf = await renderReportPdf({
+          tenantName: branding.name,
+          tenantLogoUrl: branding.logoUrl,
+          primaryColor: branding.primaryColor,
+          reportName: card.name,
+          dateRangeLabel: 'Live data snapshot',
+          generatedAt: new Date(),
+          timezone: ctx.timezone,
+          locale: ctx.locale,
+          translate,
+          summary: document.summary,
+          groups: document.groups,
+          layout: resolveReportLayout({
+            paperSize: 'letter',
+            orientation: 'landscape',
+            marginMm: 10,
+            density: 'compact',
+          }),
+        })
+      }
     }
 
-    const branding = await loadTenantBranding(ctx)
-    const pdf = await renderReportPdf({
-      tenantName: branding.name,
-      tenantLogoUrl: branding.logoUrl,
-      primaryColor: branding.primaryColor,
-      reportName: card.name,
-      dateRangeLabel: 'Live data snapshot',
-      generatedAt: new Date(),
-      timezone: ctx.timezone,
-      locale: ctx.locale,
-      translate: createSystemTranslator(ctx.locale),
-      summary: document.summary,
-      groups: document.groups,
-      layout: resolveReportLayout({
-        paperSize: 'letter',
-        orientation: 'landscape',
-        marginMm: 10,
-        density: 'compact',
-      }),
-    })
     await recordAudit(ctx, {
       entityType: 'insight_card',
       entityId: card.id,
       action: 'export',
-      summary: `Exported Insights card "${card.name}" (${document.rowCount} rows) to PDF`,
-      metadata: { format: 'pdf', rowCount: document.rowCount },
+      summary: `Exported Insights card "${card.name}" (${rowCount} rows) to PDF`,
+      metadata: { format: 'pdf', rowCount },
     })
     return new NextResponse(new Uint8Array(pdf), {
       headers: {
@@ -159,8 +226,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     maxRows: 50_000,
     trustedSystemCard: isTrustedSystemCard(card),
   })
-  const csv = toCsv(result, card.vizSettings)
-  const rowCount = result.shape === 'flat' ? result.rows.length : result.rowKeys.length
+  const { csv, rowCount } = toCsv(result, card.vizSettings, peopleSearch)
   await recordAudit(ctx, {
     entityType: 'insight_card',
     entityId: card.id,
@@ -175,4 +241,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       'content-disposition': `attachment; filename="${filename}.csv"`,
     },
   })
+}
+
+function status204(): ResponseInit {
+  return { status: 204 }
 }
