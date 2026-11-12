@@ -22,6 +22,7 @@ import {
   equipmentInspectionRecords,
   equipmentInspectionTypes,
   equipmentItems,
+  orgUnits,
   people,
   tenantUsers,
   users as user,
@@ -47,7 +48,15 @@ export async function generateMetadata() {
 }
 
 const BASE = '/equipment/inspections'
-const SORTS = ['occurred', 'reference', 'equipment', 'type', 'result', 'status'] as const
+const SORTS = [
+  'occurred',
+  'reference',
+  'equipment',
+  'type',
+  'location',
+  'result',
+  'status',
+] as const
 type Sort = (typeof SORTS)[number]
 const STATUSES = ['draft', 'in_progress', 'submitted', 'closed'] as const
 
@@ -94,6 +103,7 @@ export default async function EquipmentInspectionsPage({
     reference: equipmentInspectionRecords.reference,
     equipment: equipmentInspectionRecords.equipmentNameSnapshot,
     type: equipmentInspectionTypes.name,
+    location: orgUnits.name,
     result: equipmentInspectionRecords.result,
     status: equipmentInspectionRecords.status,
   }
@@ -114,6 +124,7 @@ export default async function EquipmentInspectionsPage({
       ilike(equipmentInspectionRecords.serial, term),
       ilike(equipmentInspectionRecords.rentalProvider, term),
       ilike(equipmentInspectionTypes.name, term),
+      ilike(orgUnits.name, term),
     )
     if (cond) filters.push(cond)
   }
@@ -180,6 +191,13 @@ export default async function EquipmentInspectionsPage({
           eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
         ),
       )
+      .leftJoin(
+        orgUnits,
+        and(
+          eq(orgUnits.tenantId, equipmentInspectionRecords.tenantId),
+          eq(orgUnits.id, equipmentInspectionRecords.siteOrgUnitId),
+        ),
+      )
       .where(where)
     const rows = await tx
       .select({
@@ -195,6 +213,7 @@ export default async function EquipmentInspectionsPage({
         isRental: equipmentInspectionRecords.isRental,
         rentalProvider: equipmentInspectionRecords.rentalProvider,
         typeName: equipmentInspectionTypes.name,
+        siteName: orgUnits.name,
         inspectorUser: user.name,
         inspectorFirst: people.firstName,
         inspectorLast: people.lastName,
@@ -213,6 +232,13 @@ export default async function EquipmentInspectionsPage({
         and(
           eq(equipmentInspectionTypes.tenantId, equipmentInspectionRecords.tenantId),
           eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+        ),
+      )
+      .leftJoin(
+        orgUnits,
+        and(
+          eq(orgUnits.tenantId, equipmentInspectionRecords.tenantId),
+          eq(orgUnits.id, equipmentInspectionRecords.siteOrgUnitId),
         ),
       )
       .leftJoin(
@@ -261,7 +287,7 @@ export default async function EquipmentInspectionsPage({
           />
           <EquipmentSubNav active="inspections" />
           <TableToolbar>
-            <SearchInput placeholder={tGenerated('m_17c97e2e4a7a11')} />
+            <SearchInput placeholder={tGenerated('m_12f62c0f923e6b')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
@@ -304,6 +330,9 @@ export default async function EquipmentInspectionsPage({
               <TableHead>
                 <GeneratedText id="m_08412ea75fe5da" />
               </TableHead>
+              <SortableTh {...sortProps} column="location" active={params.sort === 'location'}>
+                <GeneratedText id="m_055f11420b2da4" />
+              </SortableTh>
               <SortableTh {...sortProps} column="result" active={params.sort === 'result'}>
                 <GeneratedText id="m_100e41041dbe51" />
               </SortableTh>
@@ -317,7 +346,7 @@ export default async function EquipmentInspectionsPage({
               value={
                 rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
+                    <TableCell colSpan={8} className="py-10 text-center text-sm text-slate-500">
                       <GeneratedText id="m_1ef212a3b97a74" />
                       {can(ctx, 'inspections.read.self') ? (
                         <span className="mt-1 block text-xs">
@@ -386,6 +415,9 @@ export default async function EquipmentInspectionsPage({
                         </TableCell>
                         <TableCell className="text-slate-600 dark:text-slate-300">
                           <GeneratedValue value={inspector ?? '—'} />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue value={r.siteName ?? '—'} />
                         </TableCell>
                         <TableCell>
                           <GeneratedValue

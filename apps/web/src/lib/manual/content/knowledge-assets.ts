@@ -1148,6 +1148,8 @@ If you have permission to perform equipment inspections, open a submitted or clo
 
 ## Manage inspections and work orders
 
+The [Inspections](/equipment/inspections) list shows each inspection's **Location**. Tap a column heading to sort by it. The search box also matches the location name.
+
 Managers can **Delete** an inspection and use **Include deleted** to find and **Restore** it. Deleting, restoring or reopening recalculates the unit's inspection schedule. History is retained.
 
 Select a work-order row to open its full drawer. Edit details and work notes, change its status, **Mark complete**, or **Reopen** a closed order. Managers can **Delete** and **Restore** work orders. Equipment records also have **Delete** and **Restore**; check a unit in before deleting it.
