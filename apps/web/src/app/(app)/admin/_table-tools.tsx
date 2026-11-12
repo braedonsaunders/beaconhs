@@ -16,6 +16,7 @@ import {
 
 import { useEffect, useRef, useState } from 'react'
 import type { Component, Editor } from 'grapesjs'
+import { autoColumnPercents, type ColumnValueKind } from '@beaconhs/email-render/column-widths'
 import { layoutTable, nextColumnPercents, nextTableWidthPct } from './_table-grid'
 import {
   applyColumnPercents,
@@ -29,10 +30,12 @@ import {
   moveTableRow,
   normalizeTables,
   readColumnPercents,
+  readTable,
   readTableWidthPct,
   removeTableColumn,
   removeTableRow,
   setTableWidthPct,
+  tableColumnSamples,
   type CellPosition,
 } from './_table-model'
 
@@ -100,6 +103,35 @@ function fitToWidth(editor: Editor): void {
   const pos = selectedPosition(editor)
   if (!pos) return
   fitTableToWidth(pos.table)
+  refresh(editor)
+}
+
+/** Characters of body text that fit across a table, from its rendered width and font. */
+function tableBudgetChars(tableEl: HTMLElement): number | undefined {
+  const view = tableEl.ownerDocument.defaultView
+  const sample = tableEl.querySelector('td') ?? tableEl
+  const fontPx = parseFloat(view?.getComputedStyle(sample).fontSize ?? '') || 13
+  const width = tableEl.getBoundingClientRect().width
+  // An average character of a proportional UI font is a little over half an em.
+  return width > 0 ? Math.round(width / (fontPx * 0.55)) : undefined
+}
+
+/**
+ * Size every column of the selected table to what it holds: its headings and
+ * the values in its cells. Replaces the table's widths — it is the explicit
+ * "size this for me" action; drag or type widths afterwards to adjust.
+ */
+function autoFitColumns(editor: Editor, kinds: Readonly<Record<string, ColumnValueKind>>): void {
+  const pos = selectedPosition(editor)
+  if (!pos || pos.count < 2) return
+  normalizeTables(pos.table)
+  const model = readTable(pos.table)
+  const tableEl = pos.table.getEl()
+  const percents = autoColumnPercents(tableColumnSamples(model), {
+    kinds,
+    budgetChars: tableEl ? tableBudgetChars(tableEl) : undefined,
+  })
+  applyColumnPercents(model, percents)
   refresh(editor)
 }
 
@@ -226,13 +258,21 @@ export function repairTables(editor: Editor): void {
 const BTN =
   'rounded px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-700'
 
-// Floats at the top of the canvas whenever a table cell is selected.
-export function TableToolbar({ editor }: { editor: Editor | null }) {
+// Shown at the top of the canvas whenever a table cell is selected. `fieldKinds`
+// (value kinds by field key) sharpens Auto-fit; without it, field names guide it.
+export function TableToolbar({
+  editor,
+  fieldKinds = {},
+}: {
+  editor: Editor | null
+  fieldKinds?: Readonly<Record<string, ColumnValueKind>>
+}) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const [active, setActive] = useState(false)
   const [canDelete, setCanDelete] = useState(false)
   const [canSize, setCanSize] = useState(false)
+  const [canAutoFit, setCanAutoFit] = useState(false)
   const [width, setWidth] = useState('')
   const [canMoveUp, setCanMoveUp] = useState(false)
   const [canMoveDown, setCanMoveDown] = useState(false)
@@ -246,6 +286,7 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
       setActive(!!pos)
       setCanDelete(canDeleteColumn(pos))
       setCanSize(!!pos && pos.placement.span === 1 && pos.count > 1)
+      setCanAutoFit(!!pos && pos.count > 1)
       setWidth(currentColWidthPct(pos))
     }
     editor.on('component:selected', sync)
@@ -274,7 +315,7 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
   }
 
   return (
-    <div className="absolute top-2 right-2 left-2 z-20 flex flex-wrap items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/95">
+    <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/95">
       <span className="px-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
         <GeneratedText id="m_1ccaefc0402329" />
       </span>
@@ -320,6 +361,15 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
         title={tGenerated('m_0b3b42818d84db')}
       >
         <GeneratedText id="m_1fd502c12105c1" />
+      </button>
+      <button
+        type="button"
+        className={BTN}
+        onClick={() => autoFitColumns(editor, fieldKinds)}
+        disabled={!canAutoFit}
+        title={tGeneratedValue('Size each column to its heading and values')}
+      >
+        {tGeneratedValue('Auto-fit columns')}
       </button>
       <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-600" />
       <button

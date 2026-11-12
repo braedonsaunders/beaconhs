@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./column-widths": "./src/column-widths.ts",
     "./delivery-input": "./src/delivery-input.ts",
     "./subject": "./src/subject.ts"
   },

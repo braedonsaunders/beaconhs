@@ -13,8 +13,13 @@
 // Consumed by the web publish hook / admin "Generate" affordance AND the db
 // seed backfill — keep it dependency-free (pure string building).
 
-import type { FormSchemaV1 } from './schema'
+import type { FieldType, FormSchemaV1, TableColumnType } from './schema'
 import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
+import {
+  autoColumnPercents,
+  colgroupHtml,
+  type ColumnValueKind,
+} from '@beaconhs/email-render/column-widths'
 import {
   SKIP_FIELD_TYPES,
   hasImageCompanion,
@@ -23,6 +28,48 @@ import {
   isAttachmentArrayField,
   labelText,
 } from './form-companions'
+
+/** How wide a form field's value prints, for sizing the column that holds it. */
+export function formFieldColumnKind(type: FieldType | TableColumnType): ColumnValueKind {
+  switch (type) {
+    case 'number':
+    case 'slider':
+    case 'rating':
+    case 'formula':
+      return 'number'
+    case 'date':
+      return 'date'
+    case 'datetime':
+      return 'datetime'
+    case 'checkbox':
+    case 'pass_fail_na':
+    case 'traffic_light':
+      return 'bool'
+    case 'radio':
+    case 'select':
+    case 'risk_matrix':
+      return 'enum'
+    case 'person_picker':
+      return 'person'
+    case 'customer_picker':
+    case 'project_picker':
+    case 'site_picker':
+    case 'area_picker':
+      return 'org_unit'
+    case 'long_text':
+    case 'rich_text':
+    case 'address':
+    case 'yes_no_comment':
+    case 'multi_select':
+    case 'checkbox_group':
+    case 'multi_person_picker':
+    case 'matrix':
+    case 'ranking':
+      return 'long_text'
+    default:
+      return 'text'
+  }
+}
 
 // --- shared design language (mirrors the seeded native-module documents) ----
 
@@ -135,17 +182,25 @@ function renderKvTable(rows: KvRow[]): string {
 function collectionTable(
   title: string,
   eachKey: string,
-  columns: { header: string; cell: string }[],
+  columns: { header: string; cell: string; kind?: ColumnValueKind }[],
 ): string {
   const ths = columns.map((c) => `<th style="${TH}">${esc(c.header)}</th>`).join('')
   const tds = columns.map((c) => `<td style="${TD}">${c.cell}</td>`).join('')
-  // An even <colgroup> is what fixed layout reads first — the heading row below
+  // The <colgroup> is what fixed layout reads first — the heading row below
   // spans every column and says nothing about their widths — and it is the one
-  // place the designer's column resizer writes to.
-  const width = Math.round((100 / columns.length) * 10) / 10
-  const colgroup = `<colgroup>${columns
-    .map(() => `<col style="width:${width}%" />`)
-    .join('')}</colgroup>`
+  // place the designer's column resizer writes to. Widths follow what each
+  // column holds, so a date or a number stays narrow beside free text.
+  const kinds: Record<string, ColumnValueKind> = {}
+  for (const column of columns) {
+    const key = /^\{\{\{?\s*([\w@.-]+)\s*\}?\}\}$/.exec(column.cell)?.[1]
+    if (key && column.kind) kinds[key] = column.kind
+  }
+  const colgroup = colgroupHtml(
+    autoColumnPercents(
+      columns.map((c) => ({ header: c.header, cells: [c.cell] })),
+      { kinds },
+    ),
+  )
   // Section title and column headings share ONE <thead>, in that order.
   // <thead> renders at the top of the table box regardless of source order, so
   // a title left outside it ends up BELOW the column headings it introduces.
@@ -223,6 +278,7 @@ export function generateFormPdfTemplate(
           ...fields.map((f) => ({
             header: labelText(f.label, f.id, locale, locale),
             cell: hasTextCompanion(f.type) ? `{{${f.id}_text}}` : `{{${f.id}}}`,
+            kind: formFieldColumnKind(f.type),
           })),
         ]),
       )
@@ -274,14 +330,20 @@ export function generateFormPdfTemplate(
         continue
       }
       if (f.type === 'table') {
-        const cfg = (f.config ?? {}) as { columns?: { key: string; label?: string }[] }
+        const cfg = (f.config ?? {}) as {
+          columns?: { key: string; label?: string; type?: TableColumnType }[]
+        }
         const columns = cfg.columns ?? []
         if (columns.length > 0) {
           trailing.push(
             collectionTable(
               label,
               f.id,
-              columns.map((c) => ({ header: c.label || c.key, cell: `{{${c.key}}}` })),
+              columns.map((c) => ({
+                header: c.label || c.key,
+                cell: `{{${c.key}}}`,
+                kind: formFieldColumnKind(c.type ?? 'text'),
+              })),
             ),
           )
         }

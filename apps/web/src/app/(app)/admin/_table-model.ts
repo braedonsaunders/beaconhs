@@ -1,4 +1,5 @@
 import type { Component } from 'grapesjs'
+import type { ColumnSample } from '@beaconhs/email-render/column-widths'
 import {
   layoutTable,
   normalizePercents,
@@ -152,6 +153,32 @@ export function applyColumnPercents(model: TableModel, percents: number[]): void
   for (const r of plainRows(model, percents.length)) {
     percents.forEach((pct, i) => setWidthPct(model.cells[r]![i], pct))
   }
+}
+
+/**
+ * What each logical column holds — its heading text and the markup of its body
+ * cells, tokens included — for sizing columns to their content. Cells spanning
+ * several columns say nothing about any one of them and are skipped.
+ */
+export function tableColumnSamples(model: TableModel): ColumnSample[] {
+  const count = columnCount(model)
+  const samples: { header: string[]; cells: string[] }[] = Array.from({ length: count }, () => ({
+    header: [],
+    cells: [],
+  }))
+  const { placements } = layoutTable(model.grid)
+  placements.forEach((own, r) => {
+    own.forEach((placement, c) => {
+      if (placement.span !== 1) return
+      const cell = model.cells[r]?.[c]
+      const sample = samples[placement.start]
+      if (!cell || !sample) return
+      const markup = cell.getInnerHTML()
+      if (tagOf(cell) === 'th') sample.header.push(markup.replace(/<[^>]*>/g, ' '))
+      else sample.cells.push(markup)
+    })
+  })
+  return samples.map((sample) => ({ header: sample.header.join(' '), cells: sample.cells }))
 }
 
 /** The table's own width as a share of what it sits in, when it declares one in %. */

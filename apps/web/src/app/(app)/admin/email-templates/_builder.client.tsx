@@ -16,7 +16,7 @@ import { GeneratedValue } from '@/i18n/generated'
 // fills the fixed-height container — without it the row sizes to content and the
 // overflow is clipped by the wrapper (the "can't scroll to the bottom" bug).
 
-import { useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import GjsEditor, { Canvas } from '@grapesjs/react'
 import grapesjs, { type Editor } from 'grapesjs'
 import 'grapesjs/dist/css/grapes.min.css'
@@ -25,15 +25,12 @@ import { installTemplateComponents } from '../_template-components'
 import {
   collectionTableBlockHtml,
   mergeFieldBlockHtml,
+  templateFieldKinds,
   type TemplateCollection,
   type TemplateMergeField,
 } from '@/lib/template-builder-html'
-import {
-  installTableEditing,
-  repairTables,
-  TableColumnResizer,
-  TableToolbar,
-} from '../_table-tools'
+import { installTableEditing, repairTables, TableColumnResizer } from '../_table-tools'
+import { CanvasToolbars } from '../_canvas-toolbars'
 
 const STARTER_HTML =
   '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;padding:24px;max-width:680px;margin:0 auto;">' +
@@ -121,6 +118,10 @@ export default function EmailBuilder({
   collections?: TemplateCollection[]
 }) {
   const [editor, setEditor] = useState<Editor | null>(null)
+  const fieldKinds = useMemo(
+    () => templateFieldKinds(mergeFields, collections),
+    [mergeFields, collections],
+  )
   return (
     <div
       data-editor-ready={!!editor}
@@ -190,7 +191,7 @@ export default function EmailBuilder({
                 <GeneratedValue value="Loading editor…" />
               </div>
             )}
-            <TableToolbar editor={editor} />
+            <CanvasToolbars editor={editor} fieldKinds={fieldKinds} />
             <TableColumnResizer editor={editor} />
             <Canvas className="h-full" />
           </div>

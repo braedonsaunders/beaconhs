@@ -7,18 +7,22 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import { formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
 import {
   SKIP_FIELD_TYPES,
+  formFieldColumnKind,
   hasImageCompanion,
   hasPhotosCompanion,
   hasTextCompanion,
   isAttachmentArrayField,
   labelText,
   type FormSchemaV1,
+  type TableColumnType,
 } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
+import type { ColumnValueKind } from '@beaconhs/email-render/column-widths'
 import { MODULE_FLOW_PROFILES } from './module-profiles'
 import { COMPONENT_SUBJECT_FIELDS, COMPONENT_SUBJECT_LABELS } from './component-subjects'
 
-type SubjectFieldOption = { key: string; label: string; rich?: boolean }
+/** `kind` sizes the template-table column a value lands in. */
+type SubjectFieldOption = { key: string; label: string; rich?: boolean; kind?: ColumnValueKind }
 type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }
 /** A repeating child collection exposed for {{#each}} tables. */
 type SubjectCollection = { key: string; label: string; fields: SubjectFieldOption[] }
@@ -75,6 +79,7 @@ export async function loadSubjectFields(
       return profile.fields.map((f) => ({
         key: f.key,
         label: f.label,
+        kind: f.kind,
         ...(f.rich ? { rich: true } : {}),
       }))
     }
@@ -88,7 +93,7 @@ export async function loadSubjectFields(
       for (const f of sec.fields ?? []) {
         if (SKIP_FIELD_TYPES.has(f.type)) continue
         const label = labelText(f.label, f.id, ctx.locale, ctx.defaultLocale)
-        out.push({ key: f.id, label })
+        out.push({ key: f.id, label, kind: formFieldColumnKind(f.type) })
         // Companion keys mirror the form flow adapter's loadValues():
         // repeating-section rows keep raw values only, so companions apply to
         // top-level fields alone.
@@ -119,7 +124,7 @@ export async function loadSubjectCollections(
     return (MODULE_FLOW_PROFILES[subjectKey]?.collections ?? []).map((c) => ({
       key: c.key,
       label: c.label,
-      fields: c.fields.map((f) => ({ key: f.key, label: f.label })),
+      fields: c.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind })),
     }))
   }
   if (subjectType === 'form_template') {
@@ -140,6 +145,7 @@ export async function loadSubjectCollections(
           .map((f) => ({
             key: hasTextCompanion(f.type) ? `${f.id}_text` : f.id,
             label: labelText(f.label, f.id, ctx.locale, ctx.defaultLocale),
+            kind: formFieldColumnKind(f.type),
           }))
         if (fields.length > 0) {
           out.push({
@@ -174,13 +180,19 @@ export async function loadSubjectCollections(
         }
         // Table fields: rows keyed by column key.
         if (f.type === 'table') {
-          const cfg = (f.config ?? {}) as { columns?: { key: string; label?: string }[] }
+          const cfg = (f.config ?? {}) as {
+            columns?: { key: string; label?: string; type?: TableColumnType }[]
+          }
           const columns = cfg.columns ?? []
           if (columns.length > 0) {
             out.push({
               key: f.id,
               label,
-              fields: columns.map((c) => ({ key: c.key, label: c.label || c.key })),
+              fields: columns.map((c) => ({
+                key: c.key,
+                label: c.label || c.key,
+                kind: formFieldColumnKind(c.type ?? 'text'),
+              })),
             })
           }
         }

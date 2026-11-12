@@ -8,8 +8,8 @@ import {
 } from '@/i18n/generated'
 
 // PDF document editor — a full-height shell with a paper-setup bar and three
-// tabs: Design (the GrapesJS builder at page width), HTML (the same markup as
-// raw text, for power users) and Preview (Paged.js paginates the template with
+// tabs: Design (the GrapesJS builder at page width), HTML (the same markup in a
+// code editor, laid out one block per line, for power users) and Preview (Paged.js paginates the template with
 // sample data into real pages + header/footer + page numbers).
 //
 // All three read and write ONE markup string, so an edit made in either editor
@@ -21,10 +21,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import type { Editor } from 'grapesjs'
-import { ArrowLeft, Copy, FileText, Save } from 'lucide-react'
-import { Button, Input, Select, Textarea } from '@beaconhs/ui'
+import { ArrowLeft, Braces, Copy, FileText, Save } from 'lucide-react'
+import { Button, Input, Select } from '@beaconhs/ui'
 import { savePdfTemplateAsCopy, savePdfTemplateDesign } from '../_actions'
 import { serializeTemplateEditor } from '@/lib/template-builder-html'
+import { formatTemplateHtml } from '@/lib/template-html-format'
+import { CodeEditor } from '@/components/code-editor.client'
 
 const PdfBuilder = dynamic(() => import('../_builder.client'), {
   ssr: false,
@@ -112,7 +114,9 @@ export function PdfTemplateEditor({
 
   const goToTab = (next: 'design' | 'html' | 'preview') => {
     const html = currentHtml()
-    if (html !== null) setSourceDraft(html)
+    // The designer saves one long line; the HTML tab shows it laid out as code.
+    // Formatting only moves whitespace browsers ignore, so nothing prints differently.
+    if (html !== null) setSourceDraft(next === 'html' ? formatTemplateHtml(html) : html)
     if (next === 'design' && tab === 'html') setBuilderKey((k) => k + 1)
     if (next === 'preview') setPreviewHtml(html ?? template.sourceHtml ?? '')
     setTab(next)
@@ -312,15 +316,25 @@ export function PdfTemplateEditor({
           value={
             tab === 'html' ? (
               <div className="flex h-full min-h-0 flex-col gap-1.5 p-3">
-                <p className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
-                  <GeneratedText id="m_13f8bb86805041" />
-                </p>
-                <Textarea
+                <div className="flex shrink-0 items-center gap-2">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_13f8bb86805041" />
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => setSourceDraft((html) => formatTemplateHtml(html))}
+                    title={tGeneratedValue('Lay the HTML out one block per line')}
+                  >
+                    <Braces size={14} /> <GeneratedValue value="Format" />
+                  </Button>
+                </div>
+                <CodeEditor
                   value={sourceDraft}
-                  onChange={(e) => setSourceDraft(e.target.value)}
-                  spellCheck={false}
-                  aria-label={tGenerated('m_12a44c42d2c6f4')}
-                  className="min-h-0 flex-1 resize-none font-mono text-xs leading-relaxed"
+                  onChange={setSourceDraft}
+                  ariaLabel={tGenerated('m_12a44c42d2c6f4')}
+                  className="flex-1"
                 />
               </div>
             ) : tab === 'design' ? (

@@ -11,7 +11,7 @@ import { GeneratedValue } from '@/i18n/generated'
 // re-applies live when paper size / orientation / margin change in the top bar.
 // Multi-page pagination is the Preview tab (Paged.js); here it's one tall sheet.
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import GjsEditor, { Canvas } from '@grapesjs/react'
 import grapesjs, { type Editor } from 'grapesjs'
 import 'grapesjs/dist/css/grapes.min.css'
@@ -20,15 +20,12 @@ import { installTemplateComponents } from '../_template-components'
 import {
   collectionTableBlockHtml,
   mergeFieldBlockHtml,
+  templateFieldKinds,
   type TemplateCollection,
   type TemplateMergeField,
 } from '@/lib/template-builder-html'
-import {
-  installTableEditing,
-  repairTables,
-  TableColumnResizer,
-  TableToolbar,
-} from '../_table-tools'
+import { installTableEditing, repairTables, TableColumnResizer } from '../_table-tools'
+import { CanvasToolbars } from '../_canvas-toolbars'
 
 const STARTER_HTML =
   '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;">' +
@@ -146,6 +143,10 @@ export default function PdfBuilder({
 }) {
   const editorRef = useRef<Editor | null>(null)
   const [editor, setEditor] = useState<Editor | null>(null)
+  const fieldKinds = useMemo(
+    () => templateFieldKinds(mergeFields, collections),
+    [mergeFields, collections],
+  )
 
   // Re-apply the paper-sheet CSS whenever the page dimensions change (the user
   // picks A4 / landscape / a new margin in the top bar). The load handler injects
@@ -240,7 +241,7 @@ export default function PdfBuilder({
                 <GeneratedValue value="Loading editor…" />
               </div>
             )}
-            <TableToolbar editor={editor} />
+            <CanvasToolbars editor={editor} fieldKinds={fieldKinds} />
             <TableColumnResizer editor={editor} />
             <Canvas className="h-full" />
           </div>

@@ -18,6 +18,7 @@ import { INCIDENT_METRICS } from '../incident-metrics'
 import { sql } from 'drizzle-orm'
 import { generateFormPdfTemplate, type FormSchemaV1 } from '@beaconhs/forms-core'
 import { expandRepeatMarkers } from '@beaconhs/email-render'
+import { autoColumnPercents, colgroupHtml } from '@beaconhs/email-render/column-widths'
 
 // --- design language (slate letterhead document) -----------------------------
 
@@ -133,14 +134,20 @@ type Col = [header: string, cell: string, extraStyle?: string]
  *
  * `table-layout:fixed` needs every column sized or the browser splits what is
  * left evenly and the careful widths drift. Columns that declare a width keep
- * it; the rest share the remainder.
+ * it; the rest share the remainder by what they hold (headings and value
+ * kinds), so a date or a count stays narrow beside free text.
  */
 function columnWidths(cols: Col[]): string[] {
   const declared = cols.map(([, , style]) => /width:\s*([\d.]+)%/.exec(style ?? '')?.[1])
   const used = declared.reduce((sum, w) => sum + (w ? Number(w) : 0), 0)
-  const unsized = declared.filter((w) => !w).length
-  const share = unsized > 0 ? Math.max(0, 100 - used) / unsized : 0
-  return declared.map((w) => `${w ? Number(w) : share}%`)
+  const remainder = Math.max(0, 100 - used)
+  const auto = autoColumnPercents(
+    cols.flatMap(([header, cell], i) => (declared[i] ? [] : [{ header, cells: [cell] }])),
+  )
+  let next = 0
+  return declared.map((w) =>
+    w ? `${Number(w)}%` : `${Math.round((auto[next++] ?? 0) * remainder) / 100}%`,
+  )
 }
 
 function collection(
@@ -823,7 +830,7 @@ const TRAINING_CLASS = wrap(
 // driver+vehicle month (`entries` + month totals) anchored on one entry.
 const VEHICLE_LOG_CELL = `${TD}padding:3px 4px;font-size:11px;line-height:1.2;`
 function vehicleLogTable(odometer: boolean): string {
-  const columns = odometer
+  const columns: [header: string, value: string][] = odometer
     ? [
         ['Day', '{{day}} {{weekday}}'],
         ['Start odo', '{{start_odometer}}'],
@@ -840,7 +847,7 @@ function vehicleLogTable(odometer: boolean): string {
         ['Total km', '{{total_km}}'],
       ]
   return (
-    `<table style="${TABLE}"><colgroup>${columns.map(() => `<col style="width:${100 / columns.length}%;" />`).join('')}</colgroup><thead><tr>${columns.map(([label]) => `<th style="${TH}">${label}</th>`).join('')}</tr></thead><tbody>` +
+    `<table style="${TABLE}">${colgroupHtml(autoColumnPercents(columns.map(([header, cell]) => ({ header, cells: [cell] }))))}<thead><tr>${columns.map(([label]) => `<th style="${TH}">${label}</th>`).join('')}</tr></thead><tbody>` +
     `<tr data-each="entries" style="${ROW}">{{#if is_weekend}}${columns.map(([, value]) => `<td style="${VEHICLE_LOG_CELL}background:#d1d5db;">${value}</td>`).join('')}{{else}}${columns.map(([, value]) => `<td style="${VEHICLE_LOG_CELL}background:#ffffff;">${value}</td>`).join('')}{{/if}}</tr>` +
     `<tr><td colspan="3" style="${VEHICLE_LOG_CELL}font-weight:700;">Month total</td>` +
     (odometer ? '' : `<td style="${VEHICLE_LOG_CELL}">{{month_business_km}}</td>`) +

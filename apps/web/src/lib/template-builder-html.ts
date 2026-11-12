@@ -1,13 +1,33 @@
+import {
+  autoColumnPercents,
+  colgroupHtml,
+  type ColumnValueKind,
+} from '@beaconhs/email-render/column-widths'
+
 export type TemplateMergeField = {
   key: string
   label?: string
   /** Sanitized rich-text value: merged raw so its lists and paragraphs survive. */
   rich?: boolean
+  /** How wide the value prints — sizes table columns that hold it. */
+  kind?: ColumnValueKind
 }
 export type TemplateCollection = {
   key: string
   label: string
-  fields: { key: string; label: string }[]
+  fields: { key: string; label: string; kind?: ColumnValueKind }[]
+}
+
+/** Value kinds by field key, across a subject's fields and its collections' fields. */
+export function templateFieldKinds(
+  mergeFields: readonly TemplateMergeField[],
+  collections: readonly TemplateCollection[],
+): Record<string, ColumnValueKind> {
+  const kinds: Record<string, ColumnValueKind> = {}
+  for (const field of [...mergeFields, ...collections.flatMap((c) => c.fields)]) {
+    if (field.kind) kinds[field.key] = field.kind
+  }
+  return kinds
 }
 
 type TemplateEditorSnapshot = {
@@ -64,6 +84,7 @@ export function collectionTableBlockHtml(collection: TemplateCollection): string
   const fields = collection.fields.map((field) => ({
     key: safeTemplateKey(field.key),
     label: escapeHtml(field.label),
+    kind: field.kind,
   }))
   if (fields.some((field) => field.key === null)) return null
 
@@ -73,13 +94,21 @@ export function collectionTableBlockHtml(collection: TemplateCollection): string
   const body = fields
     .map((field) => `<td style="${TABLE_CELL_STYLE}">{{${field.key!}}}</td>`)
     .join('')
-  // Matches the seeded document tables: an even <colgroup> the column resizer
-  // writes to, `table-layout:fixed` so a table that breaks across a page keeps
-  // the same shape on both halves, and the headings in <thead> so they repeat.
-  const width = Math.round((100 / fields.length) * 10) / 10
-  const colgroup = `<colgroup>${fields
-    .map(() => `<col style="width:${width}%" />`)
-    .join('')}</colgroup>`
+  // Matches the seeded document tables: a <colgroup> sized to what each column
+  // holds (the column resizer writes to it), `table-layout:fixed` so a table
+  // that breaks across a page keeps the same shape on both halves, and the
+  // headings in <thead> so they repeat.
+  const kinds: Record<string, ColumnValueKind> = {}
+  for (const field of fields) if (field.kind) kinds[field.key!] = field.kind
+  const colgroup = colgroupHtml(
+    autoColumnPercents(
+      collection.fields.map((field, i) => ({
+        header: field.label,
+        cells: [`{{${fields[i]!.key}}}`],
+      })),
+      { kinds },
+    ),
+  )
   return (
     '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 8px;">' +
     colgroup +

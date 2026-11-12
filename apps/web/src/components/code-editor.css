@@ -1,0 +1,150 @@
+/* Light/dark syntax theme for the CodeMirror 5 template HTML editor. */
+.bhs-code-editor .CodeMirror {
+  height: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #ffffff;
+  color: #0f172a;
+}
+.bhs-code-editor .CodeMirror-gutters {
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+}
+.bhs-code-editor .CodeMirror-linenumber {
+  color: #94a3b8;
+}
+.bhs-code-editor .CodeMirror-activeline-background {
+  background: #f1f5f9;
+}
+.bhs-code-editor .CodeMirror-selected,
+.bhs-code-editor .CodeMirror-focused .CodeMirror-selected {
+  background: #ccfbf1;
+}
+.bhs-code-editor .CodeMirror-cursor {
+  border-left-color: #0f172a;
+}
+.bhs-code-editor .CodeMirror-matchingtag {
+  background: rgba(13, 148, 136, 0.15);
+}
+.bhs-code-editor .cm-tag {
+  color: #0f766e;
+}
+.bhs-code-editor .cm-bracket {
+  color: #64748b;
+}
+.bhs-code-editor .cm-attribute {
+  color: #7c3aed;
+}
+.bhs-code-editor .cm-string {
+  color: #b45309;
+}
+.bhs-code-editor .cm-comment {
+  color: #94a3b8;
+  font-style: italic;
+}
+.bhs-code-editor .cm-property {
+  color: #1d4ed8;
+}
+.bhs-code-editor .cm-qualifier,
+.bhs-code-editor .cm-builtin {
+  color: #be185d;
+}
+.bhs-code-editor .cm-number,
+.bhs-code-editor .cm-atom {
+  color: #c2410c;
+}
+.bhs-code-editor .cm-keyword,
+.bhs-code-editor .cm-def {
+  color: #9333ea;
+}
+.bhs-code-editor .cm-error {
+  color: #dc2626;
+}
+/* {{merge tokens}} and {{#if}} blocks — the template's bindings. */
+.bhs-code-editor .cm-hbs {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+.bhs-code-editor .cm-hbs.cm-variable-2 {
+  color: #92400e;
+  font-weight: 600;
+}
+.bhs-code-editor .cm-hbs.cm-keyword {
+  color: #9333ea;
+}
+.bhs-code-editor .CodeMirror-dialog {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+
+.dark .bhs-code-editor .CodeMirror {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+.dark .bhs-code-editor .CodeMirror-gutters {
+  background: #111827;
+  border-right-color: #1e293b;
+}
+.dark .bhs-code-editor .CodeMirror-linenumber {
+  color: #475569;
+}
+.dark .bhs-code-editor .CodeMirror-activeline-background {
+  background: #1e293b;
+}
+.dark .bhs-code-editor .CodeMirror-selected,
+.dark .bhs-code-editor .CodeMirror-focused .CodeMirror-selected {
+  background: #134e4a;
+}
+.dark .bhs-code-editor .CodeMirror-cursor {
+  border-left-color: #e2e8f0;
+}
+.dark .bhs-code-editor .cm-tag {
+  color: #5eead4;
+}
+.dark .bhs-code-editor .cm-bracket {
+  color: #94a3b8;
+}
+.dark .bhs-code-editor .cm-attribute {
+  color: #c4b5fd;
+}
+.dark .bhs-code-editor .cm-string {
+  color: #fcd34d;
+}
+.dark .bhs-code-editor .cm-comment {
+  color: #64748b;
+}
+.dark .bhs-code-editor .cm-property {
+  color: #93c5fd;
+}
+.dark .bhs-code-editor .cm-qualifier,
+.dark .bhs-code-editor .cm-builtin {
+  color: #f9a8d4;
+}
+.dark .bhs-code-editor .cm-number,
+.dark .bhs-code-editor .cm-atom {
+  color: #fdba74;
+}
+.dark .bhs-code-editor .cm-keyword,
+.dark .bhs-code-editor .cm-def {
+  color: #d8b4fe;
+}
+.dark .bhs-code-editor .cm-hbs {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+}
+.dark .bhs-code-editor .cm-hbs.cm-variable-2 {
+  color: #fde68a;
+}
+.dark .bhs-code-editor .cm-hbs.cm-keyword {
+  color: #d8b4fe;
+}
+.dark .bhs-code-editor .CodeMirror-dialog {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-color: #334155;
+}
+.dark .bhs-code-editor .CodeMirror-dialog input {
+  color: #e2e8f0;
+}

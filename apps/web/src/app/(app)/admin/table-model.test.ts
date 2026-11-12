@@ -16,8 +16,11 @@ import {
   readTable,
   removeTableColumn,
   removeTableRow,
+  tableColumnSamples,
   tableCols,
 } from './_table-model'
+import { autoColumnPercents } from '@beaconhs/email-render/column-widths'
+import { textFormatPatch, readTextFormat } from './_text-format'
 import { installTableEditing } from './_table-tools'
 import { installTemplateComponents } from './_template-components'
 import { MODULE_PDF_TEMPLATE_SEEDS } from '@beaconhs/db/seed/pdf-templates'
@@ -350,6 +353,34 @@ describe('repairing a table saved in a broken state', () => {
   })
 })
 
+describe('auto-fit columns', () => {
+  it('samples each column from its headings and body cells, skipping spanning title cells', async () => {
+    const { table } = await loadEditor(TABLE)
+    const samples = tableColumnSamples(readTable(table))
+    expect(samples.map((sample) => sample.header.trim())).toEqual(['PPE', 'Required', 'Answer'])
+    expect(samples[0]!.cells.join(' ')).toContain('{{name}}')
+    expect(samples[0]!.cells.join(' ')).toContain('Total')
+    expect(samples[1]!.cells.join(' ')).toContain('{{count}}')
+    expect(samples.flatMap((sample) => sample.cells).join(' ')).not.toContain('PPE manifest')
+  })
+
+  it('writes content-sized widths that still fill the table and survive a save', async () => {
+    const { editor, table } = await loadEditor(
+      '<table style="width:100%;table-layout:fixed;">' +
+        '<colgroup><col style="width:33.3%" /><col style="width:33.3%" /><col style="width:33.4%" /></colgroup>' +
+        '<thead><tr><th>Date</th><th>Description</th><th>Total km</th></tr></thead>' +
+        '<tbody><tr data-each="entries"><td>{{entry_date}}</td><td>{{description}}</td><td>{{total_km}}</td></tr></tbody>' +
+        '</table>',
+    )
+    const model = readTable(table)
+    applyColumnPercents(model, autoColumnPercents(tableColumnSamples(model)))
+    const { widths } = serialized(editor)
+    expect(total(widths)).toBe(100)
+    expect(widths[1]).toBeGreaterThan(widths[0]!)
+    expect(widths[1]).toBeGreaterThan(widths[2]!)
+  })
+})
+
 describe('fit to width', () => {
   it('stretches a narrow table back to the full width', async () => {
     const { table } = await loadEditor(
@@ -399,6 +430,47 @@ describe('editable record documents', () => {
         .some((c) => c.get('type') === 'record-value'),
     ).toBe(true)
     expect(next.cells[0]![1]!.toHTML()).not.toContain('{{course_code}}')
+  })
+
+  it('formats one record value and keeps it through save, reopen and rendering', async () => {
+    const { editor, table } = await loadEditor(
+      '<table><tr><td>Total</td><td>{{total_km}} km</td></tr></table>',
+      setup,
+    )
+    const value = readTable(table)
+      .cells[0]![1]!.components()
+      .toArray()
+      .find((c) => c.get('type') === 'record-value')!
+    const current = readTextFormat({
+      fontWeight: '400',
+      fontStyle: 'normal',
+      textDecorationLine: 'none',
+      fontSize: '13px',
+      color: 'rgb(15, 23, 42)',
+      textAlign: 'start',
+      display: 'inline',
+    })
+    value.setStyle(
+      textFormatPatch({ ...value.getStyle() } as Record<string, string>, current, {
+        bold: true,
+        italic: true,
+        color: '#b91c1c',
+      }),
+    )
+    const reopened = await loadEditor(sanitizeEmailHtml(serializeTemplateEditor(editor)), setup)
+    const html = serializeTemplateEditor(reopened.editor)
+    const rendered = new JSDOM(renderTemplate(html, { total_km: '42' }))
+    const doc = rendered.window.document
+    const span = [...doc.querySelectorAll('td span')].find((el) => el.textContent === '42')!
+    const style = rendered.window.getComputedStyle(span)
+    expect(style.fontWeight).toBe('700')
+    expect(style.fontStyle).toBe('italic')
+    expect(style.color).toBe('rgb(185, 28, 28)')
+    // Only the value is formatted, not the text beside it.
+    expect(rendered.window.getComputedStyle(doc.querySelectorAll('td')[1]!).fontWeight).not.toBe(
+      '700',
+    )
+    rendered.window.close()
   })
 
   it('deletes a value without deleting its cell or other rows', async () => {

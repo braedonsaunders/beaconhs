@@ -4,6 +4,7 @@ import {
   mergeFieldBlockHtml,
   safeTemplateKey,
   serializeTemplateEditor,
+  templateFieldKinds,
 } from './template-builder-html'
 
 describe('template builder HTML', () => {
@@ -55,5 +56,29 @@ describe('template builder HTML', () => {
         fields: [{ key: 'name', label: 'Name' }],
       }),
     ).toBeNull()
+  })
+
+  it('sizes a dropped-in table to its columns and collects value kinds', () => {
+    const collection = {
+      key: 'entries',
+      label: 'Entries',
+      fields: [
+        { key: 'logged_on', label: 'Date', kind: 'date' as const },
+        { key: 'details', label: 'Details', kind: 'text' as const },
+        { key: 'ok', label: 'OK', kind: 'bool' as const },
+      ],
+    }
+    const html = collectionTableBlockHtml(collection)!
+    const widths = [...html.matchAll(/<col style="width:([\d.]+)%"/g)].map((m) => Number(m[1]))
+    expect(widths).toHaveLength(3)
+    expect(Math.round(widths.reduce((a, b) => a + b, 0) * 10) / 10).toBe(100)
+    expect(widths[1]).toBeGreaterThan(widths[0]!)
+    expect(widths[0]).toBeGreaterThan(widths[2]!)
+    expect(templateFieldKinds([{ key: 'title', kind: 'text' }], [collection])).toEqual({
+      title: 'text',
+      logged_on: 'date',
+      details: 'text',
+      ok: 'bool',
+    })
   })
 })
