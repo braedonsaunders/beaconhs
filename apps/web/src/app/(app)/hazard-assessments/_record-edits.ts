@@ -7,6 +7,7 @@
 // Writes land on the same tables as the Server Actions, so the database's
 // signature-invalidation triggers keep clearing ink when job content changes.
 
+import { canUpdateRecord, canUpdateSomeRecords } from '@/lib/own-record-policy'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { activePeopleWhere, type Database } from '@beaconhs/db'
 import {
@@ -19,7 +20,6 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
-import { can } from '@beaconhs/tenant'
 import { recordAuditInTransaction } from '@/lib/audit'
 import {
   choice,
@@ -33,6 +33,7 @@ import {
 import {
   RecordEditRejection,
   defineRecordSaver,
+  recordForbidden,
   recordLocked,
   recordNotFound,
   recordOp,
@@ -346,7 +347,7 @@ function auditEntry(
 export const hazardAssessmentRecordSaver = defineRecordSaver<LoadedAssessment>(
   'hazard-assessments',
   {
-    authorize: (ctx) => can(ctx, 'hazid.update'),
+    authorize: (ctx) => canUpdateSomeRecords(ctx, 'hazid'),
     async load(tx, requestCtx, assessmentId) {
       if (!requestCtx.tenantId) throw recordNotFound()
       const ctx = requestCtx as HazidCtx
@@ -354,6 +355,7 @@ export const hazardAssessmentRecordSaver = defineRecordSaver<LoadedAssessment>(
       // locked FOR UPDATE for the whole batch.
       const row = await lockVisibleAssessmentRow(ctx, tx, assessmentId)
       if (!row) throw recordNotFound()
+      if (!canUpdateRecord(ctx, 'hazid', [row.reportedByTenantUserId])) throw recordForbidden()
       if (row.locked) throw recordLocked(ASSESSMENT_LOCKED_MESSAGE)
       return { ctx, row, hazards: new Map(), ppe: new Map(), questions: new Map() }
     },

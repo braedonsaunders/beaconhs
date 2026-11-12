@@ -1,10 +1,10 @@
 'use server'
+import { assertCanUpdateSomeRecords } from '@/lib/own-record-policy'
 import { signingResult } from '@/lib/hazid-signing-action-result'
 
 import { randomUUID } from 'node:crypto'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import { assertCan } from '@beaconhs/tenant'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import {
@@ -50,7 +50,7 @@ async function performAddSigningCrew(input: {
   externalNames: string[]
 }) {
   const ctx = await signingContext()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   if (
     !isUuid(input.assessmentId) ||
     !Array.isArray(input.personIds) ||
@@ -176,7 +176,7 @@ async function performAddSigningCrew(input: {
 
 async function performStartSigningCollection(assessmentId: string, preferredSignatureId?: string) {
   const ctx = await signingContext()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   if (!isUuid(assessmentId)) throw new HazidSigningError('Assessment not found')
   const result = await ctx.db(async (tx) => {
     const parent = await lockHazidForSigning(ctx, tx, assessmentId)
@@ -260,7 +260,7 @@ async function captureSignature(
   own: boolean,
 ) {
   const ctx = await signingContext()
-  if (!own) assertCan(ctx, 'hazid.update')
+  if (!own) assertCanUpdateSomeRecords(ctx, 'hazid')
   if (
     !isUuid(signatureId) ||
     !Number.isInteger(revision) ||
@@ -359,7 +359,7 @@ async function captureSignature(
 
 async function performRequestCrewSignatures(assessmentId: string) {
   const ctx = await signingContext()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   if (!isUuid(assessmentId)) throw new HazidSigningError('Assessment not found')
   const result = await ctx.db(async (tx) => {
     const parent = await lockHazidForSigning(ctx, tx, assessmentId)
@@ -472,7 +472,7 @@ async function performChangeSignature(
   remove: boolean,
 ) {
   const ctx = await signingContext()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   if (
     !isUuid(input.assessmentId) ||
     !isUuid(input.signatureId) ||

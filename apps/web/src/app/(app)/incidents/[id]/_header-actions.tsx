@@ -21,6 +21,8 @@ export function IncidentHeaderActions({
   statuses,
   locked,
   canManage,
+  canEdit,
+  canClose,
   pdfHref,
   emailHref,
   copyHref,
@@ -33,6 +35,10 @@ export function IncidentHeaderActions({
   statuses: readonly string[]
   locked: boolean
   canManage: boolean
+  /** incidents.update, or incidents.update.own on the caller's own report. */
+  canEdit: boolean
+  /** incidents.close: closing is its own right, separate from editing. */
+  canClose: boolean
   pdfHref: string
   emailHref: string
   copyHref: string
@@ -56,15 +62,21 @@ export function IncidentHeaderActions({
     })
   }
 
+  // Only offer the transitions this caller may make: Closed needs the close
+  // right; every other status needs the edit right.
+  const statusOptions = statuses.filter((s) =>
+    s === status || s === 'closed' ? s === status || canClose : canEdit,
+  )
+
   const statusSelect = (
     <Select
       aria-label={tGenerated('m_15e6f0c4903078')}
       value={status}
-      disabled={pending}
+      disabled={pending || statusOptions.length < 2}
       onChange={(e) => onStatusChange(e.target.value)}
       className="w-auto min-w-36 capitalize"
     >
-      {statuses.map((s) => (
+      {statusOptions.map((s) => (
         <option key={s} value={s} className="capitalize">
           {s.replace(/_/g, ' ')}
         </option>
@@ -130,7 +142,7 @@ export function IncidentHeaderActions({
           <Copy size={15} />
           <GeneratedText id="m_17e5ebd91b9a4f" />
         </Link>
-        {lockForm}
+        {canEdit ? lockForm : null}
       </RecordActionMenu>
     </div>
   )

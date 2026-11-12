@@ -6,6 +6,7 @@
 // locked incidents are read-only, one audit entry per changed field — plus a
 // compare-and-set against the value the device last saw.
 
+import { canUpdateRecord, canUpdateSomeRecords } from '@/lib/own-record-policy'
 import { and, eq, isNull } from 'drizzle-orm'
 import { incidents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
@@ -102,7 +103,7 @@ function incidentCodecs(timeZone: string): { [K in keyof IncidentRow]?: Codec<In
 }
 
 export const incidentRecordSaver = defineRecordSaver<IncidentRow>('incidents', {
-  authorize: (ctx) => can(ctx, 'incidents.update') || can(ctx, 'incidents.create'),
+  authorize: (ctx) => canUpdateSomeRecords(ctx, 'incidents') || can(ctx, 'incidents.create'),
   async load(tx, ctx, incidentId) {
     const [row] = await tx
       .select()
@@ -129,7 +130,8 @@ export const incidentRecordSaver = defineRecordSaver<IncidentRow>('incidents', {
     return row
   },
   resolve: (tx, ctx, row, op) => {
-    if (op === 'severityRating' && !can(ctx, 'incidents.update')) throw recordForbidden()
+    if (op === 'severityRating' && !canUpdateRecord(ctx, 'incidents', [row.reportedByTenantUserId]))
+      throw recordForbidden()
     return columnOps(row, incidentCodecs(ctx.timezone), (patch) =>
       tx
         .update(incidents)

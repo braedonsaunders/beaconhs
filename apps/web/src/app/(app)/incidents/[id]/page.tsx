@@ -1,7 +1,12 @@
 import { canEditIncidentReporting } from '../_reporting-access'
 import { INCIDENT_METRICS } from '@beaconhs/db/incident-metrics'
 import { activePeopleWhere } from '@beaconhs/db'
-import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import {
+  assertCanUpdateRecord,
+  assertCanUpdateSomeRecords,
+  canDeleteOwnRecord,
+  canUpdateRecord,
+} from '@/lib/own-record-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -133,16 +138,18 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-// Re-scope guard for the per-incident mutations: the caller already holds the
-// relevant write permission, but a self/site-tier user must not be able to
-// drive an incident they cannot see by guessing its id. Mirrors the detail
-// page's canSeeRecord check (prefix 'incidents', owner = reporter, site).
+// Re-scope guard for the per-incident mutations: a self/site-tier user must not
+// be able to drive an incident they cannot see by guessing its id. Mirrors the
+// detail page's canSeeRecord check (prefix 'incidents', owner = reporter, site).
+// `update` also applies the edit scope: incidents.update edits any visible
+// incident, incidents.update.own only the caller's own reports.
 async function assertCanSeeIncident(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   incidentId: string,
+  access: 'read' | 'update' = 'read',
 ): Promise<void> {
-  const visible = await ctx.db(async (tx) => {
-    const [row] = await tx
+  const row = await ctx.db(async (tx) => {
+    const [found] = await tx
       .select({
         reportedByTenantUserId: incidents.reportedByTenantUserId,
         siteOrgUnitId: incidents.siteOrgUnitId,
@@ -150,14 +157,16 @@ async function assertCanSeeIncident(
       .from(incidents)
       .where(eq(incidents.id, incidentId))
       .limit(1)
-    if (!row) return false
-    return canSeeRecord(ctx, tx, {
+    if (!found) return null
+    const visible = await canSeeRecord(ctx, tx, {
       prefix: 'incidents',
-      ownerIds: [row.reportedByTenantUserId],
-      siteId: row.siteOrgUnitId,
+      ownerIds: [found.reportedByTenantUserId],
+      siteId: found.siteOrgUnitId,
     })
+    return visible ? found : null
   })
-  if (!visible) throw new Error('Incident not found')
+  if (!row) throw new Error('Incident not found')
+  if (access === 'update') assertCanUpdateRecord(ctx, 'incidents', [row.reportedByTenantUserId])
 }
 
 // ---- Status & lock ---------------------------------------------------------
@@ -169,8 +178,10 @@ async function updateStatus(formData: FormData) {
   const status = String(formData.get('status') ?? '')
   if (!STATUSES.includes(status as (typeof STATUSES)[number])) return
   const closing = status === 'closed'
-  assertCan(ctx, closing ? 'incidents.close' : 'incidents.update')
-  await assertCanSeeIncident(ctx, id)
+  if (closing) assertCan(ctx, 'incidents.close')
+  else assertCanUpdateSomeRecords(ctx, 'incidents')
+  // Closing is its own right; any other status change is an edit of this incident.
+  await assertCanSeeIncident(ctx, id, closing ? 'read' : 'update')
   const eventKey = randomUUID()
   const changed = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -241,10 +252,10 @@ async function updateStatus(formData: FormData) {
 async function toggleLock(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   const lock = formData.get('lock') === 'true'
-  await assertCanSeeIncident(ctx, id)
+  await assertCanSeeIncident(ctx, id, 'update')
   const changed = await ctx.db(async (tx) => {
     const [current] = await tx
       .select({ locked: incidents.locked })
@@ -330,9 +341,9 @@ async function submitIncident(formData: FormData) {
 async function attachPhotos(incidentId: string, attachmentIds: string[]) {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   if (attachmentIds.length === 0) return
-  await assertCanSeeIncident(ctx, incidentId)
+  await assertCanSeeIncident(ctx, incidentId, 'update')
   await ctx.db(async (tx) => {
     const [incident] = await tx
       .select({ locked: incidents.locked })
@@ -385,9 +396,9 @@ async function updateIncidentPhoto(
 ): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   if (!isUuid(incidentId) || !isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
-  await assertCanSeeIncident(ctx, incidentId)
+  await assertCanSeeIncident(ctx, incidentId, 'update')
   const edits = parsePhotoEdits(input)
   const changed = await ctx.db(async (tx) => {
     const [incident] = await tx
@@ -451,9 +462,9 @@ async function removeIncidentPhoto(
 ): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   if (!isUuid(incidentId) || !isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
-  await assertCanSeeIncident(ctx, incidentId)
+  await assertCanSeeIncident(ctx, incidentId, 'update')
   const removed = await ctx.db(async (tx) => {
     const [incident] = await tx
       .select({ locked: incidents.locked })
@@ -494,7 +505,7 @@ async function reorderIncidentPhotos(
 ): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   if (
     !isUuid(incidentId) ||
     photoIds.some((photoId) => !isUuid(photoId)) ||
@@ -502,7 +513,7 @@ async function reorderIncidentPhotos(
   ) {
     return { ok: false, error: 'Photo order is invalid.' }
   }
-  await assertCanSeeIncident(ctx, incidentId)
+  await assertCanSeeIncident(ctx, incidentId, 'update')
   const changed = await ctx.db(async (tx) => {
     const [incident] = await tx
       .select({ locked: incidents.locked })
@@ -688,11 +699,11 @@ async function deleteIncident(formData: FormData) {
 async function saveIncidentPerson(input: PersonInput): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   if (!input.incidentId) return { ok: false, error: 'Missing incident.' }
   if (!input.personId && !input.personNameText)
     return { ok: false, error: 'Pick a person or type a name.' }
-  await assertCanSeeIncident(ctx, input.incidentId)
+  await assertCanSeeIncident(ctx, input.incidentId, 'update')
   if (input.id) {
     await ctx.db((tx) =>
       tx
@@ -734,11 +745,11 @@ async function saveIncidentPerson(input: PersonInput): Promise<{ ok: boolean; er
 async function deleteIncidentPerson(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
-  await assertCanSeeIncident(ctx, incidentId)
+  await assertCanSeeIncident(ctx, incidentId, 'update')
   await ctx.db((tx) => tx.delete(incidentPeople).where(eq(incidentPeople.id, id)))
   await recordAudit(ctx, {
     entityType: 'incident',
@@ -756,7 +767,7 @@ class IncidentInjuryMutationError extends Error {}
 async function saveIncidentInjury(input: InjuryInput): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
 
   let parsed: ReturnType<typeof parseIncidentInjuryInput>
   try {
@@ -765,7 +776,7 @@ async function saveIncidentInjury(input: InjuryInput): Promise<{ ok: boolean; er
     return { ok: false, error: error instanceof Error ? error.message : 'Injury is invalid.' }
   }
 
-  await assertCanSeeIncident(ctx, parsed.incidentId)
+  await assertCanSeeIncident(ctx, parsed.incidentId, 'update')
   const values = {
     personId: parsed.personId,
     personName: parsed.personName,
@@ -938,11 +949,11 @@ async function saveIncidentInjury(input: InjuryInput): Promise<{ ok: boolean; er
 async function deleteIncidentInjury(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!isUuid(id) || !isUuid(incidentId)) return
-  await assertCanSeeIncident(ctx, incidentId)
+  await assertCanSeeIncident(ctx, incidentId, 'update')
   await ctx.db(async (tx) => {
     const [deleted] = await tx
       .delete(incidentInjuries)
@@ -979,8 +990,8 @@ async function addLostTimeEvent(formData: FormData) {
   const notes = String(formData.get('notes') ?? '').trim() || null
   if (!incidentId || !validFrom) return
   if (!['off_work', 'restricted_duty', 'full_duty'].includes(status)) return
-  assertCan(ctx, 'incidents.update')
-  await assertCanSeeIncident(ctx, incidentId)
+  assertCanUpdateSomeRecords(ctx, 'incidents')
+  await assertCanSeeIncident(ctx, incidentId, 'update')
 
   const [row] = await ctx.db((tx) =>
     tx
@@ -1012,11 +1023,11 @@ async function addLostTimeEvent(formData: FormData) {
 async function deleteLostTimeEvent(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  assertCanUpdateSomeRecords(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
-  await assertCanSeeIncident(ctx, incidentId)
+  await assertCanSeeIncident(ctx, incidentId, 'update')
   const before = await ctx.db(async (tx) => {
     const [row] = await tx
       .select()
@@ -1624,7 +1635,7 @@ export default async function IncidentDetailPage({
     canDeleteOwnRecord(ctx, 'incidents.delete.own', incident.reportedByTenantUserId)
   const canInvestigate = can(ctx, 'incidents.investigate')
   const locked = incident.locked
-  const canUpdate = can(ctx, 'incidents.update')
+  const canUpdate = canUpdateRecord(ctx, 'incidents', [incident.reportedByTenantUserId])
   const reportingReadOnly =
     locked || !canEditIncidentReporting(ctx, incident.reportedByTenantUserId)
   const isDraft = incident.isDraft
@@ -1738,6 +1749,8 @@ export default async function IncidentDetailPage({
                 statuses={STATUSES}
                 locked={locked}
                 canManage={canManage}
+                canEdit={canUpdate}
+                canClose={can(ctx, 'incidents.close')}
                 pdfHref={`${basePath}/pdf`}
                 emailHref={drawerHref('send-email')}
                 copyHref={drawerHref('copy')}
@@ -1793,13 +1806,19 @@ export default async function IncidentDetailPage({
                         />
                         <GeneratedText id="m_02ee203c91c623" />
                       </span>
-                      <form action={toggleLock} className="inline">
-                        <input type="hidden" name="id" value={id} />
-                        <input type="hidden" name="lock" value="false" />
-                        <Button variant="outline" size="sm" type="submit">
-                          <Unlock size={12} /> <GeneratedText id="m_0ca830c9381fd6" />
-                        </Button>
-                      </form>
+                      <GeneratedValue
+                        value={
+                          canUpdate ? (
+                            <form action={toggleLock} className="inline">
+                              <input type="hidden" name="id" value={id} />
+                              <input type="hidden" name="lock" value="false" />
+                              <Button variant="outline" size="sm" type="submit">
+                                <Unlock size={12} /> <GeneratedText id="m_0ca830c9381fd6" />
+                              </Button>
+                            </form>
+                          ) : null
+                        }
+                      />
                     </AlertDescription>
                   </Alert>
                 ) : null

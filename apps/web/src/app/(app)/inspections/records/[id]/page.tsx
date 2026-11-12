@@ -1,4 +1,4 @@
-import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { canDeleteOwnRecord } from '@/lib/own-record-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'

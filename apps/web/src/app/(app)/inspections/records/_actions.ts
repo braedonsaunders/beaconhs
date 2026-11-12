@@ -16,7 +16,7 @@ import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
-import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { canDeleteOwnRecord } from '@/lib/own-record-policy'
 import { canManageModule } from '@/lib/module-admin/guard'
 import {
   lockVisibleInspectionRecordForMutation,

@@ -74,11 +74,32 @@ it('locks and authorizes a submitted assessment without blocking crew changes', 
     reportedByTenantUserId: 'owner',
     siteOrgUnitId: null,
   }
+  const editor = { ...ctx, permissions: new Set(['hazid.update']) } as SigningContext
   vi.mocked(canSeeRecord).mockResolvedValue(true)
   const q = query([parent])
-  await expect(lockHazidForSigning(ctx, q.tx, parent.id)).resolves.toBe(parent)
+  await expect(lockHazidForSigning(editor, q.tx, parent.id)).resolves.toBe(parent)
   expect(q.sql().params).toContain(ctx.tenantId)
   expect(q.sql().sql).toContain('"hazid_assessments"."deleted_at" is null')
   vi.mocked(canSeeRecord).mockResolvedValue(false)
-  await expect(lockHazidForSigning(ctx, q.tx, parent.id)).rejects.toThrow('not found')
+  await expect(lockHazidForSigning(editor, q.tx, parent.id)).rejects.toThrow('not found')
+})
+
+it('limits crew management under hazid.update.own to assessments the caller started', async () => {
+  const parent = { id: 'assessment-1', reportedByTenantUserId: 'owner', siteOrgUnitId: null }
+  const ownEditor = (membershipId: string) =>
+    ({
+      ...ctx,
+      membership: { id: membershipId },
+      permissions: new Set(['hazid.read.all', 'hazid.update.own']),
+    }) as unknown as SigningContext
+  vi.mocked(canSeeRecord).mockResolvedValue(true)
+  await expect(
+    lockHazidForSigning(ownEditor('owner'), query([parent]).tx, parent.id),
+  ).resolves.toBe(parent)
+  await expect(
+    lockHazidForSigning(ownEditor('someone-else'), query([parent]).tx, parent.id),
+  ).rejects.toThrow('assessments you started')
+  await expect(lockHazidForSigning(ctx, query([parent]).tx, parent.id)).rejects.toThrow(
+    'assessments you started',
+  )
 })

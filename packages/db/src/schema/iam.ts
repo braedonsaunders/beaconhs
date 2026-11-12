@@ -174,6 +174,8 @@ export const PERMISSION_CATALOGUE = [
   'incidents.delete.own',
   'incidents.create',
   'incidents.update',
+  // Edit only incidents you reported (pair with read.all for "view all, edit own").
+  'incidents.update.own',
   'incidents.investigate',
   'incidents.close',
   // Inspections — record visibility tiers + write. `create` = start/perform an
@@ -196,6 +198,8 @@ export const PERMISSION_CATALOGUE = [
   'hazid.delete.own',
   'hazid.create',
   'hazid.update',
+  // Edit only assessments you started (pair with read.all for "view all, edit own").
+  'hazid.update.own',
   'hazid.review',
   // Training
   'training.read.all',

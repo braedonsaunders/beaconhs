@@ -838,6 +838,14 @@ On **Roles**, search by role name or description and use **Type** to show built-
 
 To allow equipment check-in and check-out without equipment editing, open the role’s **Permissions** tab. Under **Equipment**, enable **Check equipment in/out**, then save. Leave **Manage equipment** off when the role should not edit equipment or its setup. This is a standard role permission; it is not granted to all employees by default.
 
+To let a role see every incident or hazard assessment but change only their own, open the role's **Permissions** tab:
+
+1. Under **Incidents**, turn on **View all incidents** and **Edit own incidents**. Leave **Edit incidents** off.
+2. Under **Hazard assessments**, turn on **View all hazard assessments** and **Edit own hazard assessments**. Leave **Edit hazard assessments** off.
+3. Save.
+
+"Own" means the incident the person reported, or the assessment they started. **Edit incidents** and **Edit hazard assessments** still edit every record the person can see. Closing an incident needs **Close incidents**, and investigation needs **Investigate incidents**.
+
 ## Resend an expired invitation
 
 1. Open the invited member from [Users](/admin/users).

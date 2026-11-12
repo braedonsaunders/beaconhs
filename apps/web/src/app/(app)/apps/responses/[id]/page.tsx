@@ -1,7 +1,7 @@
 import { RecordActionMenu } from '@/components/record-action-menu'
 import { ConfirmedSubmitButton } from '@/components/record-header-actions'
 import { deleteFormResponse } from './_delete-action'
-import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { canDeleteOwnRecord } from '@/lib/own-record-policy'
 import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 

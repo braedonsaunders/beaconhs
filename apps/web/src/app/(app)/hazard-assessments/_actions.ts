@@ -37,7 +37,11 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import {
+  assertCanUpdateRecord,
+  assertCanUpdateSomeRecords,
+  canDeleteOwnRecord,
+} from '@/lib/own-record-policy'
 import { canManageModule, assertCanManageModule } from '@/lib/module-admin/guard'
 import {
   freezeHazidSigning,
@@ -70,6 +74,7 @@ import {
   lockEditableAssessment,
   lockVisibleAssessment,
   lockVisibleAssessmentRow,
+  lockWritableAssessment,
   updateAssessmentHazardRow,
   type AssessmentHazardUpdate,
   type HazidCtx,
@@ -85,22 +90,29 @@ async function ctxWithTenant(): Promise<HazidCtx> {
   return ctx as HazidCtx
 }
 
-// Re-scope guard for the per-assessment actions: the caller already holds
-// `hazid.update`, but a self/site-tier user must not be able to drive an
-// assessment they cannot see by guessing its id. Mirrors the detail page's
-// canSeeRecord check (prefix 'hazid', owner = reporter, site). Soft-deleted
-// assessments are treated as not found.
+// Re-scope guard for the per-assessment actions: a self/site-tier user must not
+// be able to drive an assessment they cannot see by guessing its id. Mirrors
+// the detail page's canSeeRecord check (prefix 'hazid', owner = reporter,
+// site). Soft-deleted assessments are treated as not found.
 async function assertCanSeeAssessment(ctx: HazidCtx, assessmentId: string): Promise<void> {
   await resolveAssessmentAccess(ctx, assessmentId)
+}
+
+// Write guard: visibility PLUS the edit scope (hazid.update edits any visible
+// assessment, hazid.update.own only the caller's own).
+async function assertCanUpdateAssessment(ctx: HazidCtx, assessmentId: string) {
+  const row = await resolveAssessmentAccess(ctx, assessmentId)
+  assertCanUpdateRecord(ctx, 'hazid', [row.reportedByTenantUserId])
+  return row
 }
 
 // Mutation guard: visibility re-scope PLUS lock enforcement. The detail page
 // only hides controls when an assessment is locked, so the server must reject
 // writes on a locked (signed) assessment regardless of what gets posted —
 // otherwise signatures would silently stop attesting to what was signed.
-// Lock/unlock/copy/delete/export keep the plain visibility guard.
+// Lock/unlock use the write guard; copy/delete/export/review keep visibility.
 async function assertAssessmentEditable(ctx: HazidCtx, assessmentId: string): Promise<void> {
-  const row = await resolveAssessmentAccess(ctx, assessmentId)
+  const row = await assertCanUpdateAssessment(ctx, assessmentId)
   if (row.locked) throw new Error(ASSESSMENT_LOCKED_MESSAGE)
 }
 
@@ -375,14 +387,14 @@ export async function startAssessment(formData: FormData) {
 
 export async function openAssessmentApp(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const typeAppId = String(formData.get('typeAppId') ?? '')
   if (!isUuid(assessmentId) || !isUuid(typeAppId)) throw new Error('Invalid assessment app')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertCanUpdateAssessment(ctx, assessmentId)
 
   const target = await ctx.db(async (tx) => {
-    const lockedAssessment = await lockVisibleAssessment(ctx, tx, assessmentId)
+    const lockedAssessment = await lockWritableAssessment(ctx, tx, assessmentId)
     const [assessment] = await tx
       .select({
         id: hazidAssessments.id,
@@ -524,7 +536,7 @@ export async function openAssessmentApp(formData: FormData) {
 
 export async function captureExternalAssessmentApp(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const typeAppId = String(formData.get('typeAppId') ?? '')
   const issuer = String(formData.get('issuer') ?? '').trim()
@@ -543,9 +555,9 @@ export async function captureExternalAssessmentApp(formData: FormData) {
   ) {
     throw new Error('Enter a valid issuer and no more than 10 photos')
   }
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertCanUpdateAssessment(ctx, assessmentId)
   await ctx.db(async (tx) => {
-    const assessment = await lockVisibleAssessment(ctx, tx, assessmentId)
+    const assessment = await lockWritableAssessment(ctx, tx, assessmentId)
     if (assessment.locked)
       throw new Error('Unlock this assessment before capturing an external form')
     const [typeApp] = await tx
@@ -684,11 +696,11 @@ export async function captureExternalAssessmentApp(formData: FormData) {
 
 export async function lockAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
-  await assertCanSeeAssessment(ctx, id)
+  await assertCanUpdateAssessment(ctx, id)
   await ctx.db(async (tx) => {
-    const assessment = await lockVisibleAssessment(ctx, tx, id)
+    const assessment = await lockWritableAssessment(ctx, tx, id)
     if (assessment.locked) throw new Error('This assessment is already locked')
     // A hazard assessment is the crew's record that they read and understood
     // the hazards. Submitting one nobody signed produces a signed-off safety
@@ -806,11 +818,11 @@ export async function reviewAssessment(formData: FormData) {
 
 export async function unlockAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
-  await assertCanSeeAssessment(ctx, id)
+  await assertCanUpdateAssessment(ctx, id)
   await ctx.db(async (tx) => {
-    const assessment = await lockVisibleAssessment(ctx, tx, id)
+    const assessment = await lockWritableAssessment(ctx, tx, id)
     if (!assessment.locked) throw new Error('This assessment is not locked')
     if (!assessment.signingFrozenAt) {
       const [full] = await tx
@@ -931,7 +943,7 @@ export async function copyAssessment(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addTask(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const taskId = String(formData.get('taskId') ?? '').trim() || null
   const description = String(formData.get('description') ?? '').trim() || null
@@ -978,7 +990,7 @@ export async function addTask(formData: FormData) {
 
 export async function updateTask(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
@@ -1004,7 +1016,7 @@ export async function updateTask(formData: FormData) {
 
 export async function deleteTask(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
@@ -1027,7 +1039,7 @@ export async function deleteTask(formData: FormData) {
 
 export async function moveTask(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
@@ -1049,7 +1061,7 @@ export async function moveTask(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const hazardId = String(formData.get('hazardId') ?? '').trim() || null
   const name = String(formData.get('name') ?? '').trim() || null
@@ -1088,7 +1100,7 @@ export async function addHazard(formData: FormData) {
 
 export async function addHazardSet(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const setId = String(formData.get('setId') ?? '')
   if (!assessmentId || !setId) throw new Error('Missing ids')
@@ -1145,7 +1157,7 @@ export async function addHazardSet(formData: FormData) {
 
 export async function updateHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
@@ -1184,7 +1196,7 @@ export async function updateHazard(formData: FormData) {
 
 export async function deleteHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
@@ -1210,7 +1222,7 @@ export async function deleteHazard(formData: FormData) {
 
 export async function moveHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
@@ -1232,7 +1244,7 @@ export async function moveHazard(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addPPE(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   if (!assessmentId || !name) throw new Error('Missing fields')
@@ -1265,7 +1277,7 @@ export async function addPPE(formData: FormData) {
 
 export async function updatePPE(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
@@ -1292,7 +1304,7 @@ export async function updatePPE(formData: FormData) {
 
 export async function deletePPE(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
@@ -1313,7 +1325,7 @@ export async function deletePPE(formData: FormData) {
 
 export async function movePPE(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
@@ -1335,7 +1347,7 @@ export async function movePPE(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const question = String(formData.get('question') ?? '').trim()
   if (!assessmentId || !question) throw new Error('Missing fields')
@@ -1377,7 +1389,7 @@ export async function addQuestion(formData: FormData) {
 
 export async function updateQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
@@ -1408,7 +1420,7 @@ export async function updateQuestion(formData: FormData) {
 
 export async function deleteQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
@@ -1434,7 +1446,7 @@ export async function deleteQuestion(formData: FormData) {
 
 export async function moveQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
@@ -1456,7 +1468,7 @@ export async function moveQuestion(formData: FormData) {
 // ------------------------------------------------------------------
 export async function attachPhotos(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const ids = String(formData.get('attachmentIds') ?? '')
     .split(',')
@@ -1510,7 +1522,7 @@ export async function removePhoto(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   if (!isUuid(assessmentId) || !isUuid(id)) return { ok: false, error: 'Photo not found.' }
   await assertAssessmentEditable(ctx, assessmentId)
   const removed = await ctx.db(async (tx) => {
@@ -1545,7 +1557,7 @@ export async function updatePhoto(
   input: unknown,
 ): Promise<{ ok: boolean; error?: string }> {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   if (!isUuid(assessmentId) || !isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
   const edits = parsePhotoEdits(input)
   const changed = await ctx.db(async (tx) => {
@@ -1602,7 +1614,7 @@ export async function reorderPhotos(
   photoIds: string[],
 ): Promise<{ ok: boolean; error?: string }> {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  assertCanUpdateSomeRecords(ctx, 'hazid')
   if (
     !isUuid(assessmentId) ||
     photoIds.some((photoId) => !isUuid(photoId)) ||

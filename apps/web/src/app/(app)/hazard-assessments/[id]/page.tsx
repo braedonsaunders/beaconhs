@@ -1,7 +1,7 @@
 import { SigningHistory } from '../_signing-history'
 import { responseInitialState } from '@/app/(app)/apps/_lib/response-initial-state'
 import { activePeopleWhere } from '@beaconhs/db'
-import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { canDeleteOwnRecord, canUpdateRecord } from '@/lib/own-record-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -642,7 +642,7 @@ export default async function HazidAssessmentDetailPage({
   const requiredEmbeddedApps = embeddedApps.filter((item) => item.app.required)
   const requiredEmbeddedDone = requiredEmbeddedApps.filter((item) => item.done).length
 
-  const canUpdate = can(ctx, 'hazid.update')
+  const canUpdate = canUpdateRecord(ctx, 'hazid', [a.reportedByTenantUserId])
   const locked = a.locked || !canUpdate
   const signingRoster = await loadHazidSigningRoster(ctx, id, sp)
   if (!signingRoster) notFound()

@@ -50,6 +50,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'incidents.read.self': 'View own incidents',
   'incidents.create': 'Report incidents',
   'incidents.update': 'Edit incidents',
+  'incidents.update.own': 'Edit own incidents',
   'incidents.investigate': 'Investigate incidents',
   'incidents.close': 'Close incidents',
 
@@ -65,6 +66,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'hazid.read.self': 'View own hazard assessments',
   'hazid.create': 'Create hazard assessments',
   'hazid.update': 'Edit hazard assessments',
+  'hazid.update.own': 'Edit own hazard assessments',
   'hazid.review': 'Review hazard assessments',
 
   'training.read.all': 'View all training',

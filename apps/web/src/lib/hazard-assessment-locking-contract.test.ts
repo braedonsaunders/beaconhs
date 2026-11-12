@@ -67,6 +67,11 @@ describe('hazard-assessment transactional locking contract', () => {
     const lockVisible = betweenIn(
       rules,
       'export async function lockVisibleAssessment(',
+      'export async function lockWritableAssessment',
+    )
+    const lockWritable = betweenIn(
+      rules,
+      'export async function lockWritableAssessment',
       'export async function lockEditableAssessment',
     )
     const lockEditable = betweenIn(
@@ -80,15 +85,23 @@ describe('hazard-assessment transactional locking contract', () => {
     expect(lockRow).toContain(".for('update')")
     expect(lockRow).toContain('await canSeeRecord(ctx, tx')
     expect(lockVisible).toContain('await lockVisibleAssessmentRow(ctx, tx, assessmentId)')
-    expect(lockEditable).toContain('await lockVisibleAssessment(ctx, tx, assessmentId)')
+    expect(lockWritable).toContain('await lockVisibleAssessment(ctx, tx, assessmentId)')
+    // Writes apply the edit scope: hazid.update.own only edits the caller's own assessments.
+    expect(lockWritable).toContain(
+      "assertCanUpdateRecord(ctx, 'hazid', [row.reportedByTenantUserId])",
+    )
+    expect(lockEditable).toContain('await lockWritableAssessment(ctx, tx, assessmentId)')
     expect(lockEditable).toContain('if (row.locked)')
     expect(actions).not.toMatch(/\nasync function lock(?:Visible|Editable)Assessment/u)
   })
 
   it('applies inline record edits under the same parent lock, child scoping and audit', () => {
     const load = betweenIn(saver, 'async load(', 'resolve(')
-    expect(saver).toContain("authorize: (ctx) => can(ctx, 'hazid.update')")
+    expect(saver).toContain("authorize: (ctx) => canUpdateSomeRecords(ctx, 'hazid')")
     expect(load).toContain('await lockVisibleAssessmentRow(ctx, tx, assessmentId)')
+    expect(load).toContain(
+      "if (!canUpdateRecord(ctx, 'hazid', [row.reportedByTenantUserId])) throw recordForbidden()",
+    )
     expect(load).toContain('if (row.locked) throw recordLocked(ASSESSMENT_LOCKED_MESSAGE)')
     for (const table of [
       'hazidAssessmentHazards',
@@ -202,9 +215,9 @@ describe('hazard-assessment transactional locking contract', () => {
 
     expect(create).not.toContain('copyFromId')
     expect(openApp).toContain(
-      'const lockedAssessment = await lockVisibleAssessment(ctx, tx, assessmentId)',
+      'const lockedAssessment = await lockWritableAssessment(ctx, tx, assessmentId)',
     )
-    expect(openApp.indexOf('await lockVisibleAssessment')).toBeLessThan(
+    expect(openApp.indexOf('await lockWritableAssessment')).toBeLessThan(
       openApp.indexOf('await createAssessmentAppResponse'),
     )
     expect(copy).toMatch(

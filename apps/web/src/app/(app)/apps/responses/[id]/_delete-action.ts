@@ -9,7 +9,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { archiveFormResponseInTransaction } from '@/lib/forms/archive-form-response'
-import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { canDeleteOwnRecord } from '@/lib/own-record-policy'
 import { canAccessResponseTemplate } from '@/app/(app)/apps/_lib/access'
 import { isUuid } from '@/lib/list-params'
 

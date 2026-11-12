@@ -214,7 +214,7 @@ Use **All locations** to search the complete set of locations used by assessment
 
 Most people see only the assessments they started. Foremen see their site's assessments.
 
-If your company wants you to read other people's assessments — for example to copy a good one for repeat work — an administrator can add the **View all hazard assessments** permission to your role, or just to you under **Permissions** on your member page. It lets you open, list, email, and copy from anyone's assessment. It does not let you change other people's assessments. Editing still needs the edit permission, and copying still needs the create permission.
+If your company wants you to read other people's assessments — for example to copy a good one for repeat work — an administrator can add the **View all hazard assessments** permission to your role, or just to you under **Permissions** on your member page. It lets you open, list, email, and copy from anyone's assessment. It does not let you change other people's assessments. With **Edit own hazard assessments**, you edit only the assessments you started. **Edit hazard assessments** edits every assessment you can see. Copying still needs the create permission.
 
 ## Starting a new assessment
 
@@ -504,6 +504,8 @@ Changes save as you work. Existing reports retain their saved ratings; new quest
 - When the investigation and fixes are done, the incident is closed.
 
 You can open your own reports any time from the [Incidents](/incidents) list to see their status. The top-bar search finds incidents in every status, including closed incidents, with no age limit. Your access permissions still apply.
+
+Some roles can view every incident but change only their own. With **Edit own incidents**, you edit, lock, and update the status of only the incidents you reported. Other incidents open read-only.
 
 ## Recording the investigation
 

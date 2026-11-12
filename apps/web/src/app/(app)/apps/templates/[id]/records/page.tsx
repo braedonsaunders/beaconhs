@@ -26,7 +26,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
-import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { canDeleteOwnRecord } from '@/lib/own-record-policy'
 import { ConfirmedSubmitButton } from '@/components/record-header-actions'
 import { bulkDeleteBuilderResponses } from './_bulk-delete-action'
 import { localizeText, type AppLocale } from '@beaconhs/i18n'

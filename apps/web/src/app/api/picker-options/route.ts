@@ -1,4 +1,5 @@
 import { canFacilitateDocumentSignoff } from '@/lib/document-signoff-permission'
+import { canUpdateSomeRecords } from '@/lib/own-record-policy'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { recordSearchWhere } from '@/lib/record-search'
@@ -268,9 +269,9 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
         can(ctx, 'journals.assign')
       )
     case 'hazard-assessment-crew-candidates':
-      return can(ctx, 'hazid.update')
+      return canUpdateSomeRecords(ctx, 'hazid')
     case 'hazard-assessment-locations':
-      return can(ctx, 'hazid.create') || can(ctx, 'hazid.update')
+      return can(ctx, 'hazid.create') || canUpdateSomeRecords(ctx, 'hazid')
     case 'form-response-locations':
       return can(ctx, 'forms.response.create') || can(ctx, 'forms.response.update.own')
     case 'safe-distance-sites':
@@ -294,7 +295,7 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'incident-injury-types':
       return (
         can(ctx, 'incidents.create') ||
-        can(ctx, 'incidents.update') ||
+        canUpdateSomeRecords(ctx, 'incidents') ||
         can(ctx, 'incidents.investigate')
       )
     case 'inspection-supervisors':

@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('server-only', () => ({}))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/navigation', () => ({ unstable_rethrow: vi.fn() }))
-vi.mock('@beaconhs/tenant', () => ({ assertCan: mocks.assertCan }))
+vi.mock('@/lib/own-record-policy', () => ({ assertCanUpdateSomeRecords: mocks.assertCan }))
 vi.mock('@beaconhs/compliance', () => ({ materializeEvidenceTargetObligations: mocks.evidence }))
 vi.mock('@beaconhs/events', () => ({
   recordModuleFlowEvent: mocks.flow,
@@ -202,7 +202,7 @@ describe('submitted JSA signature mutations', () => {
     tx = database([])
     mocks.lock.mockRejectedValueOnce(new HazidSigningError('Assessment not found'))
     expect(await clearCrewSignature(input)).toEqual({ ok: false, error: 'Assessment not found' })
-    expect(mocks.assertCan).toHaveBeenCalledWith(mocks.ctx, 'hazid.update')
+    expect(mocks.assertCan).toHaveBeenCalledWith(mocks.ctx, 'hazid')
     expect(tx.set).not.toHaveBeenCalled()
   })
 })

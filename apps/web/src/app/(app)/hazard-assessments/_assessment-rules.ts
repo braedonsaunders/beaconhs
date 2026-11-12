@@ -21,6 +21,7 @@ import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { canAccessTemplate } from '@/app/(app)/apps/_lib/access'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { hazidAppIsApplicable } from '@/lib/hazid-app-condition'
+import { assertCanUpdateRecord } from '@/lib/own-record-policy'
 
 // Every page below /hazard-assessments is tenant-scoped; requireRequestContext
 // types tenantId as string | null, so callers narrow it once.
@@ -80,16 +81,31 @@ export async function lockVisibleAssessment(
 }
 
 /**
- * Mutation guard: the visibility-scoped parent lock PLUS lock enforcement. A
- * locked (signed) assessment rejects job-content writes regardless of what is
- * posted, otherwise signatures would silently stop attesting to what was signed.
+ * Write guard: the visibility-scoped parent lock PLUS the edit scope —
+ * hazid.update edits any visible assessment, hazid.update.own only the ones
+ * the caller started. Lock/unlock and embedded-app writes take this guard.
+ */
+export async function lockWritableAssessment(
+  ctx: HazidCtx,
+  tx: Database,
+  assessmentId: string,
+): Promise<HazidAssessmentRow> {
+  const row = await lockVisibleAssessment(ctx, tx, assessmentId)
+  assertCanUpdateRecord(ctx, 'hazid', [row.reportedByTenantUserId])
+  return row
+}
+
+/**
+ * Content-edit guard: the write guard PLUS lock enforcement. A locked (signed)
+ * assessment rejects job-content writes regardless of what is posted, otherwise
+ * signatures would silently stop attesting to what was signed.
  */
 export async function lockEditableAssessment(
   ctx: HazidCtx,
   tx: Database,
   assessmentId: string,
 ): Promise<HazidAssessmentRow> {
-  const row = await lockVisibleAssessment(ctx, tx, assessmentId)
+  const row = await lockWritableAssessment(ctx, tx, assessmentId)
   if (row.locked) throw new Error(ASSESSMENT_LOCKED_MESSAGE)
   return row
 }

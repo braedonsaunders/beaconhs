@@ -17,6 +17,7 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { HazidSigningError } from './hazid-signing-result'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
+import { canUpdateRecord } from './own-record-policy'
 import { createHazidFlowAdapter } from './flows/adapters/hazid'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
@@ -25,7 +26,10 @@ export type SigningContext = RequestContext & { tenantId: string }
 export const SIGNING_REQUEST_DAYS = 7
 export const MAX_SIGNING_CREW = 250
 
-/** Parent lock is acquired first by every signing/content mutation. */
+/**
+ * Parent lock is acquired first by every signing/content mutation. Without an
+ * own signature id the caller is managing the crew, which needs the edit scope.
+ */
 export async function lockHazidForSigning(
   ctx: SigningContext,
   tx: Database,
@@ -55,6 +59,10 @@ export async function lockHazidForSigning(
     }))
   ) {
     throw new HazidSigningError('Assessment not found')
+  } else if (!canUpdateRecord(ctx, 'hazid', [assessment.reportedByTenantUserId])) {
+    // Managing the crew and signatures is an edit: hazid.update.own covers only
+    // the assessments the caller started.
+    throw new HazidSigningError('You can only manage signatures on assessments you started')
   }
   return assessment
 }
