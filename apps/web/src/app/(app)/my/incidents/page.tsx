@@ -307,7 +307,7 @@ export default async function MyIncidentsPage({
                           <SeverityBadge severity={incident.severity} />
                         </TableCell>
                         <TableCell>
-                          <StatusBadge status={incident.status} />
+                          <StatusBadge status={incident.status} isDraft={incident.isDraft} />
                         </TableCell>
                         <TableCell>
                           <Link

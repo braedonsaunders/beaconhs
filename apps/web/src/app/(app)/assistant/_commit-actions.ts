@@ -12,7 +12,8 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { correctiveActions, incidents } from '@beaconhs/db/schema'
 import { assertNotImpersonating, can } from '@beaconhs/tenant'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
-import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
+import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
+import { recordIncidentCreated } from '@/lib/incident-events'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -158,34 +159,8 @@ export async function commitIncident(input: {
         location: p.location,
         reportedByTenantUserId: ctx.membership?.id ?? null,
       })
-      .returning({ id: incidents.id, reference: incidents.reference })
-    if (r) {
-      await recordDomainEvent(tx, {
-        tenantId: ctx.tenantId,
-        eventType: 'incident.created',
-        subjectId: r.id,
-        dedupKey: `incident.created:${r.id}`,
-        payload: {
-          notification: { kind: 'incident_reported', incidentId: r.id },
-          integration: incidentCreatedEvent(ctx.tenantId, {
-            id: r.id,
-            reference: r.reference,
-            type: p.type,
-            severity: p.severity,
-            status: 'reported',
-            title: p.title,
-            description: p.description,
-            occurredAt,
-            location: p.location,
-          }),
-          web: moduleFlowCommand(ctx, {
-            subjectId: r.id,
-            moduleKey: 'incidents',
-            event: 'on_create',
-          }),
-        },
-      })
-    }
+      .returning()
+    if (r) await recordIncidentCreated(tx, ctx, r)
     return r!
   })
 

@@ -17,7 +17,15 @@ export function SeverityBadge({ severity }: { severity: string }) {
   )
 }
 
-export function StatusBadge({ status }: { status: string }) {
+/** A started report that has not been submitted shows as a draft, whatever its status. */
+export function StatusBadge({ status, isDraft = false }: { status: string; isDraft?: boolean }) {
+  if (isDraft) {
+    return (
+      <Badge variant="outline">
+        <GeneratedValue value="draft" />
+      </Badge>
+    )
+  }
   const v =
     status === 'closed'
       ? 'success'

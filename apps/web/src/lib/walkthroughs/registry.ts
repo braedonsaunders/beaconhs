@@ -259,6 +259,10 @@ export const WALKTHROUGHS: Walkthrough[] = [
         body: 'Say what happened in your own words: when, where, who was involved, what you saw. Photos help a lot. You will not get in trouble for reporting.',
       },
       {
+        title: 'Submit the report',
+        body: 'Your report saves as you type, but it stays a Draft until you send it. Pick the Site and fill in Event details / cause, then tap Submit report.',
+      },
+      {
         title: 'What happens next',
         body: 'Complete the Reporting section, including Key metrics and your understanding of the Root cause. Your safety team uses Investigating for the timeline, cause analysis and corrective actions. You can check the status here any time.',
       },

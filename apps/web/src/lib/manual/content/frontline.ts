@@ -471,14 +471,15 @@ Open **Incidents** in the left menu, or go to [Incidents](/incidents).
 
 ## Reporting an incident
 
-1. Tap **Report incident**. This creates the record and opens the full incident form immediately.
+1. Tap **Report incident**. This creates a **Draft** report and opens the full incident form immediately.
 2. Pick the **Type**: injury, illness, near miss, property damage, environmental, or security.
 3. Pick the **Severity**. For a near miss with no one hurt, pick no injury.
-4. Set **Occurred at** (date and time) and the **Location**.
+4. Set **Occurred at** (date and time), the **Site**, and the **Location on site**.
 5. Give it a short **Title**, like "Slip on wet floor near pump 3".
-6. In **Description**, write what happened: who was there, what equipment was involved, what you saw.
+6. In **Event details / cause**, write what happened: who was there, what equipment was involved, what you saw.
 7. Fill in **Immediate action taken** — first aid given, area barricaded, equipment locked out, and so on.
 8. Complete **Key metrics** and **Root cause** in the reporting section. Fields save automatically; check the sync badge before leaving.
+9. Tap **Submit report** in the **Draft report** box at the top. You need a **Site** and **Event details / cause** first. Until you submit, the report stays a **Draft** and waits for you under **In progress** in your Workspace.
 
 Photos, witness statements, and investigation sections are on the same incident page. The reporting employee fills in **Root cause**. The investigator or H&S team completes **Timeline** and **Cause analysis**. In **Photos**, tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. Tap the pencil button to add a caption or mark up a photo. The editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the photo order before the incident is locked.
 
@@ -497,6 +498,7 @@ Changes save as you work. Existing reports retain their saved ratings; new quest
 ## What happens after
 
 - The incident starts as **Reported**. The right people are notified automatically.
+- Submitting the report runs any automatic emails and actions your company set up for submitted incidents.
 - An investigator may move it to investigating, dig into the causes, and record findings on the incident page.
 - Fixes get assigned as [corrective actions](/help/corrective-actions) — someone is assigned to do each one, with a due date.
 - When the investigation and fixes are done, the incident is closed.
@@ -537,6 +539,7 @@ If your role can manage Incidents, the **Manage** pages include **Classification
 - An injury can have more than one managed **Injury type**. A type that is already used is archived instead of permanently deleted, so historical records stay complete.
 - To nest a classification, choose **+ Child** on an active top-level row. In **Parent**, type to find another active top-level classification. Archived rows cannot receive new children.
 - On **Hours worked**, search by period, date, or site. Use **Site** to narrow the entries. The totals above the table follow the current search and filter.
+- Under **Flows**, use the trigger **A record is submitted** for emails, PDFs, and webhooks that need the finished report. **On create** runs as soon as someone taps **Report incident**, while the draft is still empty. Reports created complete — by the assistant, a form, or the API — run both.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -544,7 +547,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 Once an incident is open, every field on the page saves to this device first and sends when signal comes back. The badge at the top shows **Saved on device**, **Offline · saved on device**, or **Synced**.
 
-You need signal to change the status, lock or unlock the incident, add or edit people, injuries, lost time, timeline events, causes, whys, and preventative steps, add photos, and to copy, email, or delete the incident. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.** See [Working without signal](/help/forms) for how recovery and conflicts work.
+You need signal to submit the report, change the status, lock or unlock the incident, add or edit people, injuries, lost time, timeline events, causes, whys, and preventative steps, add photos, and to copy, email, or delete the incident. Without signal, BeaconHS says **You need signal for this step. Your answers are saved on this device.** See [Working without signal](/help/forms) for how recovery and conflicts work.
 
 ## Tips
 

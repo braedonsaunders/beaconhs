@@ -2,12 +2,14 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { incidents } from '@beaconhs/db/schema'
-import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
-import { incidentCreatedEvent } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCan } from '@beaconhs/tenant'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
+import { recordIncidentCreated } from '@/lib/incident-events'
+
+// Starts an empty draft report and opens it. The reporter fills it in on the
+// record page and taps Submit report, which runs the incident `on_submit` Flows.
 export async function startIncident() {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'incidents.create')
@@ -31,6 +33,7 @@ export async function startIncident() {
         type,
         severity,
         status: 'reported',
+        isDraft: true,
         title,
         description,
         occurredAt,
@@ -50,31 +53,7 @@ export async function startIncident() {
       summary: `Started ${incident.reference}`,
       after: { reference: incident.reference, type, severity, occurredAt },
     })
-    await recordDomainEvent(tx, {
-      tenantId: ctx.tenantId,
-      eventType: 'incident.created',
-      subjectId: incident.id,
-      dedupKey: `incident.created:${incident.id}`,
-      payload: {
-        notification: { kind: 'incident_reported', incidentId: incident.id },
-        integration: incidentCreatedEvent(ctx.tenantId, {
-          id: incident.id,
-          reference: incident.reference,
-          type,
-          severity,
-          status: 'reported',
-          title,
-          description,
-          occurredAt,
-          location,
-        }),
-        web: moduleFlowCommand(ctx, {
-          subjectId: incident.id,
-          moduleKey: 'incidents',
-          event: 'on_create',
-        }),
-      },
-    })
+    await recordIncidentCreated(tx, ctx, incident)
     return incident
   })
 

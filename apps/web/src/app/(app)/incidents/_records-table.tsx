@@ -21,6 +21,7 @@ export type IncidentsTableRow = {
   title: string
   siteName: string | null
   locked: boolean
+  isDraft: boolean
   involved: string[]
 }
 
@@ -77,7 +78,7 @@ export function IncidentsRecordsTable({
               }
               avatarName={r.involved[0]}
               reference={r.reference}
-              status={<StatusBadge status={r.status} />}
+              status={<StatusBadge status={r.status} isDraft={r.isDraft} />}
               title={tGeneratedValue(r.title)}
               meta={`${r.occurredOn} · ${r.type.replace(/_/g, ' ')}${
                 r.siteName ? ` · ${r.siteName}` : ''
@@ -166,7 +167,7 @@ export function IncidentsRecordsTable({
                       <SeverityBadge severity={r.severity} />
                     </td>
                     <td className="px-3 py-2">
-                      <StatusBadge status={r.status} />
+                      <StatusBadge status={r.status} isDraft={r.isDraft} />
                     </td>
                     <td className="px-3 py-2">
                       <Link

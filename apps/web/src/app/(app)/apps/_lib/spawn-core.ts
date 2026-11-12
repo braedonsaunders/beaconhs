@@ -17,7 +17,8 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
-import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
+import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
+import { recordIncidentCreated } from '@/lib/incident-events'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
@@ -239,33 +240,7 @@ export async function spawnIncidentCore(
       })
       .onConflictDoNothing({ target: [incidents.tenantId, incidents.flowExecutionKey] })
       .returning()
-    if (inserted) {
-      await recordDomainEvent(tx, {
-        tenantId: ctx.tenantId,
-        eventType: 'incident.created',
-        subjectId: inserted.id,
-        dedupKey: `incident.created:${inserted.id}`,
-        payload: {
-          notification: { kind: 'incident_reported', incidentId: inserted.id },
-          integration: incidentCreatedEvent(ctx.tenantId, {
-            id: inserted.id,
-            reference: inserted.reference,
-            type: inserted.type,
-            severity: inserted.severity,
-            status: inserted.status,
-            title: inserted.title,
-            description: inserted.description,
-            occurredAt: inserted.occurredAt,
-            location: inserted.location,
-          }),
-          web: moduleFlowCommand(ctx, {
-            subjectId: inserted.id,
-            moduleKey: 'incidents',
-            event: 'on_create',
-          }),
-        },
-      })
-    }
+    if (inserted) await recordIncidentCreated(tx, ctx, inserted)
     if (inserted) return { record: inserted, replayed: false }
     if (input.flowExecutionKey) {
       const [existing] = await tx

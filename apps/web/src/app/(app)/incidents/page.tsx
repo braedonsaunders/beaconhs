@@ -175,6 +175,7 @@ export default async function IncidentsPage({
     title: incident.title,
     siteName: site?.name ?? null,
     locked: incident.locked,
+    isDraft: incident.isDraft,
     involved: involvedByIncident.get(incident.id) ?? [],
   }))
 

@@ -49,7 +49,8 @@ import {
   materializeEvidenceTargetObligations,
   materializeEvidenceTargetsObligations,
 } from '@beaconhs/compliance'
-import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
+import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
+import { recordIncidentCreated } from '@/lib/incident-events'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { dateIsoInTimeZone } from '@/lib/datetime'
@@ -293,33 +294,7 @@ async function createIncident(ctx: RequestContext, raw: unknown): Promise<WriteR
         severityRating: b.severityRating ?? null,
       })
       .returning()
-    if (created) {
-      await recordDomainEvent(tx, {
-        tenantId: ctx.tenantId,
-        eventType: 'incident.created',
-        subjectId: created.id,
-        dedupKey: `incident.created:${created.id}`,
-        payload: {
-          notification: { kind: 'incident_reported', incidentId: created.id },
-          integration: incidentCreatedEvent(ctx.tenantId, {
-            id: created.id,
-            reference: created.reference,
-            type: created.type,
-            severity: created.severity,
-            status: created.status,
-            title: created.title,
-            description: created.description,
-            occurredAt: created.occurredAt,
-            location: created.location,
-          }),
-          web: moduleFlowCommand(ctx, {
-            subjectId: created.id,
-            moduleKey: 'incidents',
-            event: 'on_create',
-          }),
-        },
-      })
-    }
+    if (created) await recordIncidentCreated(tx, ctx, created)
     return created
   })
 

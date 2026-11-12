@@ -11,6 +11,7 @@ import { getTranslations } from 'next-intl/server'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { htmlToText } from '@beaconhs/forms-core'
 import {
   Activity,
   AlertTriangle,
@@ -27,6 +28,7 @@ import {
   Lock,
   Pencil,
   Plus,
+  Send,
   Trash2,
   Unlock,
   Users,
@@ -90,6 +92,7 @@ import { assertCan, can, getRegulatoryTerminology } from '@beaconhs/tenant'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAuditInTransaction, recordAudit } from '@/lib/audit'
+import { recordIncidentCreated, recordIncidentSubmitted } from '@/lib/incident-events'
 import { parseIncidentInjuryInput } from '@/lib/incident-injury-input'
 import {
   isIncidentFactorCategory,
@@ -268,6 +271,58 @@ async function toggleLock(formData: FormData) {
     after: { locked: lock },
   })
   revalidatePath(`/incidents/${id}`)
+}
+
+// A started report is a draft until the reporter submits it. Submitting runs
+// the incident `on_submit` Flows — the trigger for anything that should see the
+// finished report (emails with the incident PDF, webhooks, notices).
+async function submitIncident(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  await assertCanSeeIncident(ctx, id)
+  const submitted = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        isDraft: incidents.isDraft,
+        locked: incidents.locked,
+        reportedByTenantUserId: incidents.reportedByTenantUserId,
+        siteOrgUnitId: incidents.siteOrgUnitId,
+        description: incidents.description,
+      })
+      .from(incidents)
+      .where(and(eq(incidents.id, id), isNull(incidents.deletedAt)))
+      .limit(1)
+      .for('update')
+    if (!row) throw new Error('Incident not found')
+    if (!canEditIncidentReporting(ctx, row.reportedByTenantUserId))
+      throw new Error('You cannot submit this incident report.')
+    if (!row.isDraft) return false
+    if (row.locked) throw new Error('Unlock this incident before you submit it.')
+    const missing = [
+      row.siteOrgUnitId ? null : 'Site',
+      htmlToText(row.description) ? null : 'Event details / cause',
+    ].filter((field): field is string => field !== null)
+    if (missing.length > 0)
+      throw new Error(`Fill in ${missing.join(' and ')} before you submit this report.`)
+    await tx.update(incidents).set({ isDraft: false }).where(eq(incidents.id, id))
+    await recordIncidentSubmitted(tx, ctx, id)
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'incident',
+      entityId: id,
+      action: 'update',
+      summary: 'Submitted report',
+      before: { isDraft: true },
+      after: { isDraft: false },
+    })
+    return true
+  })
+  if (!submitted) return
+  revalidatePath(`/incidents/${id}`)
+  revalidatePath('/incidents')
+  revalidatePath('/my/incidents')
+  revalidatePath('/my/in-progress')
+  revalidatePath('/dashboard')
 }
 
 // ---- Photos, email, copy, delete -------------------------------------------
@@ -552,9 +607,11 @@ async function copyIncident(formData: FormData) {
   })
   if (!src) return
 
-  const [row] = await ctx.db(async (tx) => {
+  // A copy is a new draft: the reporter adjusts it, then submits it like any
+  // started report.
+  const row = await ctx.db(async (tx) => {
     const reference = await nextReference(tx, ctx.tenantId, 'incident')
-    return tx
+    const [created] = await tx
       .insert(incidents)
       .values({
         tenantId: ctx.tenantId,
@@ -562,6 +619,7 @@ async function copyIncident(formData: FormData) {
         type: src.type,
         severity: src.severity,
         status: 'reported',
+        isDraft: true,
         title: titleOverride || `Copy of ${src.title}`,
         description: src.description,
         occurredAt: new Date(),
@@ -577,15 +635,18 @@ async function copyIncident(formData: FormData) {
         reportedByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning()
-  })
-  if (row) {
-    await recordAudit(ctx, {
+    if (!created) return null
+    await recordAuditInTransaction(tx, ctx, {
       entityType: 'incident',
-      entityId: row.id,
+      entityId: created.id,
       action: 'create',
       summary: `Cloned from ${src.reference}`,
-      after: { reference: row.reference, sourceId: src.id },
+      after: { reference: created.reference, sourceId: src.id },
     })
+    await recordIncidentCreated(tx, ctx, created)
+    return created
+  })
+  if (row) {
     revalidatePath('/incidents')
     redirect(`/incidents/${row.id}`)
   }
@@ -1566,6 +1627,7 @@ export default async function IncidentDetailPage({
   const canUpdate = can(ctx, 'incidents.update')
   const reportingReadOnly =
     locked || !canEditIncidentReporting(ctx, incident.reportedByTenantUserId)
+  const isDraft = incident.isDraft
   const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
 
   // Smallest unused ordinal (1..5) for adding a new "why" row.
@@ -1656,7 +1718,7 @@ export default async function IncidentDetailPage({
             badge={
               <div className="flex flex-wrap items-center gap-2">
                 <SeverityBadge severity={incident.severity} />
-                <StatusBadge status={incident.status} />
+                <StatusBadge status={incident.status} isDraft={incident.isDraft} />
                 <RecordSyncStatus />
                 <GeneratedValue
                   value={
@@ -1689,6 +1751,28 @@ export default async function IncidentDetailPage({
         alerts={
           <>
             <RecordSyncBanner />
+            <GeneratedValue
+              value={
+                isDraft && !reportingReadOnly ? (
+                  <Alert variant="info">
+                    <AlertTitle>
+                      <GeneratedText id="m_07ae4a6d5cafa5" />
+                    </AlertTitle>
+                    <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                      <span>
+                        <GeneratedText id="m_10db8bfdbcea0f" />
+                      </span>
+                      <OnlineActionForm action={submitIncident} purpose="finish">
+                        <input type="hidden" name="id" value={id} />
+                        <Button size="sm" type="submit">
+                          <Send size={12} /> <GeneratedText id="m_09349052137c88" />
+                        </Button>
+                      </OnlineActionForm>
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
             <GeneratedValue
               value={
                 locked ? (

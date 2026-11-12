@@ -5,15 +5,21 @@ const mocks = vi.hoisted(() => ({
   permission: vi.fn(),
   audit: vi.fn(),
   event: vi.fn(),
+  flowEvent: vi.fn(),
   reference: vi.fn(),
   redirect: vi.fn(),
   revalidate: vi.fn(),
 }))
+vi.mock('server-only', () => ({}))
 vi.mock('@/lib/auth', () => ({ requireRequestContext: mocks.auth }))
 vi.mock('@beaconhs/tenant', () => ({ assertCan: mocks.permission }))
 vi.mock('@/lib/audit', () => ({ recordAuditInTransaction: mocks.audit }))
 vi.mock('@/lib/reference', () => ({ nextReference: mocks.reference }))
-vi.mock('@beaconhs/events', () => ({ recordDomainEvent: mocks.event, moduleFlowCommand: vi.fn() }))
+vi.mock('@beaconhs/events', () => ({
+  recordDomainEvent: mocks.event,
+  recordModuleFlowEvent: mocks.flowEvent,
+  moduleFlowCommand: vi.fn(),
+}))
 vi.mock('@beaconhs/integrations', () => ({ incidentCreatedEvent: vi.fn() }))
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidate }))
@@ -25,7 +31,7 @@ let tx: { insert: ReturnType<typeof vi.fn> }
 let ctx: { tenantId: string; membership: { id: string }; db: ReturnType<typeof vi.fn> }
 beforeEach(() => {
   vi.resetAllMocks()
-  returning = vi.fn().mockResolvedValue([{ id: 'incident-id', reference: 'INC-42' }])
+  returning = vi.fn().mockResolvedValue([{ id: 'incident-id', reference: 'INC-42', isDraft: true }])
   values = vi.fn().mockReturnValue({ returning })
   tx = { insert: vi.fn().mockReturnValue({ values }) }
   ctx = {
@@ -55,6 +61,7 @@ describe('direct incident creation', () => {
         reference: 'INC-42',
         reportedByTenantUserId: ctx.membership.id,
         status: 'reported',
+        isDraft: true,
         occurredAt: expect.any(Date),
       }),
     )
@@ -70,6 +77,8 @@ describe('direct incident creation', () => {
         dedupKey: 'incident.created:incident-id',
       }),
     )
+    // A started report is an empty draft: its on_submit Flows wait for Submit report.
+    expect(mocks.flowEvent).not.toHaveBeenCalled()
     expect(mocks.redirect).toHaveBeenCalledWith('/incidents/incident-id')
   })
 
