@@ -5,6 +5,7 @@
 // compliance_status + reminders). Pure DB layer — depends only on @beaconhs/db
 // + drizzle-orm; takes a `tx` + tenantId, never the web's RequestContext.
 
+export * from './after-event'
 export * from './audience'
 export * from './audience-targets'
 export * from './document-acknowledgment'

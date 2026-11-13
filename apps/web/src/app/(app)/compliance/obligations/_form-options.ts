@@ -19,6 +19,7 @@ import {
   trainingAssessmentTypes,
   trainingCourses,
   trainingSkillTypes,
+  type ComplianceRecurrence,
   type ComplianceTargetRef,
 } from '@beaconhs/db/schema'
 import { primaryPersonTitleName } from '@beaconhs/db'
@@ -34,6 +35,8 @@ type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 type ObligationFormSelection = {
   targetRef?: ComplianceTargetRef
   audience?: readonly AudienceItem[]
+  /** An after-event rule names a job title or people group to hydrate too. */
+  recurrence?: ComplianceRecurrence
 }
 
 function audienceKeys(audience: readonly AudienceItem[], type: AudienceItem['type']): string[] {
@@ -62,14 +65,22 @@ export async function loadObligationFormOptions(
   const skillTypeId = isUuid(ref.skillTypeId ?? '') ? ref.skillTypeId! : null
   const formTemplateId = isUuid(ref.formTemplateId ?? '') ? ref.formTemplateId! : null
   const ppeTypeId = isUuid(ref.ppeTypeId ?? '') ? ref.ppeTypeId! : null
-  const jobTitleId = isUuid(ref.jobTitleId ?? '') ? ref.jobTitleId! : null
+  const afterEvent = selection.recurrence?.afterEvent
+  const jobTitleIds = [ref.jobTitleId, afterEvent?.titleId].filter(
+    (value): value is string => typeof value === 'string' && isUuid(value),
+  )
 
   const roleKeys = audienceKeys(audience, 'role')
   const tradeIds = audienceKeys(audience, 'trade').filter(isUuid)
   const departmentIds = audienceKeys(audience, 'department').filter(isUuid)
   const personIds = audienceKeys(audience, 'person').filter(isUuid)
   const orgUnitIds = audienceKeys(audience, 'org_unit').filter(isUuid)
-  const groupIds = audienceKeys(audience, 'person_group').filter(isUuid)
+  const groupIds = [
+    ...new Set([
+      ...audienceKeys(audience, 'person_group'),
+      ...(afterEvent?.groupId ? [afterEvent.groupId] : []),
+    ]),
+  ].filter(isUuid)
   const crewIds = audienceKeys(audience, 'crew').filter(isUuid)
 
   const data = await ctx.db(async (tx) => {
@@ -198,11 +209,11 @@ export async function loadObligationFormOptions(
             .from(ppeTypes)
             .where(eq(ppeTypes.id, ppeTypeId))
         : Promise.resolve([]),
-      jobTitleId
+      jobTitleIds.length > 0
         ? tx
             .select({ id: personTitles.id, name: personTitles.name })
             .from(personTitles)
-            .where(and(eq(personTitles.id, jobTitleId), isNull(personTitles.deletedAt)))
+            .where(and(inArray(personTitles.id, jobTitleIds), isNull(personTitles.deletedAt)))
         : Promise.resolve([]),
       groupIds.length > 0
         ? tx

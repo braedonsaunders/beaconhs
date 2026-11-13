@@ -9,11 +9,15 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
+  type ComplianceAfterEvent,
   type ComplianceRecurrence,
   type ComplianceTargetRef,
   complianceAudience,
+  complianceAudienceJoins,
   complianceObligations,
   complianceStatus,
+  personGroups,
+  personTitles,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import {
@@ -25,6 +29,7 @@ import {
   discardOpenCompliancePeriods,
   resolveComplianceClock,
   skipQueuedComplianceDispatches,
+  validateAfterEvent,
   validateCronRecurrence,
   validateFrequencyRecurrence,
 } from '@beaconhs/compliance'
@@ -112,8 +117,21 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
   }
 }
 
+/** Keep only the fields the chosen event uses. */
+function normalizeAfterEvent(afterEvent: ComplianceAfterEvent): ComplianceAfterEvent {
+  return {
+    event: afterEvent.event,
+    days: afterEvent.days,
+    countPrior: afterEvent.countPrior,
+    ...(afterEvent.event === 'job_title' ? { titleId: afterEvent.titleId } : {}),
+    ...(afterEvent.event === 'group_join' ? { groupId: afterEvent.groupId } : {}),
+  }
+}
+
 function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRecurrence {
   const cronFor = () => r.cron?.trim() || frequencyToCron(r.frequency ?? 'week')
+  // "Every N" is stored only when it is more than one unit.
+  const interval = r.interval && r.interval > 1 ? r.interval : undefined
   if (kind === 'cert_requirement' || kind === 'skill_requirement' || kind === 'ppe_inspection')
     return { kind: 'expiry', remindBeforeDays: r.remindBeforeDays ?? 30 }
   if (kind === 'job_title_signoff') return { kind: 'one_time' }
@@ -124,6 +142,12 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
       cron: cronFor(),
       dueOffsetMinutes: r.dueOffsetMinutes,
       activeMonths: r.activeMonths,
+    }
+  if ((kind === 'training' || kind === 'document') && r.kind === 'after_event' && r.afterEvent)
+    return {
+      kind: 'one_time',
+      afterEvent: normalizeAfterEvent(r.afterEvent),
+      remindBeforeDays: r.remindBeforeDays ?? 7,
     }
   if (kind === 'training' || kind === 'document')
     return r.kind === 'one_time'
@@ -138,6 +162,7 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
         : {
             kind: 'frequency',
             frequency: r.frequency ?? 'week',
+            interval,
             cron:
               kind === 'training' || (kind === 'document' && r.evidenceWindow === 'calendar')
                 ? undefined
@@ -163,6 +188,7 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
     kind: 'frequency',
     journalDays: kind === 'journal' ? r.journalDays : undefined,
     frequency: r.frequency ?? 'week',
+    interval: kind === 'journal' && r.journalDays ? undefined : interval,
     cron: KIND_META[kind].recurrence.calendar ? undefined : cronFor(),
     evidenceWindow: KIND_META[kind].recurrence.calendar ? 'calendar' : undefined,
     deadline: KIND_META[kind].recurrence.calendar
@@ -184,6 +210,49 @@ function assertValidRecurrence(
     else if (recurrence.kind === 'cron') validateCronRecurrence(recurrence, clock)
   } catch (error) {
     expectedError(error instanceof Error ? error.message : 'The recurrence is invalid')
+  }
+}
+
+/** A due-after-event rule must name a live title / group of this tenant. */
+async function assertValidAfterEvent(
+  tx: Database,
+  tenantId: string,
+  recurrence: ComplianceRecurrence,
+): Promise<void> {
+  const afterEvent = recurrence.afterEvent
+  if (!afterEvent) return
+  try {
+    validateAfterEvent(afterEvent)
+  } catch (error) {
+    expectedError(error instanceof Error ? error.message : 'The event rule is invalid')
+  }
+  if (afterEvent.event === 'job_title') {
+    const [title] = await tx
+      .select({ id: personTitles.id })
+      .from(personTitles)
+      .where(
+        and(
+          eq(personTitles.tenantId, tenantId),
+          eq(personTitles.id, afterEvent.titleId!),
+          isNull(personTitles.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!title) expectedError('That job title no longer exists')
+  }
+  if (afterEvent.event === 'group_join') {
+    const [group] = await tx
+      .select({ id: personGroups.id })
+      .from(personGroups)
+      .where(
+        and(
+          eq(personGroups.tenantId, tenantId),
+          eq(personGroups.id, afterEvent.groupId!),
+          isNull(personGroups.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!group) expectedError('That people group no longer exists')
   }
 }
 
@@ -296,6 +365,7 @@ export async function createObligation(rawInput: ObligationInput): Promise<Oblig
         const clock = await resolveComplianceClock(tx, ctx.tenantId)
         assertValidRecurrence(recurrence, clock)
       }
+      await assertValidAfterEvent(tx, ctx.tenantId, recurrence)
       await lockComplianceTarget(tx, ctx.tenantId, input.kind, ref)
       await lockComplianceAudienceTargets(tx, ctx.tenantId, audienceRows)
       const [row] = await tx
@@ -394,6 +464,7 @@ export async function updateObligation(
         const clock = await resolveComplianceClock(tx, ctx.tenantId)
         assertValidRecurrence(recurrence, clock)
       }
+      await assertValidAfterEvent(tx, ctx.tenantId, recurrence)
       const previousAudience = await tx
         .select({
           kind: complianceAudience.kind,
@@ -579,8 +650,16 @@ export async function deleteObligation(
       if (!deleted) expectedError('Obligation not found')
 
       // The obligation row is kept for its audit trail, but its materialized
-      // status rows must disappear in the same transaction.
+      // status rows and audience join dates must disappear in the same transaction.
       await purgeMaterializedStatus(tx, ctx.tenantId, id)
+      await tx
+        .delete(complianceAudienceJoins)
+        .where(
+          and(
+            eq(complianceAudienceJoins.tenantId, ctx.tenantId),
+            eq(complianceAudienceJoins.obligationId, id),
+          ),
+        )
       await skipQueuedComplianceDispatches(tx, ctx.tenantId, id)
       await recordAuditInTransaction(tx, ctx, {
         entityType: 'compliance_obligation',

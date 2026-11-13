@@ -151,6 +151,11 @@ function zonedMidnight(value: CalendarDate, timezone: string): Date {
   return new Date(candidate)
 }
 
+/** The instant a civil date (YYYY-MM-DD) begins in the compliance timezone. */
+export function complianceDayStartAt(on: string, timezone: string): Date {
+  return zonedMidnight(toCalendar(new Date(`${on}T00:00:00Z`)), timezone)
+}
+
 function periodStartFor(value: CalendarDate, frequency: Frequency): CalendarDate {
   if (frequency === 'day') return value
   if (frequency === 'week') {
@@ -172,11 +177,53 @@ function shiftPeriod(value: CalendarDate, frequency: Frequency, amount: number):
   return { year: value.year + amount, month: 1, day: 1 }
 }
 
+/** Longest supported "every N" cadence. */
+const MAX_INTERVAL = 99
+
+/** How many cadence units make one period ("every N weeks"). Defaults to 1. */
+export function recurrenceInterval(recurrence: Pick<ComplianceRecurrence, 'interval'>): number {
+  const interval = recurrence.interval ?? 1
+  if (!Number.isSafeInteger(interval) || interval < 1 || interval > MAX_INTERVAL) {
+    throw new Error(`Repeat every must be a whole number from 1 to ${MAX_INTERVAL}`)
+  }
+  return interval
+}
+
+/** Whole cadence units from one unit start to another (b − a). */
+function unitsBetween(a: CalendarDate, b: CalendarDate, frequency: Frequency): number {
+  if (frequency === 'day' || frequency === 'week') {
+    const days = Math.round((fromCalendar(b).getTime() - fromCalendar(a).getTime()) / 86_400_000)
+    return frequency === 'day' ? days : Math.floor(days / 7)
+  }
+  const months = (b.year - a.year) * 12 + (b.month - a.month)
+  return Math.floor(months / (frequency === 'month' ? 1 : frequency === 'quarter' ? 3 : 12))
+}
+
+/**
+ * Start of the period containing `value`. A period is `interval` cadence units
+ * long; multi-unit periods are counted from the unit the obligation became
+ * active in, so "every 3 years" created in 2026 runs 2026–2028, 2029–2031, ….
+ */
+function cyclePeriodStart(
+  value: CalendarDate,
+  frequency: Frequency,
+  interval: number,
+  anchor: CalendarDate,
+): CalendarDate {
+  const unit = periodStartFor(value, frequency)
+  if (interval === 1) return unit
+  const anchorUnit = periodStartFor(anchor, frequency)
+  const cycles = Math.floor(unitsBetween(anchorUnit, unit, frequency) / interval)
+  return shiftPeriod(anchorUnit, frequency, cycles * interval)
+}
+
 function occurrenceForPeriod(
   expression: string,
   periodStartAt: Date,
   periodEndAt: Date,
   timezone: string,
+  /** Multi-unit periods start at their first fire; the schedule fires once per unit. */
+  firstOnly = false,
 ): Date {
   if (expression.trim().split(/\s+/).length !== 5) {
     throw new Error('The cron schedule must contain exactly five fields')
@@ -189,6 +236,7 @@ function occurrenceForPeriod(
   if (first.getTime() >= periodEndAt.getTime()) {
     throw new Error('The cron schedule does not fire in every selected cadence period')
   }
+  if (firstOnly) return first
   const second = iterator.next().toDate()
   if (second.getTime() < periodEndAt.getTime()) {
     throw new Error('The cron schedule fires more than once in the selected cadence period')
@@ -288,11 +336,18 @@ function periodWindow(
   recurrence: ComplianceRecurrence,
   timezone: string,
 ) {
-  const nextStart = shiftPeriod(start, frequency, 1)
+  const interval = recurrenceInterval(recurrence)
+  const nextStart = shiftPeriod(start, frequency, interval)
   const periodStartAt = zonedMidnight(start, timezone)
   const periodEndAt = zonedMidnight(nextStart, timezone)
   const expression = recurrence.cron?.trim() || DEFAULT_CRON[frequency]
-  const scheduledAt = occurrenceForPeriod(expression, periodStartAt, periodEndAt, timezone)
+  const scheduledAt = occurrenceForPeriod(
+    expression,
+    periodStartAt,
+    periodEndAt,
+    timezone,
+    interval > 1,
+  )
   const dueAt = new Date(scheduledAt.getTime() + offsetMilliseconds(recurrence))
   return {
     start,
@@ -324,26 +379,29 @@ export function resolveFrequencyWindow(
     throw new Error('The obligation activation time is invalid')
   }
   if (recurrence.deadline) {
-    const window = resolveCompletionCalendarWindow(recurrence, clock)
+    const window = resolveCompletionCalendarWindow(recurrence, clock, activeFrom)
     return {
       ...window,
       evidenceStartAt: new Date(Math.max(window.periodStartAt.getTime(), activeFrom.getTime())),
       scheduledAt: window.periodStartAt,
     }
   }
-  const currentStart = periodStartFor(
+  const interval = recurrenceInterval(recurrence)
+  const currentStart = cyclePeriodStart(
     calendarDate(clock.periodAt ?? clock.now, clock.timezone),
     frequency,
+    interval,
+    calendarDate(activeFrom, clock.timezone),
   )
   const current = periodWindow(currentStart, frequency, recurrence, clock.timezone)
   const previous = periodWindow(
-    shiftPeriod(currentStart, frequency, -1),
+    shiftPeriod(currentStart, frequency, -interval),
     frequency,
     recurrence,
     clock.timezone,
   )
   const following = periodWindow(
-    shiftPeriod(currentStart, frequency, 1),
+    shiftPeriod(currentStart, frequency, interval),
     frequency,
     recurrence,
     clock.timezone,
@@ -356,10 +414,9 @@ export function resolveFrequencyWindow(
   const selected = clock.periodAt ? current : (started.at(-1) ?? eligible[0])
   if (!selected) throw new Error('The obligation has no valid scheduled period')
 
-  const nextStart = shiftPeriod(selected.start, frequency, 1)
-  const next = periodWindow(nextStart, frequency, recurrence, clock.timezone)
-  const interval = next.scheduledAt.getTime() - selected.scheduledAt.getTime()
-  if (selected.dueAt.getTime() - selected.scheduledAt.getTime() > interval) {
+  const next = periodWindow(selected.nextStart, frequency, recurrence, clock.timezone)
+  const span = next.scheduledAt.getTime() - selected.scheduledAt.getTime()
+  if (selected.dueAt.getTime() - selected.scheduledAt.getTime() > span) {
     throw new Error('The due offset must not extend beyond the next scheduled occurrence')
   }
 
@@ -424,9 +481,13 @@ export function shiftCompletionDate(value: string, frequency: Frequency, amount:
 }
 
 /** Rolling windows follow local civil dates, including daylight-saving changes. */
-export function rollingEvidenceBoundary(clock: ComplianceClock, frequency: Frequency) {
+export function rollingEvidenceBoundary(
+  clock: ComplianceClock,
+  frequency: Frequency,
+  interval = 1,
+) {
   const today = complianceDate(clock)
-  const startOn = shiftCompletionDate(today, frequency, -1)
+  const startOn = shiftCompletionDate(today, frequency, -interval)
   return {
     startOn,
     startAt: zonedMidnight(toCalendar(new Date(`${startOn}T00:00:00Z`)), clock.timezone),
@@ -441,6 +502,8 @@ export function rollingEvidenceBoundary(clock: ComplianceClock, frequency: Frequ
 export function resolveCompletionCalendarWindow(
   recurrence: ComplianceRecurrence,
   clock: ComplianceClock,
+  /** When the obligation became active; multi-unit periods count from here. */
+  activeFrom: Date = clock.now,
 ) {
   const { frequency, deadline } = recurrence
   if (
@@ -463,13 +526,22 @@ export function resolveCompletionCalendarWindow(
     (['day', 'week'].includes(frequency) && deadline.day !== undefined)
   )
     throw new Error('The completion deadline is invalid')
-  const start = periodStartFor(calendarDate(clock.periodAt ?? clock.now, clock.timezone), frequency)
-  const nextStart = shiftPeriod(start, frequency, 1)
-  let due = { ...start }
+  const interval = recurrenceInterval(recurrence)
+  const start = cyclePeriodStart(
+    calendarDate(clock.periodAt ?? clock.now, clock.timezone),
+    frequency,
+    interval,
+    calendarDate(activeFrom, clock.timezone),
+  )
+  const nextStart = shiftPeriod(start, frequency, interval)
+  // The deadline falls in the period's last unit: "every 3 years, by December 31"
+  // is due on December 31 of the third year.
+  const lastUnit = shiftPeriod(start, frequency, interval - 1)
+  let due = { ...lastUnit }
   if (frequency === 'week') {
     if (!Number.isInteger(deadline.weekday) || deadline.weekday! < 1 || deadline.weekday! > 7)
       throw new Error('Pick a deadline weekday')
-    due = addCalendarDays(start, deadline.weekday! - 1)
+    due = addCalendarDays(lastUnit, deadline.weekday! - 1)
   } else if (frequency !== 'day') {
     const months = frequency === 'year' ? 12 : frequency === 'quarter' ? 3 : 1
     const month = frequency === 'month' ? 1 : deadline.month
@@ -482,7 +554,7 @@ export function resolveCompletionCalendarWindow(
       deadline.day! > 31
     )
       throw new Error('Pick a valid deadline month and day')
-    const first = new Date(Date.UTC(start.year, start.month - 1 + month! - 1, 1))
+    const first = new Date(Date.UTC(lastUnit.year, lastUnit.month - 1 + month! - 1, 1))
     const lastDay = new Date(
       Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
     ).getUTCDate()
@@ -497,7 +569,7 @@ export function resolveCompletionCalendarWindow(
   const [hour, minute] = deadline.time.split(':').map(Number)
   const dueAt = nextCronOccurrence(
     `${minute} ${hour} ${due.day} ${due.month} *`,
-    new Date(periodStartAt.getTime() - 1),
+    new Date(zonedMidnight(lastUnit, clock.timezone).getTime() - 1),
     clock.timezone,
   )
   return {
@@ -582,6 +654,7 @@ export function validateFrequencyRecurrence(
   clock: ComplianceClock,
 ): void {
   validateActiveMonths(recurrence)
+  recurrenceInterval(recurrence)
   if (recurrence.deadline) {
     resolveCompletionCalendarWindow(recurrence, clock)
     return
@@ -596,7 +669,7 @@ export function validateFrequencyRecurrence(
       throw new Error(
         'Rolling completion windows require a frequency and do not use calendar deadlines',
       )
-    rollingEvidenceBoundary(clock, recurrence.frequency)
+    rollingEvidenceBoundary(clock, recurrence.frequency, recurrenceInterval(recurrence))
     return
   }
   resolveFrequencyWindow(recurrence, clock, clock.now)
@@ -608,6 +681,8 @@ export function validateCronRecurrence(
   clock: ComplianceClock,
 ): void {
   validateActiveMonths(recurrence)
+  if ((recurrence.interval ?? 1) !== 1)
+    throw new Error('A custom cron schedule sets its own spacing; it cannot repeat every N periods')
   const expression = cronExpression(recurrence)
   const offset = offsetMilliseconds(recurrence)
   let occurrence = nextCronOccurrence(expression, new Date(clock.now.getTime() - 1), clock.timezone)

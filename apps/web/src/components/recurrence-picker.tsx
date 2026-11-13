@@ -1,6 +1,11 @@
 'use client'
 
-import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  useGeneratedValueTranslations,
+  GeneratedValue,
+} from '@/i18n/generated'
 
 // Shared recurrence / schedule builder for compliance obligations.
 //
@@ -17,8 +22,11 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 // lives in `./recurrence` so server code can use it too.
 
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, Select } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import {
+  AFTER_EVENT_OPTIONS,
   FREQUENCIES,
+  frequencyUnit,
   CALENDAR_MONTHS,
   CALENDAR_WEEKDAYS,
   defaultCompletionDeadline,
@@ -28,18 +36,27 @@ import {
   type RecurrenceValue,
 } from './recurrence'
 
+type PickedOption = { id: string; label: string }
+
 export function RecurrencePicker({
   value,
   onChange,
   fields,
   title = 'Schedule',
+  afterEventTitle,
+  afterEventGroup,
 }: {
   value: RecurrenceValue
   onChange: (next: RecurrenceValue) => void
   fields: RecurrenceFields
   title?: string
+  /** Label of the stored after-event job title, so the picker opens filled in. */
+  afterEventTitle?: PickedOption
+  /** Label of the stored after-event people group. */
+  afterEventGroup?: PickedOption
 }) {
   const tGenerated = useGeneratedTranslations()
+  const tGeneratedValue = useGeneratedValueTranslations()
   const frequency = value.frequency ?? 'week'
   const calendar = fields.calendar || (fields.rolling && value.evidenceWindow === 'calendar')
   const deadline = value.deadline ?? defaultCompletionDeadline(frequency)
@@ -47,8 +64,16 @@ export function RecurrencePicker({
   const setDeadline = (patch: Partial<typeof deadline>) =>
     set({ deadline: { ...deadline, ...patch } })
 
+  const afterEvent = value.afterEvent ?? { event: 'hire' as const, days: 30, countPrior: false }
+  const setAfterEvent = (patch: Partial<typeof afterEvent>) =>
+    set({ afterEvent: { ...afterEvent, ...patch } })
+  // Custom cron schedules set their own spacing, so only preset cadences repeat every N.
+  const showInterval = fields.recurring && (fields.rolling || fields.calendar)
+  const interval = value.interval ?? 1
+
   const kinds: { value: RecurrenceKind; label: string }[] = []
   if (fields.oneTime) kinds.push({ value: 'one_time', label: 'One-time (single due date)' })
+  if (fields.oneTime) kinds.push({ value: 'after_event', label: 'One-time (after an event)' })
   if (fields.recurring) kinds.push({ value: 'frequency', label: 'Recurring (cadence)' })
 
   return (
@@ -77,6 +102,7 @@ export function RecurrencePicker({
                       deadline: undefined,
                       cron: undefined,
                       dueOffsetMinutes: undefined,
+                      afterEvent: e.target.value === 'after_event' ? afterEvent : undefined,
                     })
                   }
                 >
@@ -125,6 +151,123 @@ export function RecurrencePicker({
             ) : null}
           </div>
         ) : null}
+        {fields.oneTime && value.kind === 'after_event' ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="rec-event">
+                <GeneratedValue value="Starts from" />
+              </Label>
+              <Select
+                id="rec-event"
+                value={afterEvent.event}
+                onChange={(e) =>
+                  setAfterEvent({
+                    event: e.target.value as typeof afterEvent.event,
+                    titleId: undefined,
+                    groupId: undefined,
+                  })
+                }
+              >
+                {AFTER_EVENT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="rec-event-days">
+                <GeneratedValue value="Due within (days)" />
+              </Label>
+              <Input
+                id="rec-event-days"
+                type="number"
+                min={0}
+                max={3650}
+                step={1}
+                value={afterEvent.days}
+                onChange={(e) => {
+                  const next = Number(e.target.value)
+                  setAfterEvent({
+                    days: Number.isFinite(next) ? Math.max(0, Math.min(3650, Math.trunc(next))) : 0,
+                  })
+                }}
+              />
+            </div>
+            {afterEvent.event === 'job_title' ? (
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>
+                  <GeneratedValue value="Job title" />
+                </Label>
+                <RemoteSearchSelect
+                  lookup="compliance-obligation-job-titles"
+                  value={afterEvent.titleId ?? ''}
+                  onChange={(id) => setAfterEvent({ titleId: id || undefined })}
+                  initialOption={
+                    afterEventTitle
+                      ? { value: afterEventTitle.id, label: afterEventTitle.label }
+                      : undefined
+                  }
+                  placeholder={tGeneratedValue('Pick a job title')}
+                  searchPlaceholder={tGeneratedValue('Search job titles')}
+                  sheetTitle={tGeneratedValue('Pick a job title')}
+                  ariaLabel={tGeneratedValue('Job title')}
+                />
+              </div>
+            ) : null}
+            {afterEvent.event === 'group_join' ? (
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>
+                  <GeneratedValue value="People group" />
+                </Label>
+                <RemoteSearchSelect
+                  lookup="compliance-obligation-audience-groups"
+                  value={afterEvent.groupId ?? ''}
+                  onChange={(id) => setAfterEvent({ groupId: id || undefined })}
+                  initialOption={
+                    afterEventGroup
+                      ? { value: afterEventGroup.id, label: afterEventGroup.label }
+                      : undefined
+                  }
+                  placeholder={tGeneratedValue('Pick a people group')}
+                  searchPlaceholder={tGeneratedValue('Search people groups')}
+                  sheetTitle={tGeneratedValue('Pick a people group')}
+                  ariaLabel={tGeneratedValue('People group')}
+                />
+              </div>
+            ) : null}
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="rec-event-prior">
+                <GeneratedValue value="Earlier completions" />
+              </Label>
+              <Select
+                id="rec-event-prior"
+                value={afterEvent.countPrior ? 'count' : 'after'}
+                onChange={(e) => setAfterEvent({ countPrior: e.target.value === 'count' })}
+              >
+                <option value="after">
+                  <GeneratedValue value="Must be done again after the event" />
+                </option>
+                <option value="count">
+                  <GeneratedValue value="Any completion counts, even from before" />
+                </option>
+              </Select>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedValue
+                  value={
+                    afterEvent.event === 'hire'
+                      ? 'Each person is due this many days after their hire date. People without a hire date stay required with no due date.'
+                      : afterEvent.event === 'audience_join'
+                        ? 'Each person is due this many days after they first fall under this requirement. Someone who leaves and comes back starts again.'
+                        : afterEvent.event === 'job_title'
+                          ? 'Only people holding this title are required, each due this many days after it was assigned.'
+                          : 'Only members of this group are required, each due this many days after they were added.'
+                  }
+                />
+              </p>
+            </div>
+          </div>
+        ) : null}
         <GeneratedValue
           value={
             fields.oneTime && value.kind === 'one_time' ? (
@@ -139,7 +282,7 @@ export function RecurrencePicker({
                   onChange={(e) => set({ dueOn: e.target.value || undefined })}
                 />
               </div>
-            ) : fields.recurring ? (
+            ) : fields.recurring && value.kind !== 'after_event' ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="rec-freq">
@@ -165,6 +308,36 @@ export function RecurrencePicker({
                     ))}
                   </Select>
                 </div>
+                {showInterval ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="rec-interval">
+                      <GeneratedValue value="Repeat every" />
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="rec-interval"
+                        type="number"
+                        min={1}
+                        max={99}
+                        step={1}
+                        className="w-24"
+                        value={interval}
+                        disabled={Boolean(value.journalDays)}
+                        onChange={(e) => {
+                          const next = Number(e.target.value)
+                          set({
+                            interval: Number.isFinite(next)
+                              ? Math.max(1, Math.min(99, Math.trunc(next)))
+                              : 1,
+                          })
+                        }}
+                      />
+                      <span className="text-sm text-slate-600 dark:text-slate-300">
+                        <GeneratedValue value={frequencyUnit(frequency, interval)} />
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
                 {!fields.rolling && !fields.calendar ? (
                   <div className="space-y-1.5">
                     <Label htmlFor="rec-cron">

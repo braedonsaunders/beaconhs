@@ -13,6 +13,7 @@ import {
   complianceStatus,
   tenantNotificationPolicy,
 } from '@beaconhs/db/schema'
+import { syncComplianceAudienceJoins } from './after-event'
 import { type AudienceItem, resolveObligationAudience } from './audience'
 import { captureCompliancePeriod, supportsComplianceHistory } from './history'
 import {
@@ -438,13 +439,25 @@ export async function materializeObligation(
 
   const clock = await resolveComplianceClock(tx, tenantId, options)
   const audience = await loadAudience(tx, tenantId, current.id)
-  const members = supportsComplianceHistory(current)
-    ? await resolveObligationAudience(tx, tenantId, audience, current.workerType)
-    : undefined
+  const tracksJoins =
+    current.recurrence.kind === 'one_time' &&
+    current.recurrence.afterEvent?.event === 'audience_join'
+  const members =
+    supportsComplianceHistory(current) || tracksJoins
+      ? await resolveObligationAudience(tx, tenantId, audience, current.workerType)
+      : undefined
+  await syncComplianceAudienceJoins(
+    tx,
+    tenantId,
+    current,
+    tracksJoins ? (members ?? []).map((member) => member.personId) : [],
+    clock.now,
+  )
   const result = members
     ? await evaluateObligation(tx, tenantId, current, audience, clock, members)
     : await evaluateObligation(tx, tenantId, current, audience, clock)
-  if (members) await captureCompliancePeriod(tx, tenantId, current, clock, members, result.rows)
+  if (members && supportsComplianceHistory(current))
+    await captureCompliancePeriod(tx, tenantId, current, clock, members, result.rows)
 
   const now = clock.now
   const keys = result.rows.map((r) => r.key)

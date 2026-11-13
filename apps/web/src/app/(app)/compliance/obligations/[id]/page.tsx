@@ -30,7 +30,8 @@ import { recurrenceValueFromStored } from '@/components/recurrence'
 import { StatusBadge, SummaryStrip } from '../../_shared'
 import { KIND_META, isCalendarQuantity, kindLabel, type ObligationKind } from '../_meta'
 import { CALENDAR_MONTHS } from '@/components/recurrence'
-import { cadenceLabel, obligationCompliance } from '../_data'
+import { obligationCompliance } from '../_data'
+import { describeRecurrence } from '@/components/recurrence'
 import { loadObligationFormOptions } from '../_form-options'
 import { ObligationDetailActions } from './_detail-actions'
 import { ObligationEditDrawer, type ObligationEditData } from './_edit-drawer'
@@ -188,6 +189,7 @@ export default async function ObligationDetailPage({
     const { targets, audienceOptions } = await loadObligationFormOptions(ctx, {
       targetRef: ob.targetRef ?? {},
       audience: initialAudience,
+      recurrence: ob.recurrence,
     })
     edit = {
       kind: ob.sourceModule as ObligationKind,
@@ -212,7 +214,7 @@ export default async function ObligationDetailPage({
           back={{ href: '/compliance/obligations', label: 'Back to obligations' }}
           title={tGeneratedValue(ob.title)}
           subtitle={tGeneratedValue(
-            `${kindLabel(ob.sourceModule)} · ${cadenceLabel(ob.recurrence, tGeneratedValue)}${
+            `${kindLabel(ob.sourceModule)} · ${describeRecurrence(ob.recurrence, tGeneratedValue)}${
               ob.subjectKind === 'per_person'
                 ? ` · ${audienceLabel}`
                 : ob.subjectKind === 'per_task'

@@ -562,7 +562,7 @@ The **Overview** tab shows the big picture: total obligations, subjects tracked,
 2. Pick the **Kind**. Common kinds include **Training / assessment**, **Document acknowledgement**, **App (scheduled)** for a form people must fill on a cadence, **Certification requirement**, **Skill requirement**, and **Inspection**.
 3. Fill in the title and what to require for that kind — for example, which course or which document.
 4. Pick the audience: specific people, a role, a department, a **Group**, a **Crew**, a site, or everyone.
-5. For a recurring item, choose the **Cadence**. Inspections, journals and hazard assessments have **Quantity per period** and **Compliant threshold (%)**. They use calendar periods and **Due by** sets the deadline. Other scheduled kinds keep **Cron override (optional)**; scheduled apps also offer **Due offset (minutes after fire)**. Use **Active months** for seasonal requirements such as November through March; months can wrap across New Year.
+5. For a recurring item, choose the **Cadence** and, if needed, **Repeat every** — for example every 3 years. Inspections, journals and hazard assessments have **Quantity per period** and **Compliant threshold (%)**. They use calendar periods and **Due by** sets the deadline. Other scheduled kinds keep **Cron override (optional)**; scheduled apps also offer **Due offset (minutes after fire)**. Use **Active months** for seasonal requirements such as November through March; months can wrap across New Year.
 6. For a **Certification requirement**, pick a course. For a **Skill requirement**, pick a skill type. Set **Remind before (days)** for the expiry warning.
 7. Click **Create obligation**.
 
@@ -619,7 +619,36 @@ Use **Calendar schedule** when everyone must finish in the same calendar period 
 
 **Monthly** can be due by the 15th or the last day. **Quarterly** lets you choose month 1, 2, or 3 of each quarter and a day. **Weekly** lets you pick the weekday. **Daily** lets you pick the time. Days beyond the end of a short month use its last day, including February 29 deadlines in non-leap years. All deadlines use the compliance timezone under **Admin → Notifications**.
 
-Choose **Rolling period since completion** instead when a qualification must remain current. The supported periods are one day, one week, one calendar month, three calendar months, and 12 calendar months. Each person’s next due date follows their own last successful completion. A monthly completion on January 31 is valid through February 28 in a non-leap year. Choose **One-time (single due date)** for a requirement with one specific due date that does not repeat.
+Choose **Rolling period since completion** instead when a qualification must remain current. The periods are days, weeks, calendar months, quarters (three calendar months), and years (12 calendar months). Each person’s next due date follows their own last successful completion. A monthly completion on January 31 is valid through February 28 in a non-leap year. Choose **One-time (single due date)** for a requirement with one specific due date that does not repeat.
+
+## Repeat every few years
+
+Use **Repeat every** beside **Cadence** for a requirement that comes round every few days, weeks, months, quarters, or years.
+
+1. Choose **Recurring (cadence)**.
+2. Set **Cadence**, for example **Yearly**.
+3. Set **Repeat every** to the number of periods, for example **3**. The field shows **years**.
+4. Save the obligation.
+
+With **Rolling period since completion**, a completion stays valid for the whole stretch: every 3 years means a completion within the last 3 years. Each person's next due date is 3 years after their last completion.
+
+With **Calendar schedule**, the periods are counted from when the obligation started. An obligation created in 2026 with every 3 years runs 2026–2028, then 2029–2031. The **Due by** date falls in the last year of each stretch, so **December 31** means December 31, 2028. Inspections, journals, and hazard assessments count their quantity across the whole stretch. Scheduled apps use their own cron timing, so they do not offer **Repeat every**.
+
+## Due after an event
+
+Choose **One-time (after an event)** when each person must finish something within a set number of days of their own event. For example, WHMIS within 30 days of being hired. Training and document acknowledgements offer it.
+
+1. Choose **One-time (after an event)**.
+2. Under **Starts from**, choose the event:
+   - **Hire date** uses the hire date on the person's [People](/people) record. People without a hire date stay required, with no due date, until one is added.
+   - **Joining this requirement** starts when the person first falls under the audience, for example when they move into the department. Everyone already in the audience starts on the day you save. Someone who leaves the audience and comes back starts again.
+   - **Job title assigned** starts when the title you pick was given to the person. Only people holding that title are required.
+   - **Added to a people group** starts when the person joined the group you pick. Only members of that group are required.
+3. Set **Due within (days)**. Use 0 for the same day.
+4. Under **Earlier completions**, choose **Must be done again after the event** or **Any completion counts, even from before**. For example, use the first so a rehired worker redoes orientation; use the second so an existing certificate still counts.
+5. Save the obligation.
+
+Each person gets their own due date. They show as overdue the day after it passes. The audience still applies, so a job title or group event only covers people who are also in the audience.
 
 ## Track journal targets
 

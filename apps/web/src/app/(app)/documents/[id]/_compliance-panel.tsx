@@ -19,6 +19,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
+import { describeRecurrence } from '@/components/recurrence'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -95,16 +96,6 @@ export async function loadDocumentObligations(
       filteredTotal: Number(filteredRows[0]?.count ?? 0),
     }
   })
-}
-
-function recurrenceSummary(rec: ComplianceRecurrence | null): string {
-  if (!rec) return 'One-time'
-  if (rec.kind === 'one_time') return rec.dueOn ? `Due ${rec.dueOn}` : 'One-time'
-  if (rec.kind === 'frequency') {
-    const q = rec.quantity ?? 1
-    return `Every ${q > 1 ? `${q} ` : ''}${rec.frequency ?? 'period'}${q > 1 ? 's' : ''}`
-  }
-  return rec.kind.replace(/_/g, ' ')
 }
 
 export function DocumentCompliancePanel({
@@ -210,7 +201,7 @@ export function DocumentCompliancePanel({
                 <GeneratedValue value={o.status} />
               </Badge>
               <Badge variant="outline">
-                <GeneratedValue value={recurrenceSummary(o.recurrence)} />
+                <GeneratedValue value={describeRecurrence(o.recurrence)} />
               </Badge>
               <GeneratedValue
                 value={

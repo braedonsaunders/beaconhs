@@ -3,7 +3,7 @@
 // evaluation adapters. The old per-module UNION is gone.
 
 import { getGeneratedValueTranslations } from '@/i18n/generated.server'
-import { CALENDAR_MONTHS, CALENDAR_WEEKDAYS, FREQUENCIES } from '@/components/recurrence'
+import { describeRecurrence } from '@/components/recurrence'
 import { and, count, desc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm'
 import {
   complianceAudience,
@@ -32,51 +32,6 @@ type ObligationRow = {
   audience: string
   cadence: string
   enabled: boolean
-}
-
-export function cadenceLabel(
-  rec: ComplianceRecurrence | null | undefined,
-  translate: (value: string) => string = (value) => value,
-): string {
-  if (!rec) return '—'
-  if (rec.journalDays)
-    return translate(
-      rec.journalDays === 'weekdays'
-        ? 'One journal each weekday'
-        : rec.journalDays === 'calendar'
-          ? 'One journal every calendar day'
-          : 'One journal each worked day (weekdays when unknown)',
-    )
-  if (rec.kind === 'frequency' && rec.deadline) {
-    const deadline = rec.deadline
-    const frequency = rec.frequency ?? 'year'
-    const date =
-      frequency === 'year'
-        ? `${translate(CALENDAR_MONTHS[(deadline.month ?? 1) - 1] ?? 'January')} ${deadline.day}`
-        : frequency === 'quarter'
-          ? `${translate('Month of quarter')} ${deadline.month}, ${translate('Day of month')} ${deadline.day}`
-          : frequency === 'month'
-            ? `${translate('Day of month')} ${deadline.day}`
-            : frequency === 'week'
-              ? translate(CALENDAR_WEEKDAYS[(deadline.weekday ?? 1) - 1] ?? 'Monday')
-              : ''
-    return `${translate(FREQUENCIES.find((item) => item.value === frequency)?.label ?? 'Calendar schedule')} · ${translate('Due by')} ${date} ${deadline.time}`
-  }
-  if (rec.kind === 'frequency' && rec.evidenceWindow === 'rolling') {
-    const labels = {
-      day: 'Rolling 1 day',
-      week: 'Rolling 1 week',
-      month: 'Rolling 1 month',
-      quarter: 'Rolling 3 months',
-      year: 'Rolling 12 months',
-    }
-    return translate(labels[rec.frequency ?? 'year'])
-  }
-  if (rec.kind === 'frequency') return `${rec.quantity ?? 1}/${rec.frequency ?? 'week'}`
-  if (rec.kind === 'cron') return rec.cron ? `cron ${rec.cron}` : '—'
-  if (rec.kind === 'one_time') return rec.dueOn ? `due ${rec.dueOn}` : 'one-off'
-  if (rec.kind === 'expiry') return 'continuous'
-  return rec.kind
 }
 
 type ObligationListResult = { rows: ObligationRow[]; total: number }
@@ -176,7 +131,7 @@ export async function listObligations(
                 : audienceInfo.everyone
                   ? `${translate(o.workerType === 'employee' ? 'Employees' : o.workerType === 'contractor' ? 'Contractors' : 'Everyone')}${audienceInfo?.excluded ? ` · ${audienceInfo.excluded} exclusions` : ''}`
                   : `${o.workerType === 'all' ? '' : `${translate(o.workerType === 'employee' ? 'Employees' : 'Contractors')} · `}${audienceInfo.n} target${audienceInfo.n === 1 ? '' : 's'}${audienceInfo.excluded ? ` · ${audienceInfo.excluded} exclusions` : ''}`,
-        cadence: cadenceLabel(o.recurrence, translate),
+        cadence: describeRecurrence(o.recurrence, translate),
         enabled: o.status === 'active',
       }
     })

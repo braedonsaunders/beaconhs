@@ -147,6 +147,13 @@ export function ObligationForm({
   }
 
   const showRecurrence = Object.values(meta.recurrence).some(Boolean)
+  // Stored after-event title / group labels, so the pickers open filled in.
+  const afterEventTitle = targets.jobTitles
+    .filter((title) => title.id === recurrence.afterEvent?.titleId)
+    .map((title) => ({ id: title.id, label: title.name }))[0]
+  const afterEventGroup = audienceOptions.groups.find(
+    (group) => group.id === recurrence.afterEvent?.groupId,
+  )
   const cancelHref = editing ? `/compliance/obligations/${initial!.id}` : '/compliance/obligations'
 
   function submit(e: React.FormEvent) {
@@ -550,6 +557,8 @@ export function ObligationForm({
               value={recurrence}
               onChange={setRecurrence}
               fields={meta.recurrence}
+              afterEventTitle={afterEventTitle}
+              afterEventGroup={afterEventGroup}
             />
           ) : null
         }

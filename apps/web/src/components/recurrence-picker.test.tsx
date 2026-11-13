@@ -4,11 +4,12 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 vi.mock('@/i18n/generated', () => ({
   useGeneratedTranslations: () => (key: string) => key,
+  useGeneratedValueTranslations: () => (value: string) => value,
   GeneratedText: ({ id }: { id: string }) => id,
   GeneratedValue: ({ value }: { value: ReactNode }) => value,
 }))
 import { RecurrencePicker } from './recurrence-picker'
-import { recurrenceValueFromStored, type RecurrenceValue } from './recurrence'
+import { describeRecurrence, recurrenceValueFromStored, type RecurrenceValue } from './recurrence'
 import { parseObligationInput } from '../app/(app)/compliance/obligations/_input'
 
 let root: Root | undefined, container: HTMLDivElement | undefined
@@ -144,4 +145,87 @@ it('offers a whole-period journal deadline without a technical cron override', a
       recurrence: current,
     }).ok,
   ).toBe(true)
+})
+
+async function typeNumber(id: string, value: string) {
+  const input = document.getElementById(id) as HTMLInputElement
+  expect(input).not.toBeNull()
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+const trainingInput = (recurrence: RecurrenceValue) =>
+  parseObligationInput({
+    kind: 'training',
+    title: 'Refresher',
+    audience: [{ type: 'everyone', entityKey: 'all' }],
+    recurrence,
+    trainingItemKind: 'assessment_type',
+    assessmentTypeId: '10000000-0000-4000-8000-000000000001',
+  })
+
+it('repeats a cadence every N units and round-trips it through storage', async () => {
+  await render({ kind: 'frequency', frequency: 'year', evidenceWindow: 'rolling' })
+  await typeNumber('rec-interval', '3')
+  expect(current.interval).toBe(3)
+  expect(document.getElementById('rec-interval')!.parentElement!.textContent).toContain('years')
+  expect(trainingInput(current).ok).toBe(true)
+  expect(
+    recurrenceValueFromStored({
+      kind: 'frequency',
+      frequency: 'year',
+      interval: 3,
+      evidenceWindow: 'rolling',
+    }),
+  ).toMatchObject({ kind: 'frequency', frequency: 'year', interval: 3 })
+  expect(
+    describeRecurrence({
+      kind: 'frequency',
+      frequency: 'year',
+      interval: 3,
+      evidenceWindow: 'rolling',
+    }),
+  ).toBe('Rolling 3 years')
+  expect(
+    describeRecurrence({
+      kind: 'frequency',
+      frequency: 'year',
+      interval: 2,
+      evidenceWindow: 'calendar',
+      deadline: { month: 12, day: 31, time: '23:59' },
+    }),
+  ).toBe('Every 2 years · Due by December 31 23:59')
+})
+
+it('makes a one-time requirement due a number of days after each person event', async () => {
+  await render({ kind: 'frequency', frequency: 'year', evidenceWindow: 'rolling' })
+  await select('rec-kind', 'after_event')
+  expect(current.afterEvent).toEqual({ event: 'hire', days: 30, countPrior: false })
+  expect(document.getElementById('rec-interval')).toBeNull()
+  await typeNumber('rec-event-days', '14')
+  await select('rec-event-prior', 'count')
+  expect(current.afterEvent).toEqual({ event: 'hire', days: 14, countPrior: true })
+  expect(trainingInput(current).ok).toBe(true)
+
+  await select('rec-event', 'job_title')
+  expect(trainingInput(current)).toEqual({
+    ok: false,
+    error: 'Pick the job title that starts the clock',
+  })
+  const withTitle = {
+    ...current,
+    afterEvent: { ...current.afterEvent!, titleId: '10000000-0000-4000-8000-000000000002' },
+  }
+  expect(trainingInput(withTitle).ok).toBe(true)
+  expect(
+    recurrenceValueFromStored({ kind: 'one_time', afterEvent: withTitle.afterEvent }),
+  ).toMatchObject({ kind: 'after_event', afterEvent: withTitle.afterEvent })
+  expect(describeRecurrence({ kind: 'one_time', afterEvent: withTitle.afterEvent })).toBe(
+    'Within 14 days of job title assigned',
+  )
+  // Repeat-every and after-event rules belong to their own cadences only.
+  expect(trainingInput({ kind: 'one_time', interval: 2 }).ok).toBe(false)
+  expect(trainingInput({ kind: 'after_event' }).ok).toBe(false)
 })

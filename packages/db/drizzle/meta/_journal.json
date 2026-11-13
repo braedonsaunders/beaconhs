@@ -708,6 +708,13 @@
       "when": 1794070800000,
       "tag": "0101_update_own_permission_denials",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1794074400000,
+      "tag": "0102_compliance_audience_joins",
+      "breakpoints": true
     }
   ]
 }

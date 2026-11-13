@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { COMPLIANCE_AFTER_EVENTS } from '@beaconhs/db/schema'
 import { KIND_META, OBLIGATION_KINDS } from './_meta'
 
 const audienceKind = z.enum([
@@ -15,7 +16,7 @@ const uuid = z.string().uuid()
 
 const recurrenceSchema = z
   .object({
-    kind: z.enum(['one_time', 'frequency', 'cron']),
+    kind: z.enum(['one_time', 'after_event', 'frequency', 'cron']),
     evidenceWindow: z.enum(['calendar', 'rolling']).optional(),
     journalDays: z.enum(['weekdays', 'calendar', 'worked_days']).optional(),
     deadline: z
@@ -28,6 +29,17 @@ const recurrenceSchema = z
       .strict()
       .optional(),
     frequency: z.enum(['day', 'week', 'month', 'quarter', 'year']).optional(),
+    interval: z.number().int().min(1).max(99).optional(),
+    afterEvent: z
+      .object({
+        event: z.enum(COMPLIANCE_AFTER_EVENTS),
+        days: z.number().int().min(0).max(3_650),
+        titleId: uuid.optional(),
+        groupId: uuid.optional(),
+        countPrior: z.boolean(),
+      })
+      .strict()
+      .optional(),
     cron: z.string().trim().min(1).max(256).optional(),
     quantity: z.number().int().min(1).max(10_000).optional(),
     compliantPercentage: z.number().min(0).max(100).optional(),
@@ -140,6 +152,21 @@ export function parseObligationInput(raw: unknown): ObligationInputParseResult {
     seen.add(key)
     normalizedAudience.push({ type: item.type, entityKey, excluded: item.excluded })
   }
+
+  const afterEvent = input.recurrence.afterEvent
+  if ((input.recurrence.kind === 'after_event') !== Boolean(afterEvent))
+    return { ok: false, error: 'Choose the event that starts the clock' }
+  if (input.recurrence.kind === 'after_event' && !meta.recurrence.oneTime)
+    return { ok: false, error: 'This obligation kind cannot be due after an event' }
+  if (afterEvent?.event === 'job_title' && !afterEvent.titleId)
+    return { ok: false, error: 'Pick the job title that starts the clock' }
+  if (afterEvent?.event === 'group_join' && !afterEvent.groupId)
+    return { ok: false, error: 'Pick the people group that starts the clock' }
+  if (
+    (input.recurrence.interval ?? 1) > 1 &&
+    (input.recurrence.kind !== 'frequency' || !meta.recurrence.recurring || input.kind === 'form')
+  )
+    return { ok: false, error: 'Repeat every applies only to a recurring cadence' }
 
   if (
     input.recurrence.activeMonths &&

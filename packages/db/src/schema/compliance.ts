@@ -120,14 +120,37 @@ export type ComplianceTargetRef = {
   jobTitleId?: string
 }
 
+export const COMPLIANCE_AFTER_EVENTS = ['hire', 'audience_join', 'job_title', 'group_join'] as const
+export type ComplianceAfterEventKind = (typeof COMPLIANCE_AFTER_EVENTS)[number]
+
+export type ComplianceAfterEvent = {
+  event: ComplianceAfterEventKind
+  /** Days after the event the requirement is due (0 = on the event day). */
+  days: number
+  /** job_title: the title whose assignment starts the clock. */
+  titleId?: string
+  /** group_join: the people group whose membership starts the clock. */
+  groupId?: string
+  /** Whether a completion from before the event satisfies the requirement. */
+  countPrior: boolean
+}
+
 export type ComplianceRecurrence = {
   kind: 'one_time' | 'frequency' | 'cron' | 'expiry' | 'event'
   evidenceWindow?: 'calendar' | 'rolling'
   deadline?: { month?: number; day?: number; weekday?: number; time: string }
   frequency?: 'day' | 'week' | 'month' | 'quarter' | 'year'
+  /** Cadence units per period: frequency 'year' + interval 3 = every 3 years. Default 1. */
+  interval?: number
   quantity?: number
   cron?: string
   dueOn?: string // YYYY-MM-DD (one_time)
+  /**
+   * one_time only: instead of one date for everyone, each person is due a number
+   * of days after their own event (hire, joining the audience, a job title or a
+   * people group). People without the title/group membership are not subject.
+   */
+  afterEvent?: ComplianceAfterEvent
   dueOffsetDays?: number
   dueOffsetMinutes?: number
   remindBeforeDays?: number
@@ -226,6 +249,43 @@ export const complianceAudience = pgTable(
       name: 'compliance_audience_tenant_obligation_fk',
       columns: [t.tenantId, t.obligationId],
       foreignColumns: [complianceObligations.tenantId, complianceObligations.id],
+    }).onDelete('cascade'),
+  }),
+)
+
+// When each person entered an obligation's audience, for one-time requirements
+// due a number of days after joining it. Maintained by the materializer only
+// for those obligations: a person who leaves the audience loses their row, so
+// re-joining restarts their clock. Edits and pauses keep it intact.
+export const complianceAudienceJoins = pgTable(
+  'compliance_audience_joins',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    obligationId: uuid('obligation_id').notNull(),
+    personId: uuid('person_id').notNull(),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('compliance_audience_joins_tenant_idx').on(t.tenantId),
+    personIdx: index('compliance_audience_joins_person_idx').on(t.tenantId, t.personId),
+    memberUx: uniqueIndex('compliance_audience_joins_member_ux').on(
+      t.tenantId,
+      t.obligationId,
+      t.personId,
+    ),
+    obligationFk: foreignKey({
+      name: 'compliance_audience_joins_tenant_obligation_fk',
+      columns: [t.tenantId, t.obligationId],
+      foreignColumns: [complianceObligations.tenantId, complianceObligations.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'compliance_audience_joins_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
     }).onDelete('cascade'),
   }),
 )

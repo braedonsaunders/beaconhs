@@ -1,6 +1,7 @@
 import type { ComplianceRecurrence } from '@beaconhs/db/schema'
 import {
   complianceDate,
+  recurrenceInterval,
   rollingEvidenceBoundary,
   shiftCompletionDate,
   type ComplianceClock,
@@ -69,7 +70,7 @@ export function resolveEvidenceEvaluationWindow(
   }
 
   if (recurrence.kind === 'frequency' && recurrence.deadline) {
-    const window = resolveCompletionCalendarWindow(recurrence, clock)
+    const window = resolveCompletionCalendarWindow(recurrence, clock, activeFrom)
     return {
       kind: recurrence.kind,
       evidenceStartAt: window.periodStartAt,
@@ -87,7 +88,11 @@ export function resolveEvidenceEvaluationWindow(
 
   if (recurrence.kind === 'frequency' && recurrence.evidenceWindow === 'rolling') {
     if (!recurrence.frequency) throw new Error('A rolling requirement must declare its frequency')
-    const boundary = rollingEvidenceBoundary(clock, recurrence.frequency)
+    const boundary = rollingEvidenceBoundary(
+      clock,
+      recurrence.frequency,
+      recurrenceInterval(recurrence),
+    )
     return {
       kind: recurrence.kind,
       evidenceStartAt: boundary.startAt,
@@ -199,7 +204,13 @@ export function trainingEvidenceOutcome(args: {
     recurrence.evidenceWindow === 'rolling' &&
     recurrence.frequency
   ) {
-    let dueOn = evidence ? shiftCompletionDate(evidence.completedOn, recurrence.frequency, 1) : null
+    let dueOn = evidence
+      ? shiftCompletionDate(
+          evidence.completedOn,
+          recurrence.frequency,
+          recurrenceInterval(recurrence),
+        )
+      : null
     if (evidence?.expiresOn && (!dueOn || evidence.expiresOn < dueOn)) dueOn = evidence.expiresOn
     const valid =
       evidence && !evidence.expired && evidence.completedOn <= today && dueOn && dueOn >= today

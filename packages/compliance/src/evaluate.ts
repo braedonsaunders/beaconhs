@@ -61,11 +61,18 @@ import {
   frequencyProgress,
   isInSeason,
   nextSeasonStartAt,
+  recurrenceInterval,
   resolveCronWindow,
   resolveFrequencyWindow,
   seasonAdjustedNextDueAt,
   shiftCompletionDate,
 } from './schedule'
+import {
+  afterEventDueOn,
+  afterEventEvidenceCounts,
+  afterEventNextDueAt,
+  loadAfterEventDates,
+} from './after-event'
 import {
   resolveEvidenceEvaluationWindow,
   type TrainingEvidence,
@@ -481,12 +488,24 @@ async function evalTraining(
     throw new Error(`Training obligation ${ob.id} has no supported target`)
   }
 
-  return tally(
-    ids.map((pid) => {
-      const evidence = done.get(pid) ?? null
+  const afterEvent = ob.recurrence.kind === 'one_time' ? ob.recurrence.afterEvent : undefined
+  const eventDates = afterEvent
+    ? await loadAfterEventDates(tx, tid, ob.id, afterEvent, ids, clock)
+    : null
+  const result = tally(
+    (eventDates ? ids.filter((pid) => eventDates.has(pid)) : ids).map((pid) => {
+      const eventOn = eventDates?.get(pid) ?? null
+      const latest = done.get(pid) ?? null
+      const evidence =
+        afterEvent && latest && !afterEventEvidenceCounts(afterEvent, eventOn, latest.completedOn)
+          ? null
+          : latest
+      const dueOn = afterEvent ? afterEventDueOn(afterEvent, eventOn) : window.dueOn
       const outcome = trainingEvidenceOutcome({
         recurrence: ob.recurrence,
-        window,
+        window: afterEvent
+          ? { ...window, dueOn, deadlinePassed: Boolean(dueOn && dueOn < today) }
+          : window,
         today,
         evidence,
         hasProgress: inProgress.has(pid),
@@ -506,6 +525,7 @@ async function evalTraining(
     }),
     window.nextDueAt,
   )
+  return afterEvent ? { ...result, nextDueAt: afterEventNextDueAt(result.rows, clock) } : result
 }
 
 async function evalDocument(
@@ -584,27 +604,47 @@ async function evalDocument(
         )
       : null
   const newEditionPassed = Boolean(newEditionDueOn && newEditionDueOn < complianceDate(clock))
+  const afterEvent = ob.recurrence.kind === 'one_time' ? ob.recurrence.afterEvent : undefined
+  const eventDates = afterEvent
+    ? await loadAfterEventDates(tx, tid, ob.id, afterEvent, ids, clock)
+    : null
   const result = tally(
-    ids.map((pid) => {
-      const ack = ackedAt.get(pid)
-      const ackOn = ack ? complianceDate({ now: ack, timezone: clock.timezone }) : null
-      const dueOn = isNewEdition
-        ? newEditionDueOn
-        : isRolling
-          ? ackOn
-            ? shiftCompletionDate(ackOn, ob.recurrence.frequency!, 1)
-            : shiftCompletionDate(
-                complianceDate({ now: ob.createdAt, timezone: clock.timezone }),
-                ob.recurrence.frequency!,
-                1,
-              )
-          : window.dueOn
+    (eventDates ? ids.filter((pid) => eventDates.has(pid)) : ids).map((pid) => {
+      const eventOn = eventDates?.get(pid) ?? null
+      const latestAck = ackedAt.get(pid)
+      const latestAckOn = latestAck
+        ? complianceDate({ now: latestAck, timezone: clock.timezone })
+        : null
+      const ack =
+        afterEvent && latestAckOn && !afterEventEvidenceCounts(afterEvent, eventOn, latestAckOn)
+          ? undefined
+          : latestAck
+      const ackOn = ack ? latestAckOn : null
+      const dueOn = afterEvent
+        ? afterEventDueOn(afterEvent, eventOn)
+        : isNewEdition
+          ? newEditionDueOn
+          : isRolling
+            ? ackOn
+              ? shiftCompletionDate(
+                  ackOn,
+                  ob.recurrence.frequency!,
+                  recurrenceInterval(ob.recurrence),
+                )
+              : shiftCompletionDate(
+                  complianceDate({ now: ob.createdAt, timezone: clock.timezone }),
+                  ob.recurrence.frequency!,
+                  recurrenceInterval(ob.recurrence),
+                )
+            : window.dueOn
       const rollingCompleted = Boolean(ack && dueOn && dueOn >= complianceDate(clock))
-      const passed = isNewEdition
-        ? newEditionPassed
-        : isRolling
-          ? Boolean(dueOn && dueOn < complianceDate(clock))
-          : window.deadlinePassed
+      const passed = afterEvent
+        ? Boolean(dueOn && dueOn < complianceDate(clock))
+        : isNewEdition
+          ? newEditionPassed
+          : isRolling
+            ? Boolean(dueOn && dueOn < complianceDate(clock))
+            : window.deadlinePassed
       const status = isRolling
         ? rollingCompleted
           ? 'completed'
@@ -639,6 +679,7 @@ async function evalDocument(
               86_400_000,
         )
       : window.nextDueAt
+  if (afterEvent) return { ...result, nextDueAt: afterEventNextDueAt(result.rows, clock) }
   return { ...result, nextDueAt: nextDueAt && nextDueAt > clock.now ? nextDueAt : window.nextDueAt }
 }
 
