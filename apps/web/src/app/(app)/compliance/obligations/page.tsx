@@ -96,7 +96,7 @@ export default async function ObligationsPage({
             description={tGenerated('m_146371a6a81e59')}
             actions={
               canAssign ? (
-                <Link href={createHref} scroll={false}>
+                <Link href={createHref} scroll={false} data-drawer-size="lg">
                   <Button>
                     <GeneratedText id="m_01ea7b508d9390" />
                   </Button>
@@ -127,7 +127,7 @@ export default async function ObligationsPage({
               description={tGenerated('m_116b2fdc6cce4f')}
               action={
                 canAssign ? (
-                  <Link href={createHref} scroll={false}>
+                  <Link href={createHref} scroll={false} data-drawer-size="lg">
                     <Button>
                       <GeneratedText id="m_01ea7b508d9390" />
                     </Button>

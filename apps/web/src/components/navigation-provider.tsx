@@ -15,13 +15,12 @@ import { GeneratedValue } from '@/i18n/generated'
 import { Suspense, useCallback, useEffect } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
-  beginPendingDrawer,
   DrawerNavigateContext,
   PendingDrawerProvider,
   settlePendingDrawer,
   type DrawerSize,
 } from '@beaconhs/ui'
-import { drawerLinkTarget } from '@/lib/drawer-link'
+import { announceDrawerNavigation } from '@/lib/drawer-link'
 
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -45,10 +44,10 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       const anchor = (event.target as Element | null)?.closest?.('a[href]')
       if (!(anchor instanceof HTMLAnchorElement)) return
       if ((anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) return
-      // A drawer already open hands over to the next one through the server.
-      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return
-      if (!drawerLinkTarget(anchor.href, window.location.href)) return
-      beginPendingDrawer((anchor.dataset.drawerSize as DrawerSize | undefined) ?? 'md')
+      announceDrawerNavigation(
+        anchor.href,
+        (anchor.dataset.drawerSize as DrawerSize | undefined) ?? 'md',
+      )
     }
     document.addEventListener('click', onClick, true)
     return () => document.removeEventListener('click', onClick, true)

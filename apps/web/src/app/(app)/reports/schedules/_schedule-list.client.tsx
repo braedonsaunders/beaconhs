@@ -6,6 +6,7 @@ import type { ReportSchedule } from '@beaconhs/reports'
 import { ReportScheduleList, type ReportScheduleDefinitionOption } from '@beaconhs/reports/react'
 import { useGeneratedTranslations } from '@/i18n/generated'
 import { confirmDialog } from '@/lib/confirm'
+import { announceDrawerNavigation } from '@/lib/drawer-link'
 import { deleteSchedule, runScheduleNow, setScheduleActive } from './actions'
 
 export function BeaconScheduleList({
@@ -67,7 +68,10 @@ export function BeaconScheduleList({
       }}
       onStatusChange={(next) => navigate({ status: next })}
       onPageChange={(next) => navigate({ page: next })}
-      onCreate={() => router.push('/reports/schedules?drawer=new')}
+      onCreate={() => {
+        announceDrawerNavigation('/reports/schedules?drawer=new', 'lg')
+        router.push('/reports/schedules?drawer=new')
+      }}
       onOpen={(schedule) => router.push(`/reports/schedules/${schedule.id}`)}
       onToggle={(schedule) => setScheduleActive(schedule.id, !schedule.active)}
       onRun={(schedule) => runScheduleNow(schedule.id)}

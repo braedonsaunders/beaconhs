@@ -37,12 +37,12 @@ const SIZE_CLASS: Record<DrawerSize, string> = {
 // slides out at once over the unchanged page, and the real drawer takes it over
 // in place (no second slide) when the server's content arrives.
 
-type PendingDrawerState = { size: DrawerSize; adopted: boolean } | null
+type PendingDrawerState = { size: DrawerSize; key: string | null; adopted: boolean } | null
 
 type PendingDrawerApi = {
   pending: PendingDrawerState
-  /** Called by a drawer that opens while the loading panel is showing. */
-  adopt: () => void
+  /** Called by a drawer that opens while the loading panel is showing, with its real size. */
+  adopt: (size: DrawerSize) => void
 }
 
 const PendingDrawerContext = React.createContext<PendingDrawerApi | null>(null)
@@ -59,22 +59,34 @@ const PENDING_DRAWER_TIMEOUT_MS = 20_000
  */
 export function PendingDrawerProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = React.useState<PendingDrawerState>(null)
+  // Each drawer's real size, learned when it takes over, so the next loading
+  // panel for it opens at the right width.
+  const sizes = React.useRef(new Map<string, DrawerSize>())
   const timers = React.useRef<number[]>([])
   const clearTimers = React.useCallback(() => {
     for (const timer of timers.current) window.clearTimeout(timer)
     timers.current = []
   }, [])
-  const adopt = React.useCallback(() => {
-    clearTimers()
-    setPending((current) => (current && !current.adopted ? { ...current, adopted: true } : current))
-  }, [clearTimers])
+  const adopt = React.useCallback(
+    (size: DrawerSize) => {
+      clearTimers()
+      setPending((current) => {
+        if (!current || current.adopted) return current
+        if (current.key) sizes.current.set(current.key, size)
+        return { ...current, adopted: true }
+      })
+    },
+    [clearTimers],
+  )
 
   React.useEffect(() => {
     function onBegin(event: Event) {
-      const size = (event as CustomEvent<{ size?: DrawerSize }>).detail?.size ?? 'md'
+      const detail = (event as CustomEvent<{ size?: DrawerSize; key?: string }>).detail
+      const key = detail?.key ?? null
+      const size = (key ? sizes.current.get(key) : undefined) ?? detail?.size ?? 'md'
       clearTimers()
       timers.current.push(
-        window.setTimeout(() => setPending({ size, adopted: false }), PENDING_DRAWER_DELAY_MS),
+        window.setTimeout(() => setPending({ size, key, adopted: false }), PENDING_DRAWER_DELAY_MS),
         window.setTimeout(() => setPending(null), PENDING_DRAWER_TIMEOUT_MS),
       )
     }
@@ -107,9 +119,13 @@ export function PendingDrawerProvider({ children }: { children: React.ReactNode 
 const PENDING_DRAWER_EVENT = 'beaconhs:pending-drawer'
 const PENDING_DRAWER_SETTLE_EVENT = 'beaconhs:pending-drawer-settle'
 
-/** Show the loading panel for a URL drawer that is about to open. */
-export function beginPendingDrawer(size: DrawerSize = 'md') {
-  window.dispatchEvent(new CustomEvent(PENDING_DRAWER_EVENT, { detail: { size } }))
+/**
+ * Show the loading panel for a URL drawer that is about to open. `key` names the
+ * drawer (e.g. its page and `?drawer=` value) so its learned size is reused;
+ * `size` is the guess when that drawer has not opened yet.
+ */
+export function beginPendingDrawer(size: DrawerSize = 'md', key?: string) {
+  window.dispatchEvent(new CustomEvent(PENDING_DRAWER_EVENT, { detail: { size, key } }))
 }
 
 /** A navigation finished: drop a loading panel no drawer took over. */
@@ -225,8 +241,8 @@ export function Drawer({
   const takeOver = Boolean(open && pendingDrawer?.pending && !pendingDrawer.pending.adopted)
   const adoptPending = pendingDrawer?.adopt
   React.useLayoutEffect(() => {
-    if (takeOver) adoptPending?.()
-  }, [takeOver, adoptPending])
+    if (takeOver) adoptPending?.(size)
+  }, [takeOver, adoptPending, size])
 
   const panelRef = React.useRef<HTMLElement>(null)
 
