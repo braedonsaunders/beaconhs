@@ -46,7 +46,7 @@ const FREQUENCY_UNITS: Record<Frequency, [string, string]> = {
 }
 
 /** "Every 3 years" / "Yearly" — the cadence a frequency and interval describe. */
-export function frequencyCadenceLabel(frequency: Frequency, interval = 1): string {
+function frequencyCadenceLabel(frequency: Frequency, interval = 1): string {
   if (interval <= 1) return FREQUENCIES.find((f) => f.value === frequency)?.label ?? frequency
   return `Every ${interval} ${FREQUENCY_UNITS[frequency][1]}`
 }
@@ -64,7 +64,7 @@ export const AFTER_EVENT_OPTIONS: Array<{ value: ComplianceAfterEvent['event']; 
 ]
 
 /** "Within 30 days of hire date" — an after-event rule in words. */
-export function afterEventLabel(afterEvent: ComplianceAfterEvent): string {
+function afterEventLabel(afterEvent: ComplianceAfterEvent): string {
   const event =
     AFTER_EVENT_OPTIONS.find((option) => option.value === afterEvent.event)?.label ?? 'the event'
   return `Within ${afterEvent.days} ${afterEvent.days === 1 ? 'day' : 'days'} of ${event.toLowerCase()}`
