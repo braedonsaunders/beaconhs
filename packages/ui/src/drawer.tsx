@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { Skeleton } from './skeleton'
 import { useUiText } from './text-context'
 import { cn } from './utils'
 
@@ -26,6 +27,164 @@ const SIZE_CLASS: Record<DrawerSize, string> = {
   xl: 'w-full sm:max-w-4xl',
   '2xl': 'w-full sm:max-w-6xl',
   full: 'w-full',
+}
+
+// ---- Instant open for URL drawers -------------------------------------------
+//
+// A URL drawer opens when the server re-renders its page with `?drawer=…`.
+// Waiting for that round trip leaves the click looking dead. The host app calls
+// `beginPendingDrawer()` the moment such a link is clicked: a loading panel
+// slides out at once over the unchanged page, and the real drawer takes it over
+// in place (no second slide) when the server's content arrives.
+
+type PendingDrawerState = { size: DrawerSize; adopted: boolean } | null
+
+type PendingDrawerApi = {
+  pending: PendingDrawerState
+  /** Called by a drawer that opens while the loading panel is showing. */
+  adopt: () => void
+}
+
+const PendingDrawerContext = React.createContext<PendingDrawerApi | null>(null)
+
+/** Fast responses skip the loading panel and slide the real drawer in as usual. */
+const PENDING_DRAWER_DELAY_MS = 120
+/** A navigation that never opens a drawer (error, redirect) must not strand the panel. */
+const PENDING_DRAWER_TIMEOUT_MS = 20_000
+
+/**
+ * Hosts the loading panel for URL drawers. The host app calls
+ * `settlePendingDrawer()` after every navigation: when one lands without
+ * opening a drawer, the panel slides back out.
+ */
+export function PendingDrawerProvider({ children }: { children: React.ReactNode }) {
+  const [pending, setPending] = React.useState<PendingDrawerState>(null)
+  const timers = React.useRef<number[]>([])
+  const clearTimers = React.useCallback(() => {
+    for (const timer of timers.current) window.clearTimeout(timer)
+    timers.current = []
+  }, [])
+  const adopt = React.useCallback(() => {
+    clearTimers()
+    setPending((current) => (current && !current.adopted ? { ...current, adopted: true } : current))
+  }, [clearTimers])
+
+  React.useEffect(() => {
+    function onBegin(event: Event) {
+      const size = (event as CustomEvent<{ size?: DrawerSize }>).detail?.size ?? 'md'
+      clearTimers()
+      timers.current.push(
+        window.setTimeout(() => setPending({ size, adopted: false }), PENDING_DRAWER_DELAY_MS),
+        window.setTimeout(() => setPending(null), PENDING_DRAWER_TIMEOUT_MS),
+      )
+    }
+    // The navigation landed. A drawer that opened has already adopted the panel
+    // (in its layout effect); otherwise nothing is coming, so put it away.
+    function onSettle() {
+      clearTimers()
+      // Keep a handed-over panel marked as such: it must vanish under the real
+      // drawer, not slide back out as if the navigation had been abandoned.
+      setPending((current) => (current?.adopted ? current : null))
+    }
+    window.addEventListener(PENDING_DRAWER_EVENT, onBegin)
+    window.addEventListener(PENDING_DRAWER_SETTLE_EVENT, onSettle)
+    return () => {
+      window.removeEventListener(PENDING_DRAWER_EVENT, onBegin)
+      window.removeEventListener(PENDING_DRAWER_SETTLE_EVENT, onSettle)
+      clearTimers()
+    }
+  }, [clearTimers])
+
+  const api = React.useMemo(() => ({ pending, adopt }), [pending, adopt])
+  return (
+    <PendingDrawerContext.Provider value={api}>
+      {children}
+      <PendingDrawerPanel pending={pending} />
+    </PendingDrawerContext.Provider>
+  )
+}
+
+const PENDING_DRAWER_EVENT = 'beaconhs:pending-drawer'
+const PENDING_DRAWER_SETTLE_EVENT = 'beaconhs:pending-drawer-settle'
+
+/** Show the loading panel for a URL drawer that is about to open. */
+export function beginPendingDrawer(size: DrawerSize = 'md') {
+  window.dispatchEvent(new CustomEvent(PENDING_DRAWER_EVENT, { detail: { size } }))
+}
+
+/** A navigation finished: drop a loading panel no drawer took over. */
+export function settlePendingDrawer() {
+  window.dispatchEvent(new Event(PENDING_DRAWER_SETTLE_EVENT))
+}
+
+const PANEL_SPRING = { type: 'spring', damping: 32, stiffness: 320, mass: 0.8 } as const
+
+const PENDING_BACKDROP = {
+  hidden: (handedOver: boolean) => ({
+    opacity: 0,
+    transition: { duration: handedOver ? 0 : 0.15 },
+  }),
+  shown: { opacity: 1, transition: { duration: 0.15 } },
+}
+
+const PENDING_PANEL = {
+  hidden: (handedOver: boolean) =>
+    handedOver
+      ? { opacity: 0, transition: { duration: 0 } }
+      : { x: '100%', transition: PANEL_SPRING },
+  shown: { x: 0, opacity: 1, transition: PANEL_SPRING },
+}
+
+function PendingDrawerPanel({ pending }: { pending: PendingDrawerState }) {
+  const t = useUiText()
+  if (typeof document === 'undefined') return null
+  // Handed over to the real drawer: vanish under it. Abandoned: slide back out.
+  // Exiting children read this from AnimatePresence, never from their own
+  // (stale) props.
+  const handedOver = Boolean(pending?.adopted)
+  return createPortal(
+    <AnimatePresence custom={handedOver}>
+      {pending && !pending.adopted ? (
+        <div key="pending-drawer" className="fixed inset-0 z-50">
+          <motion.div
+            variants={PENDING_BACKDROP}
+            initial="hidden"
+            animate="shown"
+            exit="hidden"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+            aria-hidden="true"
+          />
+          <motion.aside
+            role="status"
+            aria-busy="true"
+            aria-label={t('Loading…')}
+            variants={PENDING_PANEL}
+            initial="hidden"
+            animate="shown"
+            exit="hidden"
+            className={cn(
+              'absolute top-0 right-0 flex h-full flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900',
+              SIZE_CLASS[pending.size],
+            )}
+          >
+            <header className="space-y-2 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-4 w-72 max-w-full" />
+            </header>
+            <div className="space-y-5 px-6 py-5">
+              {[0, 1, 2, 3].map((row) => (
+                <div key={row} className="space-y-2">
+                  <Skeleton className="h-3.5 w-28" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              ))}
+            </div>
+          </motion.aside>
+        </div>
+      ) : null}
+    </AnimatePresence>,
+    document.body,
+  )
 }
 
 /**
@@ -60,6 +219,14 @@ export function Drawer({
   const titleId = React.useId()
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
+
+  // Opening over the loading panel: take its place without sliding in again.
+  const pendingDrawer = React.useContext(PendingDrawerContext)
+  const takeOver = Boolean(open && pendingDrawer?.pending && !pendingDrawer.pending.adopted)
+  const adoptPending = pendingDrawer?.adopt
+  React.useLayoutEffect(() => {
+    if (takeOver) adoptPending?.()
+  }, [takeOver, adoptPending])
 
   const panelRef = React.useRef<HTMLElement>(null)
 
@@ -153,7 +320,7 @@ export function Drawer({
       {mounted && open ? (
         <div key="drawer" className="fixed inset-0 z-50">
           <motion.div
-            initial={{ opacity: 0 }}
+            initial={takeOver ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
@@ -167,7 +334,7 @@ export function Drawer({
             aria-modal="true"
             aria-labelledby={title ? titleId : undefined}
             tabIndex={-1}
-            initial={{ x: side === 'left' ? '-100%' : '100%' }}
+            initial={takeOver ? false : { x: side === 'left' ? '-100%' : '100%' }}
             animate={{ x: 0 }}
             exit={{ x: side === 'left' ? '-100%' : '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
