@@ -73,7 +73,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     subjectKind: 'per_person',
     audience: true,
     audienceTypes: PERSON_AUD,
-    recurrence: { oneTime: true, recurring: true, remind: true, rolling: true, dueOffset: true },
+    recurrence: { oneTime: true, recurring: true, remind: true, rolling: true },
     target: 'document',
     hint: 'These people acknowledge the current published version once, or again on a cadence.',
   },

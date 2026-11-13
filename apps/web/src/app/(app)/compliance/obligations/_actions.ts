@@ -9,7 +9,6 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
-  type ComplianceAfterEvent,
   type ComplianceRecurrence,
   type ComplianceTargetRef,
   complianceAudience,
@@ -35,11 +34,7 @@ import {
 } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
-import {
-  type RecurrenceValue,
-  frequencyToCron,
-  defaultCompletionDeadline,
-} from '@/components/recurrence'
+import { buildRecurrence } from './_build-recurrence'
 import { parseObligationInput, type ObligationInput } from './_input'
 import { KIND_META, type ObligationKind, kindLabel } from './_meta'
 import { obligationSemanticConfigChanged } from './_semantic-config'
@@ -114,90 +109,6 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
     case 'job_title_signoff':
       if (!input.jobTitleId) return { ref: {}, error: 'Pick a job title' }
       return { ref: { jobTitleId: input.jobTitleId } }
-  }
-}
-
-/** Keep only the fields the chosen event uses. */
-function normalizeAfterEvent(afterEvent: ComplianceAfterEvent): ComplianceAfterEvent {
-  return {
-    event: afterEvent.event,
-    days: afterEvent.days,
-    countPrior: afterEvent.countPrior,
-    ...(afterEvent.event === 'job_title' ? { titleId: afterEvent.titleId } : {}),
-    ...(afterEvent.event === 'group_join' ? { groupId: afterEvent.groupId } : {}),
-  }
-}
-
-function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRecurrence {
-  const cronFor = () => r.cron?.trim() || frequencyToCron(r.frequency ?? 'week')
-  // "Every N" is stored only when it is more than one unit.
-  const interval = r.interval && r.interval > 1 ? r.interval : undefined
-  if (kind === 'cert_requirement' || kind === 'skill_requirement' || kind === 'ppe_inspection')
-    return { kind: 'expiry', remindBeforeDays: r.remindBeforeDays ?? 30 }
-  if (kind === 'job_title_signoff') return { kind: 'one_time' }
-  if (kind === 'form')
-    return {
-      kind: 'cron',
-      frequency: r.frequency ?? 'week',
-      cron: cronFor(),
-      dueOffsetMinutes: r.dueOffsetMinutes,
-      activeMonths: r.activeMonths,
-    }
-  if ((kind === 'training' || kind === 'document') && r.kind === 'after_event' && r.afterEvent)
-    return {
-      kind: 'one_time',
-      afterEvent: normalizeAfterEvent(r.afterEvent),
-      remindBeforeDays: r.remindBeforeDays ?? 7,
-    }
-  if (kind === 'training' || kind === 'document')
-    return r.kind === 'one_time'
-      ? { kind: 'one_time', dueOn: r.dueOn, remindBeforeDays: r.remindBeforeDays ?? 7 }
-      : kind === 'document' && r.reacknowledgeOnEdition
-        ? {
-            kind: 'event',
-            newEditionDueDays: r.newEditionDueDays ?? 30,
-            remindBeforeDays: r.remindBeforeDays ?? 7,
-            activeMonths: r.activeMonths,
-          }
-        : {
-            kind: 'frequency',
-            frequency: r.frequency ?? 'week',
-            interval,
-            cron:
-              kind === 'training' || (kind === 'document' && r.evidenceWindow === 'calendar')
-                ? undefined
-                : cronFor(),
-            deadline:
-              (kind === 'training' || kind === 'document') && r.evidenceWindow === 'calendar'
-                ? (r.deadline ?? defaultCompletionDeadline(r.frequency ?? 'week'))
-                : undefined,
-            evidenceWindow:
-              kind === 'training' || kind === 'document'
-                ? (r.evidenceWindow ?? 'rolling')
-                : undefined,
-            remindBeforeDays: r.remindBeforeDays ?? 7,
-            dueOffsetMinutes:
-              kind === 'training' || (kind === 'document' && r.evidenceWindow === 'calendar')
-                ? undefined
-                : r.dueOffsetMinutes,
-            newEditionDueDays: kind === 'document' ? r.newEditionDueDays : undefined,
-            activeMonths: r.activeMonths,
-          }
-  // Inspection / journal / hazard assessment → frequency.
-  return {
-    kind: 'frequency',
-    journalDays: kind === 'journal' ? r.journalDays : undefined,
-    frequency: r.frequency ?? 'week',
-    interval: kind === 'journal' && r.journalDays ? undefined : interval,
-    cron: KIND_META[kind].recurrence.calendar ? undefined : cronFor(),
-    evidenceWindow: KIND_META[kind].recurrence.calendar ? 'calendar' : undefined,
-    deadline: KIND_META[kind].recurrence.calendar
-      ? (r.deadline ?? defaultCompletionDeadline(r.frequency ?? 'week'))
-      : undefined,
-    quantity: Math.max(1, r.quantity ?? 1),
-    compliantPercentage: Math.max(0, Math.min(100, r.compliantPercentage ?? 100)),
-    dueOffsetMinutes: KIND_META[kind].recurrence.calendar ? undefined : r.dueOffsetMinutes,
-    activeMonths: r.activeMonths,
   }
 }
 
