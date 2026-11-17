@@ -104,6 +104,7 @@ export default async function VerifyPersonRecordPage({
       : null,
     credentialName: data.course.name,
     credentialCode: data.course.code,
+    credentialDescription: data.course.description,
     completedOn: data.record.completedOn,
     expiresOn: data.record.expiresOn,
     instructor: data.record.instructor,

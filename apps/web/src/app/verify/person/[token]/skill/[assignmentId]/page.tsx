@@ -57,6 +57,7 @@ export default async function VerifyPersonSkillPage({
         viewSource: trainingSkillTypes.viewSource,
         skillName: trainingSkillTypes.name,
         skillCode: trainingSkillTypes.code,
+        skillDescription: trainingSkillTypes.description,
         authorityName: trainingSkillAuthorities.name,
       })
       .from(trainingSkillAssignments)
@@ -149,6 +150,7 @@ export default async function VerifyPersonSkillPage({
       : null,
     credentialName: data.skillName,
     credentialCode: data.skillCode,
+    credentialDescription: data.skillDescription,
     authorityName: data.authorityName,
     completedOn: data.assignment.grantedOn,
     expiresOn: data.assignment.expiresOn,

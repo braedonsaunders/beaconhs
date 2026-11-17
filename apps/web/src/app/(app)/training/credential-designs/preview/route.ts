@@ -101,6 +101,8 @@ export async function POST(request: Request) {
     recipientPhotoUrl: null,
     credentialName: 'Confined Space Entry and Monitor',
     credentialCode: 'CSE-201',
+    credentialDescription:
+      'Entry, atmospheric monitoring and rescue planning for permit-required confined spaces.',
     authorityName: 'Internal Health & Safety',
     completedOn: '2026-06-11',
     expiresOn: '2027-06-11',

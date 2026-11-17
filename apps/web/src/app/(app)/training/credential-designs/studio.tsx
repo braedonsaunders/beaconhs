@@ -81,6 +81,7 @@ const FIELD_OPTIONS: { value: CredentialDataField; label: string }[] = [
   { value: 'recipient.photo', label: 'Recipient photo' },
   { value: 'credential.name', label: 'Credential name' },
   { value: 'credential.code', label: 'Credential code' },
+  { value: 'credential.description', label: 'Credential description' },
   { value: 'authority.name', label: 'Authority name' },
   { value: 'completedOn', label: 'Completed date' },
   { value: 'expiresOn', label: 'Expiry date' },
@@ -102,6 +103,8 @@ const SAMPLE_VALUES: Partial<Record<DesignDataField, string>> = {
   'recipient.photo': 'Photo',
   'credential.name': 'Confined Space Entry and Monitor',
   'credential.code': 'CSE-201',
+  'credential.description':
+    'Entry, atmospheric monitoring and rescue planning for permit-required confined spaces.',
   'authority.name': 'Internal Health & Safety',
   completedOn: 'June 11, 2026',
   expiresOn: 'June 11, 2027',

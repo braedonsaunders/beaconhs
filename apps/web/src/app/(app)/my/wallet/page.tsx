@@ -235,6 +235,7 @@ export default async function MyWalletPage({
               grade: trainingRecords.grade,
               courseName: trainingCourses.name,
               courseCode: trainingCourses.code,
+              courseDescription: trainingCourses.description,
               courseMetadata: trainingCourses.metadata,
             })
             .from(trainingRecords)
@@ -250,6 +251,7 @@ export default async function MyWalletPage({
               outputIds: trainingSkillTypes.credentialOutputIds,
               skillName: trainingSkillTypes.name,
               skillCode: trainingSkillTypes.code,
+              skillDescription: trainingSkillTypes.description,
               authorityName: trainingSkillAuthorities.name,
             })
             .from(trainingSkillAssignments)
@@ -412,6 +414,7 @@ export default async function MyWalletPage({
         recipientPhotoUrl: photoUrl,
         credentialName: r.courseName ?? 'Training credential',
         credentialCode: r.courseCode ?? null,
+        credentialDescription: r.courseDescription ?? null,
         completedOn: r.completedOn,
         expiresOn: r.expiresOn,
         instructor: r.instructor,
@@ -449,6 +452,7 @@ export default async function MyWalletPage({
         recipientPhotoUrl: photoUrl,
         credentialName: s.skillName,
         credentialCode: s.skillCode ?? null,
+        credentialDescription: s.skillDescription ?? null,
         authorityName: s.authorityName,
         completedOn: s.grantedOn,
         expiresOn: s.expiresOn,
