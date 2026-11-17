@@ -32,7 +32,7 @@ const DOCUMENT_FIELDS: readonly CredentialDataField[] = [
   'recipient.photo',
   'credential.name',
   'credential.code',
-  'credential.description',
+  'record.details',
   'authority.name',
   'completedOn',
   'expiresOn',

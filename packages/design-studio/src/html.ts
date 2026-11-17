@@ -247,8 +247,8 @@ export function valueForField(field: DesignDataField, data: DesignDocumentData):
       return bag.credentialName ?? ''
     case 'credential.code':
       return bag.credentialCode ?? ''
-    case 'credential.description':
-      return bag.credentialDescription ?? ''
+    case 'record.details':
+      return bag.recordDetails ?? ''
     case 'authority.name':
       return bag.authorityName ?? ''
     case 'completedOn':

@@ -130,7 +130,7 @@ To send one reminder, choose **Automatic reminder email** on **Details**: **1 da
 1. Open [Training manage](/training/manage), then choose **Card studio**.
 2. Open an existing design, or choose a size under **Add a design**. Card studio supports up to 24 designs.
 3. Use **Insert**, **Layers**, **Style**, and **Print** to build the layout. One artboard can hold up to 240 elements.
-   To show record details, insert a data field such as **Credential name**, **Credential code**, or **Credential description**. **Credential description** prints the course's or skill type's description; it stays blank when there is none.
+   To show record details, insert a data field such as **Credential name**, **Credential code**, or **Record details**. **Record details** prints the **Details** text on that person's training record; it stays blank when the record has none and on skill-ticket cards.
 4. Choose **Preview PDF** to check the current design with sample data.
 5. Choose **Save designs**. BeaconHS checks names, colours, dimensions, fields, links, and design size before saving. If it finds a problem, it shows the exact design, artboard, or element to fix and leaves the saved designs unchanged.
 

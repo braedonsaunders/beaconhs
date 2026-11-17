@@ -9,13 +9,13 @@ const credential = {
 }
 
 describe('credential data fields', () => {
-  it('prints the course or skill description, blank when there is none', () => {
+  it("prints the training record's details, blank when there are none", () => {
     expect(
-      valueForField('credential.description', {
+      valueForField('record.details', {
         ...credential,
-        credentialDescription: 'Entry and rescue planning for confined spaces.',
+        recordDetails: 'Level 2 entrant and attendant',
       }),
-    ).toBe('Entry and rescue planning for confined spaces.')
-    expect(valueForField('credential.description', credential)).toBe('')
+    ).toBe('Level 2 entrant and attendant')
+    expect(valueForField('record.details', credential)).toBe('')
   })
 })

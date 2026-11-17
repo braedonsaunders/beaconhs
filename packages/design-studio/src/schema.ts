@@ -68,7 +68,7 @@ export type CredentialDataField =
   | 'recipient.photo'
   | 'credential.name'
   | 'credential.code'
-  | 'credential.description'
+  | 'record.details'
   | 'authority.name'
   | 'completedOn'
   | 'expiresOn'
@@ -208,8 +208,8 @@ export type CredentialDesignData = {
   recipientPhotoUrl?: string | null
   credentialName: string
   credentialCode?: string | null
-  /** The course's or skill type's description. */
-  credentialDescription?: string | null
+  /** The training record's own Details text. Skill tickets have none. */
+  recordDetails?: string | null
   authorityName?: string | null
   completedOn?: string | null
   expiresOn?: string | null
