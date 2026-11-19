@@ -184,7 +184,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips
 
-- The **Assigned** tab in [My training](/my/training) reads the same requirements as **My compliance**. It shows courses, assessments, and certificate requirements you still owe, including **Booked** classes. Choose **Open** to continue an item. A passed quiz of the same type counts within the requirement’s completion window even when taken outside the assignment. **Rolling 12 months** follows each person’s completion date. A booking is a remediation plan and does not count as a completed certificate. Anything marked overdue needs attention first.
+- The **Assigned** tab in [My training](/my/training) reads the same requirements as **My compliance**. It shows courses, assessments, and certificate requirements you still owe, including **Booked** classes. Choose **Open** to continue an item. **Open** appears for self-paced and online courses, quizzes, and courses you are enrolled in. Classroom and on-the-job courses that your trainer books show **Your trainer books this** instead, and external certificate courses show **Give your certificate to your trainer**. A passed quiz of the same type counts within the requirement’s completion window even when taken outside the assignment. **Rolling 12 months** follows each person’s completion date. A booking is a remediation plan and does not count as a completed certificate. Anything marked overdue needs attention first.
 - The **Training compliance** dashboard card counts these same training and certification requirements. It does not count the number of certificates in your history.
 - Lessons marked **opt** are optional. Everything else must be completed.`,
   },
@@ -294,6 +294,13 @@ On a class record, open **Actions** for **Email class**, **Print / PDF**, presen
 3. On the **Overview** tab, set the **Name**, **Code**, **Course type**, and **Delivery type**, then tap **Save settings**.
 
 **Course type** is your reporting category, such as Orientation or Safety. **Delivery type** controls how people take and complete the course. Reports can filter on either field.
+
+## Delete a course
+
+1. Open the course.
+2. In the course header, open **Actions** and choose **Delete course**, then confirm.
+
+The course leaves the course list, pickers, and learner views. Everyone's completion records and certificates for it stay. BeaconHS will not delete a course while a compliance requirement still requires it, or while classes for it are still scheduled — turn off or change that requirement, and cancel or finish those classes first.
 
 ## Pick the delivery type
 

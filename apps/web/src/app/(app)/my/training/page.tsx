@@ -1000,6 +1000,12 @@ export default async function MyTrainingPage({
                               obligationId: obligation.id,
                             },
                           )
+                          // A trainer-led or external course has nothing for the
+                          // learner to open until they are enrolled in it.
+                          const canOpen =
+                            !course ||
+                            deliveryMeta(course.deliveryType).selfLaunch ||
+                            enrollment != null
                           const itemName =
                             course?.name ??
                             assessmentType?.name ??
@@ -1077,12 +1083,22 @@ export default async function MyTrainingPage({
                               <TableCell className="text-right">
                                 <GeneratedValue
                                   value={
-                                    link ? (
+                                    link && canOpen ? (
                                       <Link href={link.href as never} prefetch={link.prefetch}>
                                         <Button size="sm" variant="outline">
                                           <GeneratedText id="m_107ab58c3c38bc" />
                                         </Button>
                                       </Link>
+                                    ) : course && !canOpen ? (
+                                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                                        <GeneratedValue
+                                          value={
+                                            course.deliveryType === 'external_certificate'
+                                              ? 'Give your certificate to your trainer'
+                                              : 'Your trainer books this'
+                                          }
+                                        />
+                                      </span>
                                     ) : (
                                       <span className="text-slate-400">—</span>
                                     )

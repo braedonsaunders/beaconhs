@@ -7,7 +7,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, eq, gte, inArray, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   attachments,
@@ -20,10 +20,12 @@ import {
   trainingCourseModules,
   trainingLessons,
 } from '@beaconhs/db/schema'
+import { assertComplianceTargetCanRetire } from '@beaconhs/compliance'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
+import { requireUuidInput } from '@/lib/mutation-input'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { validateTrainingExternalUrl } from '@/lib/training-external-url.server'
 import {
@@ -112,6 +114,64 @@ export async function startCourse() {
   })
   revalidatePath('/training/courses')
   redirect(`/training/courses/${created.id}`)
+}
+
+/**
+ * Retire a course. Its completion records, certificates and class history stay
+ * (they are evidence); the course leaves the catalogue, pickers and learner
+ * views. Refused while a live compliance requirement still targets it or
+ * classes are still scheduled — those would otherwise point at nothing.
+ */
+export async function deleteCourse(formData: FormData) {
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
+  const id = requireUuidInput(formData.get('id'), 'Course')
+  await ctx.db(async (tx) => {
+    const [course] = await tx
+      .select({
+        id: trainingCourses.id,
+        name: trainingCourses.name,
+        deletedAt: trainingCourses.deletedAt,
+      })
+      .from(trainingCourses)
+      .where(and(eq(trainingCourses.tenantId, ctx.tenantId), eq(trainingCourses.id, id)))
+      .limit(1)
+      .for('update')
+    if (!course) throw new Error('Course not found.')
+    if (course.deletedAt) return
+    await assertComplianceTargetCanRetire(tx, ctx.tenantId, 'course', id)
+    const [upcoming] = await tx
+      .select({ n: count() })
+      .from(trainingClasses)
+      .where(
+        and(
+          eq(trainingClasses.tenantId, ctx.tenantId),
+          eq(trainingClasses.courseId, id),
+          isNull(trainingClasses.cancelledAt),
+          isNull(trainingClasses.completedAt),
+          gte(trainingClasses.endsAt, new Date()),
+        ),
+      )
+    const scheduled = Number(upcoming?.n ?? 0)
+    if (scheduled > 0)
+      throw new Error(
+        `Cancel or finish the ${scheduled} scheduled class${scheduled === 1 ? '' : 'es'} for this course before deleting it.`,
+      )
+    await tx
+      .update(trainingCourses)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(trainingCourses.tenantId, ctx.tenantId), eq(trainingCourses.id, id)))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_course',
+      entityId: id,
+      action: 'delete',
+      summary: 'Deleted course; retained completion history',
+      before: { name: course.name },
+    })
+  })
+  revalidatePath('/training/courses')
+  revalidatePath('/training')
+  redirect('/training/courses')
 }
 
 // --- Modules ---------------------------------------------------------------

@@ -65,6 +65,7 @@ import {
   addCourseFile,
   createLessonOfKind,
   createModule,
+  deleteCourse,
   deleteModule,
   removeCourseFile,
   reorderLessons,
@@ -76,6 +77,8 @@ import { DELIVERY_OPTIONS, deliveryMeta } from '../../_lib/delivery'
 import { startTrainingRecord } from '../../records/_actions'
 import { startClass } from '../../classes/_actions'
 import { SearchInput } from '@/components/search-input'
+import { RecordActionMenu } from '@/components/record-action-menu'
+import { ConfirmButton } from '@/components/confirm-button'
 import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { TableToolbar } from '@/components/table-toolbar'
@@ -597,6 +600,23 @@ export function CourseWorkspace({
               ) : null
             }
           />
+          <RecordActionMenu
+            destructive={
+              <form action={deleteCourse}>
+                <input type="hidden" name="id" value={course.id} />
+                <ConfirmButton
+                  variant="destructive"
+                  message={tGeneratedValue(
+                    'Delete this course? It leaves the course list and learner views. Completion records and certificates stay.',
+                  )}
+                >
+                  <Trash2 size={15} /> <GeneratedValue value="Delete course" />
+                </ConfirmButton>
+              </form>
+            }
+          >
+            {null}
+          </RecordActionMenu>
         </div>
       </header>
 
