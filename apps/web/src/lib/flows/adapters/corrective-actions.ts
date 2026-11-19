@@ -120,9 +120,9 @@ export function createCorrectiveActionFlowAdapter(
         source_entity_type: r.sourceEntityType ?? '',
         root_cause: r.rootCause ?? '',
         action_taken: r.actionTaken ?? '',
-        assigned_on: fmtDate(r.assignedOn),
-        due_on: fmtDate(r.dueOn),
-        closed_at: fmtDateTime(r.closedAt),
+        assigned_on: fmtDate(r.assignedOn, ctx.timezone),
+        due_on: fmtDate(r.dueOn, ctx.timezone),
+        closed_at: fmtDateTime(r.closedAt, ctx.timezone),
         cost_impact: r.costImpact ?? '',
         // Verification panel — the bespoke CA PDF prints this block whenever
         // verification is required; verification_required is a raw boolean so
@@ -130,7 +130,7 @@ export function createCorrectiveActionFlowAdapter(
         verification_required: r.verificationRequired ?? false,
         verification_notes: r.verificationNotes ?? '',
         verifier_name: head.verifierName ?? '',
-        verified_at: fmtDateTime(r.verifiedAt),
+        verified_at: fmtDateTime(r.verifiedAt, ctx.timezone),
         site_name: head.siteName ?? '',
         owner_name: head.ownerName ?? '',
         assigned_by_name: head.assignedByName ?? '',
@@ -144,7 +144,7 @@ export function createCorrectiveActionFlowAdapter(
             kind: titleize(s.kind),
             description: s.description ?? '',
             completed_by_name: s.byName ?? '',
-            completed_at: fmtDateTime(s.completedAt),
+            completed_at: fmtDateTime(s.completedAt, ctx.timezone),
             signature_image: s.signatureKey
               ? await presignGet({ key: s.signatureKey, expiresInSeconds: 900 })
               : '',

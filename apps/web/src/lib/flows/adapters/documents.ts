@@ -120,9 +120,9 @@ export function createDocumentFlowAdapter(
 
       return {
         title: r.title ?? null,
-        period_start: fmtDate(r.periodStart),
-        period_end: fmtDate(r.periodEnd),
-        next_review_on: fmtDate(r.nextReviewOn),
+        period_start: fmtDate(r.periodStart, ctx.timezone),
+        period_end: fmtDate(r.periodEnd, ctx.timezone),
+        next_review_on: fmtDate(r.nextReviewOn, ctx.timezone),
         discussion_notes: r.discussionNotes ?? '',
         decisions: r.decisions ?? '',
         chair_name: head.chairName ?? '',
@@ -139,7 +139,7 @@ export function createDocumentFlowAdapter(
           reference: c.reference ?? '',
           title: c.title ?? '',
           status: titleize(c.status),
-          due_on: fmtDate(c.dueOn),
+          due_on: fmtDate(c.dueOn, ctx.timezone),
         })),
       }
     },

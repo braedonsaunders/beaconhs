@@ -13,29 +13,35 @@ const photoField: FormField = {
 
 describe('Builder photo document values', () => {
   it('renders an unset optional photo without throwing', () => {
-    expect(renderFormFieldText(photoField, undefined)).toBe('')
-    expect(renderFormFieldText(photoField, 'legacy-invalid-value')).toBe('0 photos')
+    expect(renderFormFieldText(photoField, undefined, { timeZone: 'America/Toronto' })).toBe('')
+    expect(
+      renderFormFieldText(photoField, 'legacy-invalid-value', { timeZone: 'America/Toronto' }),
+    ).toBe('0 photos')
   })
 
   it('includes captions and migrated text annotations in readable output', () => {
     expect(
-      renderFormFieldText(photoField, {
-        attachments: [
-          {
-            caption: 'Guardrail opening',
-            annotations: [
-              {
-                type: 'text',
-                text: '1. Missing midrail',
-              },
-              {
-                type: 'free',
-                points: [[10, 20]],
-              },
-            ],
-          },
-        ],
-      }),
+      renderFormFieldText(
+        photoField,
+        {
+          attachments: [
+            {
+              caption: 'Guardrail opening',
+              annotations: [
+                {
+                  type: 'text',
+                  text: '1. Missing midrail',
+                },
+                {
+                  type: 'free',
+                  points: [[10, 20]],
+                },
+              ],
+            },
+          ],
+        },
+        { timeZone: 'America/Toronto' },
+      ),
     ).toBe('1 photo; Notes: Guardrail opening; 1. Missing midrail')
   })
 

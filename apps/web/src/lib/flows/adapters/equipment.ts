@@ -96,8 +96,8 @@ export function createEquipmentFlowAdapter(
         priority: w.priority ?? null,
         priority_label: titleize(w.priority),
         cost: w.cost ?? '',
-        opened_at: fmtDateTime(w.openedAt),
-        closed_at: fmtDateTime(w.closedAt),
+        opened_at: fmtDateTime(w.openedAt, ctx.timezone),
+        closed_at: fmtDateTime(w.closedAt, ctx.timezone),
         equipment_name: head.itemName ?? '',
         // Linked-asset details — the bespoke work-order PDF's Equipment Item
         // panel (plus the register attributes the record page shows).

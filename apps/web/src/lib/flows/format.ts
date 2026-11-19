@@ -1,32 +1,35 @@
 import 'server-only'
+import { dateIsoInTimeZone, datetimeLocalValue } from '@/lib/datetime'
 
 // Shared value formatters for module flow adapters' loadValues(). Collections
 // and resolved joins are formatted HERE (display-ready strings) so authored
 // email templates ({{#each}} tables) render cleanly without per-template logic.
 
-function pad(n: number): string {
-  return String(n).padStart(2, '0')
-}
-
-/** `YYYY-MM-DD HH:mm` in server-local time; '' for null / invalid. */
-export function fmtDateTime(d: Date | string | null | undefined): string {
+/**
+ * `YYYY-MM-DD HH:mm` on the tenant's wall clock; '' for null / invalid.
+ * Always pass the tenant's time zone (`ctx.timezone`): the servers run in UTC,
+ * so formatting in server-local time would print UTC times on PDFs and emails.
+ */
+export function fmtDateTime(d: Date | string | null | undefined, timeZone: string): string {
   if (!d) return ''
   const dt = typeof d === 'string' ? new Date(d) : d
   if (Number.isNaN(dt.getTime())) return ''
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+  return datetimeLocalValue(dt, timeZone).replace('T', ' ')
 }
 
-/** `YYYY-MM-DD`; '' for null / invalid. Accepts a date string (date columns). */
-export function fmtDate(d: Date | string | null | undefined): string {
+/**
+ * `YYYY-MM-DD` on the tenant's calendar; '' for null / invalid. `date` columns
+ * ('YYYY-MM-DD') are already calendar days and pass through unchanged.
+ */
+export function fmtDate(d: Date | string | null | undefined, timeZone: string): string {
   if (!d) return ''
   if (typeof d === 'string') {
-    // `date` columns arrive as 'YYYY-MM-DD' already.
-    const m = /^(\d{4}-\d{2}-\d{2})/.exec(d)
+    const m = /^(\d{4}-\d{2}-\d{2})(?![T ]\d)/.exec(d)
     if (m?.[1]) return m[1]
   }
   const dt = typeof d === 'string' ? new Date(d) : d
   if (Number.isNaN(dt.getTime())) return ''
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
+  return dateIsoInTimeZone(dt, timeZone)
 }
 
 /** Person display name: formalName, else "First Last"; '' when absent. */

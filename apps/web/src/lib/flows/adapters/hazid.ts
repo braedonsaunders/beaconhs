@@ -215,8 +215,8 @@ export function createHazidFlowAdapter(
         locked: a.locked ?? null,
         in_progress: a.inProgress ?? null,
         status_label: a.locked ? 'Locked' : a.inProgress ? 'In progress' : 'Open',
-        occurred_at: fmtDateTime(a.occurredAt),
-        locked_at: fmtDateTime(a.lockedAt),
+        occurred_at: fmtDateTime(a.occurredAt, ctx.timezone),
+        locked_at: fmtDateTime(a.lockedAt, ctx.timezone),
         site_name: head.siteName ?? '',
         project_name: proj?.name ?? '',
         type_name: head.typeName ?? '',
@@ -297,7 +297,7 @@ export function createHazidFlowAdapter(
             cs_entrant: yesBlank(s.row.csEntrant),
             cs_attendant: yesBlank(s.row.csAttendant),
             cs_rescue: yesBlank(s.row.csRescue),
-            signed_at: fmtDateTime(s.row.signedAt),
+            signed_at: fmtDateTime(s.row.signedAt, ctx.timezone),
             attachment_id: s.row.signatureAttachmentId ?? null,
             image: s.signatureKey
               ? forSigning && s.row.signatureAttachmentId

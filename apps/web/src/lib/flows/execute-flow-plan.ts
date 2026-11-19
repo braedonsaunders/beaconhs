@@ -7,6 +7,7 @@ import 'server-only'
 // adapter call. Durable executions checkpoint each completed node; failures are
 // returned to the caller so its domain-event outbox can retry from that node.
 
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import {
@@ -525,9 +526,13 @@ export async function executeFlowPlan(
             failed.push('create_capa (unsupported)')
             break
           }
+          // Due N days from today on the tenant's calendar, not the server's UTC day.
           const dueOn =
             action.dueInDays != null
-              ? new Date(Date.now() + action.dueInDays * 86_400_000).toISOString().slice(0, 10)
+              ? dateIsoInTimeZone(
+                  new Date(Date.now() + action.dueInDays * 86_400_000),
+                  ctx.timezone,
+                )
               : null
           const res = await adapter.spawnCorrectiveAction({
             title: interpolate(action.titleTemplate, values) || 'Action from form',

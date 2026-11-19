@@ -88,8 +88,8 @@ export function createPpeIssueReportFlowAdapter(
         resolution: r.resolution ?? '',
         source: r.source,
         source_inspection_id: r.inspectionId ?? null,
-        reported_at: fmtDateTime(r.reportedAt),
-        resolved_at: fmtDateTime(r.resolvedAt),
+        reported_at: fmtDateTime(r.reportedAt, ctx.timezone),
+        resolved_at: fmtDateTime(r.resolvedAt, ctx.timezone),
         reported_by_name: r.reportedByNameSnapshot ?? head.reportedByName ?? '',
         // Linked PPE item (the bespoke PDF's PPE Item panel).
         type_name: head.typeName ?? '',
@@ -103,8 +103,8 @@ export function createPpeIssueReportFlowAdapter(
           lastName: head.holderLast,
           formalName: head.holderFormal,
         }),
-        purchase_date: fmtDate(item?.purchaseDate ?? null),
-        expires_on: fmtDate(item?.expiresOn ?? null),
+        purchase_date: fmtDate(item?.purchaseDate ?? null, ctx.timezone),
+        expires_on: fmtDate(item?.expiresOn ?? null, ctx.timezone),
         // FK ids for conditions / recipient `field` targets.
         item_id: r.itemId ?? null,
         type_id: item?.typeId ?? head.inspectionTypeId ?? null,

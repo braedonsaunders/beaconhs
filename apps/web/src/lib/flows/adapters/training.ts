@@ -115,7 +115,7 @@ export function createTrainingFlowAdapter(
           lastName: head.pLast,
           formalName: head.pFormal,
         }),
-        completed_at: fmtDateTime(a.completedAt),
+        completed_at: fmtDateTime(a.completedAt, ctx.timezone),
         // FK ids for conditions / recipient `field` targets.
         type_id: a.typeId ?? null,
         person_id: a.personId ?? null,

@@ -880,7 +880,16 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
     tenant_name: data.tenant.name,
     tenant_logo_url: logoUrl ?? '',
     issued_month_year: issuedMonthYear,
-    published_at: b.publishedAt ? b.publishedAt.toISOString().slice(0, 10) : '',
+    // The same print clock as the issued month: a UTC slice turns an evening
+    // publish into the next day.
+    published_at: b.publishedAt
+      ? new Intl.DateTimeFormat('en-CA', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          timeZone: BOOK_PRINT_TIMEZONE,
+        }).format(b.publishedAt)
+      : '',
     document_count: data.entries.filter((entry) => entry.kind === 'document').length,
     chapter_count: data.entries.filter((entry) => entry.kind === 'chapter').length,
     section_count: data.entries.filter((entry) => entry.kind === 'section').length,

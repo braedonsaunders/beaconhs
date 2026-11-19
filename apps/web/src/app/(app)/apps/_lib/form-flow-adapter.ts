@@ -246,6 +246,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             if (SKIP_FIELD_TYPES.has(field.type)) continue
             if (hasTextCompanion(field.type)) {
               projected[`${field.id}_text`] = renderFormFieldText(field, rawRow[field.id], {
+                timeZone: ctx.timezone,
                 personNameById: (id) => personNames.get(id),
               })
             }
@@ -277,6 +278,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           }
           if (hasTextCompanion(f.type)) {
             out[`${f.id}_text`] = renderFormFieldText(f, raw, {
+              timeZone: ctx.timezone,
               entityAttrs: entities[f.id] ?? null,
               personNameById: (id) => personNames.get(id),
             })

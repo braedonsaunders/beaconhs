@@ -121,7 +121,7 @@ export function createVehicleLogFlowAdapter(
         monthTotal += e?.kmDriven ?? 0
         const dateObj = new Date(`${entryDate}T00:00:00Z`)
         return {
-          date: fmtDate(entryDate),
+          date: fmtDate(entryDate, ctx.timezone),
           day: dateObj.getUTCDate(),
           weekday: dateObj.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }),
           is_weekend: [0, 6].includes(dateObj.getUTCDay()),
@@ -148,7 +148,7 @@ export function createVehicleLogFlowAdapter(
 
       return {
         reference: `${anchor.vehicleTag ?? anchor.vehicleName ?? 'Vehicle'} ${range.key}`,
-        entry_date: fmtDate(r.entryDate),
+        entry_date: fmtDate(r.entryDate, ctx.timezone),
         entry_mode: r.entryMode,
         is_odometer: r.entryMode === 'odometer',
         driver_name: driverName,

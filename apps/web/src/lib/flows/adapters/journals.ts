@@ -109,7 +109,7 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
         title: r.title ?? null,
         body_text: r.bodyText ?? null,
         body_html: journalBodyDocumentHtml(r.bodyHtml, r.bodyText),
-        entry_date: fmtDate(r.entryDate),
+        entry_date: fmtDate(r.entryDate, ctx.timezone),
         author_name: personName({
           firstName: e.authFirst,
           lastName: e.authLast,

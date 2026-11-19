@@ -101,13 +101,13 @@ export function createDocumentSignoffFlowAdapter(
         conducted_by_name: head.conductorName ?? '',
         conducted_by_tenant_user_id: session.conductedByTenantUserId,
         conducted_by_person_id: head.conductorPersonId,
-        conducted_at: fmtDateTime(session.conductedAt),
-        completed_at: fmtDateTime(session.completedAt),
+        conducted_at: fmtDateTime(session.conductedAt, ctx.timezone),
+        completed_at: fmtDateTime(session.completedAt, ctx.timezone),
         signer_count: signatures.length,
         signatures: await Promise.all(
           signatures.map(async (signature) => ({
             name: personName(signature),
-            signed_at: fmtDateTime(signature.acknowledgedAt),
+            signed_at: fmtDateTime(signature.acknowledgedAt, ctx.timezone),
             attachment_id: signature.attachmentId,
             image: signature.signatureKey
               ? await presignGet({ key: signature.signatureKey, expiresInSeconds: 900 })

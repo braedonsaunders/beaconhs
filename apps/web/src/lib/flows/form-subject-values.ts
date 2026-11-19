@@ -11,6 +11,7 @@ import 'server-only'
 // the palette in subject-fields.ts and the PDF template generator); this
 // module renders the companion VALUES.
 
+import { datetimeLocalValue } from '@/lib/datetime'
 import { entityDisplayName, entityKindForPicker, type FormField } from '@beaconhs/forms-core'
 import type { Annotation } from '@beaconhs/db/schema'
 import { photoDocumentUrl } from '../photo-document-url'
@@ -53,11 +54,19 @@ export function sketchImageUrl(raw: unknown): string {
   return typeof url === 'string' ? url : ''
 }
 
-function fmtDateTimeText(raw: unknown): string {
+/**
+ * A datetime answer as `YYYY-MM-DD HH:mm` on the tenant's wall clock. A
+ * wall-clock answer (no offset) is already the tenant's time and prints as-is;
+ * an instant is converted into the tenant's time zone, never the server's.
+ */
+function fmtDateTimeText(raw: unknown, timeZone: string): string {
+  if (typeof raw === 'string') {
+    const wallClock = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(raw.trim())
+    if (wallClock) return `${wallClock[1]} ${wallClock[2]}`
+  }
   const d = typeof raw === 'string' || raw instanceof Date ? new Date(raw) : null
   if (!d || Number.isNaN(d.getTime())) return raw == null ? '' : String(raw)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  return datetimeLocalValue(d, timeZone).replace('T', ' ')
 }
 
 /**
@@ -69,9 +78,11 @@ export function renderFormFieldText(
   field: Pick<FormField, 'type' | 'config'>,
   raw: unknown,
   opts: {
+    /** The tenant's time zone, for datetime answers stored as instants. */
+    timeZone: string
     entityAttrs?: Record<string, unknown> | null
     personNameById?: (id: string) => string | undefined
-  } = {},
+  },
 ): string {
   if (raw === undefined || raw === null || raw === '') return ''
 
@@ -181,7 +192,7 @@ export function renderFormFieldText(
       return parts.join('; ')
     }
     case 'datetime':
-      return fmtDateTimeText(raw)
+      return fmtDateTimeText(raw, opts.timeZone)
     default:
       return String(raw)
   }

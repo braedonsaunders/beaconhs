@@ -199,15 +199,15 @@ export function createInspectionFlowAdapter(
         status_label: titleize(r.status),
         reference: r.reference ?? null,
         type_name: head.typeName ?? '',
-        occurred_at: fmtDateTime(r.occurredAt),
+        occurred_at: fmtDateTime(r.occurredAt, ctx.timezone),
         location_on_site: r.locationOnSite ?? '',
         site_name: head.siteName ?? '',
         inspector_name: head.inspectorName ?? '',
         supervisor_name: head.supervisorName ?? '',
         foreman_text: inspectionForemanLabel(r, foremanNames),
         notes: r.notes ?? '',
-        submitted_at: fmtDateTime(r.submittedAt),
-        closed_at: fmtDateTime(r.closedAt),
+        submitted_at: fmtDateTime(r.submittedAt, ctx.timezone),
+        closed_at: fmtDateTime(r.closedAt, ctx.timezone),
         // Customer sign-off block (record-page parity): who the inspection was
         // for, who signed, and the drawn signature as a PNG data URL.
         customer_name: head.customerName ?? '',
@@ -220,7 +220,7 @@ export function createInspectionFlowAdapter(
           r.customerContactName ||
           '',
         customer_signer_name: r.customerSignerName ?? '',
-        customer_signed_at: fmtDateTime(r.customerSignedAt),
+        customer_signed_at: fmtDateTime(r.customerSignedAt, ctx.timezone),
         customer_signature_image: head.customerSignatureKey
           ? await presignGet({ key: head.customerSignatureKey, expiresInSeconds: 900 })
           : '',
