@@ -22,6 +22,7 @@ describe('monthly vehicle-log portrait PDF', () => {
           timeZone: 'UTC',
         }),
         is_weekend: index % 7 === 2 || index % 7 === 3,
+        row_shade: index % 7 === 2 || index % 7 === 3 ? '#d1d5db' : '#ffffff',
         site_name: mode === 'destination' ? 'The Shop' : '',
         other_destination: '',
         start_odometer: mode === 'odometer' ? 120000 + index * 150 : '',
@@ -51,7 +52,9 @@ describe('monthly vehicle-log portrait PDF', () => {
       expect(html).not.toContain('Employee #')
       expect(html).not.toMatch(/>Hours<|>Crew</)
       expect(html.match(/<th\b/g)).toHaveLength(mode === 'odometer' ? 5 : 6)
-      expect(html).toContain('background:#d1d5db')
+      // One row per day: weekends shade the whole row grey, every day keeps one cell per column.
+      expect(html.match(/bgcolor="#d1d5db"/g)).toHaveLength(9)
+      expect(html.match(/<tr bgcolor=/g)).toHaveLength(31)
       expect(html).not.toContain(mode === 'odometer' ? 'Customer / site' : 'Start odo')
       expect(html).not.toContain('{{')
       const pdf = await renderHtmlDocumentPdf({

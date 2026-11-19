@@ -828,27 +828,34 @@ const TRAINING_CLASS = wrap(
 
 // The monthly vehicle-log sheet: the value map carries the whole
 // driver+vehicle month (`entries` + month totals) anchored on one entry.
+//
+// Every day is ONE row with one set of cells: weekend shading comes from the
+// entry's `row_shade` colour on the row's bgcolor. Block helpers between table
+// cells ({{#if}}…{{else}}) are not HTML a browser keeps — the editor hoists
+// them out of the table and keeps both branches' cells, doubling the columns.
 const VEHICLE_LOG_CELL = `${TD}padding:3px 4px;font-size:11px;line-height:1.2;`
 function vehicleLogTable(odometer: boolean): string {
-  const columns: [header: string, value: string][] = odometer
+  // [header, cell, width %]: day and the km figures stay narrow so the
+  // destination columns get the room and do not wrap.
+  const columns: [header: string, value: string, width: number][] = odometer
     ? [
-        ['Day', '{{day}} {{weekday}}'],
-        ['Start odo', '{{start_odometer}}'],
-        ['End odo', '{{end_odometer}}'],
-        ['Personal km', '{{personal_km}}'],
-        ['Total km', '{{total_km}}'],
+        ['Day', '{{day}} {{weekday}}', 12],
+        ['Start odo', '{{start_odometer}}', 22],
+        ['End odo', '{{end_odometer}}', 22],
+        ['Personal km', '{{personal_km}}', 22],
+        ['Total km', '{{total_km}}', 22],
       ]
     : [
-        ['Day', '{{day}} {{weekday}}'],
-        ['Customer / site', '{{site_name}}'],
-        ['Other destination', '{{other_destination}}'],
-        ['Business km', '{{business_km}}'],
-        ['Personal km', '{{personal_km}}'],
-        ['Total km', '{{total_km}}'],
+        ['Day', '{{day}} {{weekday}}', 9],
+        ['Customer / site', '{{site_name}}', 34],
+        ['Other destination', '{{other_destination}}', 21],
+        ['Business km', '{{business_km}}', 12],
+        ['Personal km', '{{personal_km}}', 12],
+        ['Total km', '{{total_km}}', 12],
       ]
   return (
-    `<table style="${TABLE}">${colgroupHtml(autoColumnPercents(columns.map(([header, cell]) => ({ header, cells: [cell] }))))}<thead><tr>${columns.map(([label]) => `<th style="${TH}">${label}</th>`).join('')}</tr></thead><tbody>` +
-    `<tr data-each="entries" style="${ROW}">{{#if is_weekend}}${columns.map(([, value]) => `<td style="${VEHICLE_LOG_CELL}background:#d1d5db;">${value}</td>`).join('')}{{else}}${columns.map(([, value]) => `<td style="${VEHICLE_LOG_CELL}background:#ffffff;">${value}</td>`).join('')}{{/if}}</tr>` +
+    `<table style="${TABLE}">${colgroupHtml(columns.map(([, , width]) => width))}<thead><tr>${columns.map(([label]) => `<th style="${TH}">${label}</th>`).join('')}</tr></thead><tbody>` +
+    `<tr data-each="entries" bgcolor="{{row_shade}}" style="${ROW}">${columns.map(([, value]) => `<td style="${VEHICLE_LOG_CELL}">${value}</td>`).join('')}</tr>` +
     `<tr><td colspan="3" style="${VEHICLE_LOG_CELL}font-weight:700;">Month total</td>` +
     (odometer ? '' : `<td style="${VEHICLE_LOG_CELL}">{{month_business_km}}</td>`) +
     `<td style="${VEHICLE_LOG_CELL}">{{month_personal_km}}</td><td style="${VEHICLE_LOG_CELL}">{{month_total_km}}</td></tr></tbody></table>`

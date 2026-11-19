@@ -695,6 +695,46 @@ function isHtmlNameCode(code: number): boolean {
 }
 
 /** Read one HTML tag without treating a `>` inside a quoted attribute as its end. */
+const TABLE_STRUCTURE_TAGS = new Set(['table', 'thead', 'tbody', 'tfoot', 'tr', 'colgroup'])
+const TABLE_CELL_TAGS = new Set(['td', 'th', 'caption'])
+const BLOCK_HELPER = /\{\{\s*(?:[#^/]|else\b)[^}]*\}\}/g
+
+/**
+ * Template block helpers (`{{#if}}`, `{{else}}`, `{{/each}}`, …) written between
+ * table rows or cells rather than inside a cell. Text is not allowed there in
+ * HTML: any browser — the visual template editor included — moves it out in
+ * front of the table and keeps every branch's cells, so a saved template
+ * prints its columns twice. Conditional rows use `<tr data-if="…">` and
+ * repeating rows `<tr data-each="…">` instead.
+ */
+export function findTableStructureBlockHelpers(html: string): string[] {
+  const found: string[] = []
+  // Innermost open table element: does text here belong to a cell?
+  const stack: boolean[] = []
+  let cursor = 0
+  while (cursor < html.length) {
+    const start = html.indexOf('<', cursor)
+    const textEnd = start === -1 ? html.length : start
+    if (stack.length > 0 && stack[stack.length - 1] === false) {
+      for (const match of html.slice(cursor, textEnd).matchAll(BLOCK_HELPER)) found.push(match[0])
+    }
+    if (start === -1) break
+    const tag = readHtmlTag(html, start)
+    if (!tag) {
+      cursor = start + 1
+      continue
+    }
+    cursor = tag.end
+    const name = tag.name
+    if (!name || tag.selfClosing) continue
+    const structure = TABLE_STRUCTURE_TAGS.has(name)
+    if (!structure && !TABLE_CELL_TAGS.has(name)) continue
+    if (tag.closing) stack.pop()
+    else stack.push(!structure)
+  }
+  return found
+}
+
 function readHtmlTag(html: string, start: number): HtmlTag | null {
   if (html.charCodeAt(start) !== 60) return null
   if (html.startsWith('<!--', start)) {

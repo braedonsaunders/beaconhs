@@ -125,6 +125,8 @@ export function createVehicleLogFlowAdapter(
           day: dateObj.getUTCDate(),
           weekday: dateObj.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }),
           is_weekend: [0, 6].includes(dateObj.getUTCDay()),
+          // The sheet's row colour: weekends print grey, like the legacy log.
+          row_shade: [0, 6].includes(dateObj.getUTCDay()) ? '#d1d5db' : '#ffffff',
           site_name: siteName ?? '',
           other_destination: e?.otherDestination ?? '',
           start_odometer: num(e?.startOdometer),

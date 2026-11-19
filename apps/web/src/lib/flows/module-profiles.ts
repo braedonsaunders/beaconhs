@@ -883,6 +883,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
           { key: 'day', label: 'Day', kind: 'number' },
           { key: 'weekday', label: 'Weekday', kind: 'text' },
           { key: 'is_weekend', label: 'Weekend', kind: 'bool' },
+          { key: 'row_shade', label: 'Row colour (grey on weekends)', kind: 'text' },
           { key: 'site_name', label: 'Customer / site', kind: 'text' },
           { key: 'other_destination', label: 'Other destination', kind: 'text' },
           { key: 'start_odometer', label: 'Start odometer', kind: 'number' },

@@ -722,6 +722,13 @@
       "when": 1794078000000,
       "tag": "0103_incident_submit_trigger_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1794081600000,
+      "tag": "0104_vehicle_log_template_rows",
+      "breakpoints": true
     }
   ]
 }
