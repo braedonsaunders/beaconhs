@@ -64,6 +64,8 @@ it('persists and audits reporting metrics, preserves old scores and enforces sco
         severity: 'no_injury',
         occurredAt: new Date(),
         reportedByTenantUserId: memberId,
+        // A started report: the reporter completes it until they submit it.
+        isDraft: true,
         actualSeverity: 2,
         severityRating: 4,
       }),
@@ -144,6 +146,20 @@ it('persists and audits reporting metrics, preserves old scores and enforces sco
         ])
       ).ok,
     ).toBe(false)
+    // Submitting hands the report over: the reporter is now read-only, while
+    // incidents.update (health & safety) keeps editing.
+    await ctx.db((tx) => tx.update(incidents).set({ isDraft: false }).where(eq(incidents.id, id)))
+    expect(
+      (
+        await incidentRecordSaver(reporterCtx, id, [
+          { fieldId: 'potentialSeverity', base: '4', value: '3' },
+        ])
+      ).ok,
+    ).toBe(false)
+    const safetySave = await incidentRecordSaver(ctx, id, [
+      { fieldId: 'potentialSeverity', base: '4', value: '3' },
+    ])
+    expect(safetySave).toMatchObject({ ok: true, rejected: [], conflicts: [] })
     const values = await createIncidentFlowAdapter(ctx, id).loadValues()
     expect(values.process_experience).toBe(3)
     expect(values.crew_response_answer).toContain('5 — Treatment/repair provided.')

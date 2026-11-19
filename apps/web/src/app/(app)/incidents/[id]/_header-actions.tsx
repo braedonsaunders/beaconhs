@@ -1,10 +1,10 @@
 'use client'
 
-import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+import { GeneratedText, useGeneratedTranslations } from '@/i18n/generated'
 
-// Record actions for an incident. The status workflow lives
-// HERE in the header (not a stray card at the bottom of the page): a select
-// that auto-saves on change; record commands share one Actions menu.
+// Record actions for an incident. The status workflow lives HERE in the header
+// (not a stray card at the bottom of the page): a select that auto-saves on
+// change; a draft shows Submit report; record commands share one Actions menu.
 
 import Link from 'next/link'
 import { useTransition } from 'react'
@@ -13,38 +13,35 @@ import { DownloadLink } from '@/components/download-link'
 import { OnlineActionForm } from '@/components/online-action-form'
 import { Button, Select } from '@beaconhs/ui'
 import { useOnlineAction } from '@/lib/offline-drafts/use-online-action'
-import { Copy, FileText, Lock, Mail, Trash2, Unlock } from 'lucide-react'
+import { Copy, FileText, Send, Trash2 } from 'lucide-react'
 
 export function IncidentHeaderActions({
   id,
   status,
   statuses,
-  locked,
   canManage,
   canEdit,
   canClose,
   pdfHref,
-  emailHref,
   copyHref,
   deleteHref,
   updateStatusAction,
-  toggleLockAction,
+  submitAction,
 }: {
   id: string
   status: string
   statuses: readonly string[]
-  locked: boolean
   canManage: boolean
-  /** incidents.update, or incidents.update.own on the caller's own report. */
+  /** Can edit this incident: its own draft, or incidents.update once submitted. */
   canEdit: boolean
   /** incidents.close: closing is its own right, separate from editing. */
   canClose: boolean
   pdfHref: string
-  emailHref: string
   copyHref: string
   deleteHref: string
   updateStatusAction: (formData: FormData) => Promise<void>
-  toggleLockAction: (formData: FormData) => Promise<void>
+  /** Set while the caller can submit this draft; submitting runs the submit Flows. */
+  submitAction: ((formData: FormData) => Promise<void>) | null
 }) {
   const tGenerated = useGeneratedTranslations()
   const [pending, start] = useTransition()
@@ -68,59 +65,30 @@ export function IncidentHeaderActions({
     s === status || s === 'closed' ? s === status || canClose : canEdit,
   )
 
-  const statusSelect = (
-    <Select
-      aria-label={tGenerated('m_15e6f0c4903078')}
-      value={status}
-      disabled={pending || statusOptions.length < 2}
-      onChange={(e) => onStatusChange(e.target.value)}
-      className="w-auto min-w-36 capitalize"
-    >
-      {statusOptions.map((s) => (
-        <option key={s} value={s} className="capitalize">
-          {s.replace(/_/g, ' ')}
-        </option>
-      ))}
-    </Select>
-  )
-
-  const lockFields = (
-    <>
-      <input type="hidden" name="id" value={id} />
-      <input type="hidden" name="lock" value={locked ? 'false' : 'true'} />
-      <Button variant="outline" type="submit">
-        <GeneratedValue
-          value={
-            locked ? (
-              <>
-                <Unlock size={14} /> <GeneratedText id="m_0ca830c9381fd6" />
-              </>
-            ) : (
-              <>
-                <Lock size={14} /> <GeneratedText id="m_19f2c846c5777a" />
-              </>
-            )
-          }
-        />
-      </Button>
-    </>
-  )
-  // Locking pushes the queued field edits first. Unlocking does not wait for
-  // them: it is what makes edits left on a locked record deliverable again
-  // (the offline submit guard still covers it).
-  const lockForm = locked ? (
-    <form action={toggleLockAction}>
-      <GeneratedValue value={lockFields} />
-    </form>
-  ) : (
-    <OnlineActionForm action={toggleLockAction} purpose="finish">
-      <GeneratedValue value={lockFields} />
-    </OnlineActionForm>
-  )
-
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {statusSelect}
+      {submitAction ? (
+        // Submitting pushes the queued field edits first, then runs the flows.
+        <OnlineActionForm action={submitAction} purpose="finish">
+          <input type="hidden" name="id" value={id} />
+          <Button type="submit">
+            <Send size={14} /> <GeneratedText id="m_09349052137c88" />
+          </Button>
+        </OnlineActionForm>
+      ) : null}
+      <Select
+        aria-label={tGenerated('m_15e6f0c4903078')}
+        value={status}
+        disabled={pending || statusOptions.length < 2}
+        onChange={(e) => onStatusChange(e.target.value)}
+        className="w-auto min-w-36 capitalize"
+      >
+        {statusOptions.map((s) => (
+          <option key={s} value={s} className="capitalize">
+            {s.replace(/_/g, ' ')}
+          </option>
+        ))}
+      </Select>
       <RecordActionMenu
         destructive={
           canManage ? (
@@ -134,15 +102,10 @@ export function IncidentHeaderActions({
           <FileText size={15} />
           <GeneratedText id="m_016088be0b1e51" />
         </DownloadLink>
-        <Link href={emailHref as never} scroll={false}>
-          <Mail size={15} />
-          <GeneratedText id="m_09dfca28fc95ba" />
-        </Link>
         <Link href={copyHref as never} scroll={false}>
           <Copy size={15} />
           <GeneratedText id="m_17e5ebd91b9a4f" />
         </Link>
-        {canEdit ? lockForm : null}
       </RecordActionMenu>
     </div>
   )

@@ -1,7 +1,6 @@
 // Server-only helper to email a hazard assessment recap.
 //
-// Mirrors apps/web/src/app/(app)/incidents/[id]/_send-email.ts in shape:
-// the parent server action collects form values, this helper resolves
+// The parent server action collects form values; this helper resolves
 // recipients + composes html/text and dispatches via `sendEmail`. The
 // audit row + email_log row both end up linked back to the assessment.
 

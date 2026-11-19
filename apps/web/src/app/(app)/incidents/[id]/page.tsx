@@ -1,12 +1,7 @@
-import { canEditIncidentReporting } from '../_reporting-access'
+import { canEditIncidentReporting, canUpdateIncident } from '../_reporting-access'
 import { INCIDENT_METRICS } from '@beaconhs/db/incident-metrics'
 import { activePeopleWhere } from '@beaconhs/db'
-import {
-  assertCanUpdateRecord,
-  assertCanUpdateSomeRecords,
-  canDeleteOwnRecord,
-  canUpdateRecord,
-} from '@/lib/own-record-policy'
+import { assertCanUpdateSomeRecords, canDeleteOwnRecord } from '@/lib/own-record-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -35,7 +30,6 @@ import {
   Plus,
   Send,
   Trash2,
-  Unlock,
   Users,
 } from 'lucide-react'
 import {
@@ -48,7 +42,6 @@ import {
   EmptyState,
   Input,
   Label,
-  Textarea,
   UrlDrawer,
 } from '@beaconhs/ui'
 import type { AppLocale } from '@beaconhs/i18n'
@@ -69,7 +62,6 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
-import { sendIncidentEmail } from './_send-email'
 import { LostTimeAddForm } from './_lost-time-form'
 import {
   EventDrawer,
@@ -93,7 +85,7 @@ import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validatio
 import { requireRequestContext } from '@/lib/auth'
 import { datetimeLocalValue, formatDate, formatDateTime, parseDatetimeLocal } from '@/lib/datetime'
 import { nextReference } from '@/lib/reference'
-import { assertCan, can, getRegulatoryTerminology } from '@beaconhs/tenant'
+import { assertCan, can, ForbiddenError, getRegulatoryTerminology } from '@beaconhs/tenant'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAuditInTransaction, recordAudit } from '@/lib/audit'
@@ -127,7 +119,7 @@ import {
   LiveMetricRating,
   LiveToggle,
 } from '@/components/live-field'
-import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { incidentStatusChangedEvent } from '@beaconhs/integrations'
 import { SeverityBadge, StatusBadge } from '../_badges'
 import {
@@ -153,6 +145,7 @@ async function assertCanSeeIncident(
       .select({
         reportedByTenantUserId: incidents.reportedByTenantUserId,
         siteOrgUnitId: incidents.siteOrgUnitId,
+        isDraft: incidents.isDraft,
       })
       .from(incidents)
       .where(eq(incidents.id, incidentId))
@@ -166,7 +159,9 @@ async function assertCanSeeIncident(
     return visible ? found : null
   })
   if (!row) throw new Error('Incident not found')
-  if (access === 'update') assertCanUpdateRecord(ctx, 'incidents', [row.reportedByTenantUserId])
+  // Submitted incidents stay editable only for incidents.update (health & safety).
+  if (access === 'update' && !canUpdateIncident(ctx, row))
+    throw new ForbiddenError('incidents.update')
 }
 
 // ---- Status & lock ---------------------------------------------------------
@@ -249,41 +244,6 @@ async function updateStatus(formData: FormData) {
   revalidatePath('/incidents')
 }
 
-async function toggleLock(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCanUpdateSomeRecords(ctx, 'incidents')
-  const id = String(formData.get('id') ?? '')
-  const lock = formData.get('lock') === 'true'
-  await assertCanSeeIncident(ctx, id, 'update')
-  const changed = await ctx.db(async (tx) => {
-    const [current] = await tx
-      .select({ locked: incidents.locked })
-      .from(incidents)
-      .where(eq(incidents.id, id))
-      .limit(1)
-      .for('update')
-    if (!current || current.locked === lock) return false
-    await tx.update(incidents).set({ locked: lock }).where(eq(incidents.id, id))
-    await recordModuleFlowEvent(tx, ctx, {
-      subjectId: id,
-      moduleKey: 'incidents',
-      event: lock ? 'on_lock' : 'on_unlock',
-      occurrenceKey: randomUUID(),
-    })
-    return true
-  })
-  if (!changed) return
-  await recordAudit(ctx, {
-    entityType: 'incident',
-    entityId: id,
-    action: 'update',
-    summary: lock ? 'Locked' : 'Unlocked',
-    after: { locked: lock },
-  })
-  revalidatePath(`/incidents/${id}`)
-}
-
 // A started report is a draft until the reporter submits it. Submitting runs
 // the incident `on_submit` Flows — the trigger for anything that should see the
 // finished report (emails with the incident PDF, webhooks, notices).
@@ -306,10 +266,10 @@ async function submitIncident(formData: FormData) {
       .limit(1)
       .for('update')
     if (!row) throw new Error('Incident not found')
-    if (!canEditIncidentReporting(ctx, row.reportedByTenantUserId))
-      throw new Error('You cannot submit this incident report.')
     if (!row.isDraft) return false
-    if (row.locked) throw new Error('Unlock this incident before you submit it.')
+    if (!canEditIncidentReporting(ctx, row))
+      throw new Error('You cannot submit this incident report.')
+    if (row.locked) throw new Error('This incident is closed. Reopen it before you submit it.')
     const missing = [
       row.siteOrgUnitId ? null : 'Site',
       htmlToText(row.description) ? null : 'Event details / cause',
@@ -571,30 +531,6 @@ async function reorderIncidentPhotos(
   if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
   revalidatePath(`/incidents/${incidentId}`)
   return { ok: true }
-}
-
-async function sendEmailAction(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  if (
-    !can(ctx, 'incidents.read.all') &&
-    !can(ctx, 'incidents.read.site') &&
-    !can(ctx, 'incidents.read.self')
-  ) {
-    throw new Error('Not authorized')
-  }
-  const id = String(formData.get('id') ?? '')
-  if (!id) return
-  await assertCanSeeIncident(ctx, id)
-  const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
-  const messageOverride = String(formData.get('message') ?? '').trim() || undefined
-  const recipients = String(formData.get('recipients') ?? '')
-    .split(/[,;\s]+/g)
-    .map((s) => s.trim())
-    .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
-  if (recipients.length === 0) throw new Error('Add at least one valid email address')
-  await sendIncidentEmail(ctx, id, { subjectPrefix, messageOverride, recipients })
-  revalidatePath(`/incidents/${id}`)
 }
 
 async function copyIncident(formData: FormData) {
@@ -1635,9 +1571,8 @@ export default async function IncidentDetailPage({
     canDeleteOwnRecord(ctx, 'incidents.delete.own', incident.reportedByTenantUserId)
   const canInvestigate = can(ctx, 'incidents.investigate')
   const locked = incident.locked
-  const canUpdate = canUpdateRecord(ctx, 'incidents', [incident.reportedByTenantUserId])
-  const reportingReadOnly =
-    locked || !canEditIncidentReporting(ctx, incident.reportedByTenantUserId)
+  const canUpdate = canUpdateIncident(ctx, incident)
+  const reportingReadOnly = locked || !canEditIncidentReporting(ctx, incident)
   const isDraft = incident.isDraft
   const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
 
@@ -1747,16 +1682,14 @@ export default async function IncidentDetailPage({
                 id={id}
                 status={incident.status}
                 statuses={STATUSES}
-                locked={locked}
                 canManage={canManage}
                 canEdit={canUpdate}
                 canClose={can(ctx, 'incidents.close')}
                 pdfHref={`${basePath}/pdf`}
-                emailHref={drawerHref('send-email')}
                 copyHref={drawerHref('copy')}
                 deleteHref={drawerHref('confirm-delete')}
                 updateStatusAction={updateStatus}
-                toggleLockAction={toggleLock}
+                submitAction={isDraft && !reportingReadOnly ? submitIncident : null}
               />
             }
           />
@@ -1788,12 +1721,26 @@ export default async function IncidentDetailPage({
             />
             <GeneratedValue
               value={
+                !isDraft && !locked && reportingReadOnly ? (
+                  <Alert variant="info">
+                    <AlertTitle>
+                      <GeneratedText id="m_15384a1aa091a5" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_14bf7f7592a82b" />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
                 locked ? (
                   <Alert variant="warning">
                     <AlertTitle>
-                      <GeneratedText id="m_0580b66aed3ff1" />
+                      <GeneratedText id="m_0577b8edc03bfa" />
                     </AlertTitle>
-                    <AlertDescription className="flex items-center justify-between">
+                    <AlertDescription>
                       <span>
                         <GeneratedText id="m_01381607e25f0d" />
                         <GeneratedValue value={' '} />
@@ -1804,21 +1751,8 @@ export default async function IncidentDetailPage({
                               : '—'
                           }
                         />
-                        <GeneratedText id="m_02ee203c91c623" />
+                        <GeneratedText id="m_1f8b8158a7d63d" />
                       </span>
-                      <GeneratedValue
-                        value={
-                          canUpdate ? (
-                            <form action={toggleLock} className="inline">
-                              <input type="hidden" name="id" value={id} />
-                              <input type="hidden" name="lock" value="false" />
-                              <Button variant="outline" size="sm" type="submit">
-                                <Unlock size={12} /> <GeneratedText id="m_0ca830c9381fd6" />
-                              </Button>
-                            </form>
-                          ) : null
-                        }
-                      />
                     </AlertDescription>
                   </Alert>
                 ) : null
@@ -3399,79 +3333,6 @@ export default async function IncidentDetailPage({
                 : (row.injury.personName ?? 'Unknown'),
             }))}
           />
-        </UrlDrawer>
-
-        {/* Send email */}
-        <UrlDrawer
-          open={drawer === 'send-email'}
-          closeHref={basePath}
-          title={tGenerated('m_1c456341f763fe', { value0: incident.reference })}
-          description={tGenerated('m_059320db1d18da')}
-          size="md"
-          footer={
-            <>
-              <Link href={basePath}>
-                <Button type="button" variant="outline">
-                  <GeneratedText id="m_112e2e8ecda428" />
-                </Button>
-              </Link>
-              <Button type="submit" form="inc-send-email-form">
-                <GeneratedText id="m_09dfca28fc95ba" />
-              </Button>
-            </>
-          }
-        >
-          <OnlineActionForm
-            purpose="finish"
-            id="inc-send-email-form"
-            action={async (fd) => {
-              'use server'
-              fd.set('id', id)
-              await sendEmailAction(fd)
-            }}
-            className="space-y-3"
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="inc-se-subject">
-                <GeneratedText id="m_155e869f893331" />
-              </Label>
-              <Input
-                id="inc-se-subject"
-                name="subjectPrefix"
-                defaultValue="Update"
-                placeholder={tGenerated('m_1a1fe99effa1f0')}
-              />
-              <p className="text-xs text-slate-500">
-                <GeneratedText id="m_179df8c6e86ca9" />
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="inc-se-recipients">
-                <GeneratedText id="m_0d99b2b56f8b5d" />
-              </Label>
-              <Input
-                id="inc-se-recipients"
-                name="recipients"
-                type="text"
-                required
-                placeholder={tGenerated('m_01747fbecd701f')}
-              />
-              <p className="text-xs text-slate-500">
-                <GeneratedText id="m_0fb66d6a190ad4" />
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="inc-se-message">
-                <GeneratedText id="m_1edfd286d11988" />
-              </Label>
-              <Textarea
-                id="inc-se-message"
-                name="message"
-                rows={4}
-                placeholder={tGenerated('m_03ec1b3acac658')}
-              />
-            </div>
-          </OnlineActionForm>
         </UrlDrawer>
 
         {/* Copy */}

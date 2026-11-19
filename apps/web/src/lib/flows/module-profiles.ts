@@ -177,9 +177,10 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectType: 'module',
     subjectKey: 'incidents',
     label: 'Incidents',
-    triggers: ['on_create', 'on_submit', 'status_change', 'on_lock', 'on_unlock', 'manual'],
+    triggers: ['on_create', 'on_submit', 'status_change', 'manual'],
     // Report incident STARTS an empty draft that the reporter fills in on the
     // record page and then submits. Emailing the PDF on create ships a blank report.
+    // Incidents have no manual lock: closing locks and changing status reopens.
     completionTrigger: 'on_submit',
     actions: [
       'send_email',
