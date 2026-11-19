@@ -1,4 +1,5 @@
 import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
+import { RecordFlag } from '@/components/record-flag'
 import { setEquipmentDeleted } from '../_lifecycle-actions'
 import { transferLocation, checkOutFromItem } from './_custody-actions'
 import { EquipmentTelemetryPanel } from '@/components/equipment-telemetry-panel'
@@ -1124,9 +1125,57 @@ export default async function EquipmentDetailPage({
                 <GeneratedValue
                   value={
                     item.isMissing ? (
-                      <Badge variant="destructive">
-                        <GeneratedText id="m_033d838430bc5f" />
-                      </Badge>
+                      <RecordFlag tone="danger" label={tGeneratedValue('Missing')}>
+                        <p className="font-medium">
+                          <GeneratedText id="m_00ffd43dd757ec" />
+                        </p>
+
+                        <GeneratedValue
+                          value={(() => {
+                            const parts: string[] = []
+                            if (item.missingReportedAt) {
+                              parts.push(
+                                `Reported on ${formatDate(new Date(item.missingReportedAt), ctx.timezone, ctx.locale)}`,
+                              )
+                            }
+                            if (missingReporter?.name) {
+                              parts.push(`by ${missingReporter.name}`)
+                            }
+                            if (item.missingLastSeenAt) {
+                              parts.push(`— last seen ${item.missingLastSeenAt}`)
+                            }
+                            if (item.missingLastSeenLocation) {
+                              parts.push(`at ${item.missingLastSeenLocation}`)
+                            }
+                            const headline = parts.length
+                              ? parts.join(' ')
+                              : `Last seen ${item.lastSeenAt ? formatDateTime(new Date(item.lastSeenAt), ctx.timezone, ctx.locale) : '—'}`
+                            return (
+                              <>
+                                <div>
+                                  <GeneratedValue value={headline} />.
+                                </div>
+                                <GeneratedValue
+                                  value={
+                                    item.missingNotes ? (
+                                      <div className="mt-1 text-xs whitespace-pre-wrap">
+                                        <GeneratedValue value={item.missingNotes} />
+                                      </div>
+                                    ) : null
+                                  }
+                                />
+                                <div className="mt-1 text-xs">
+                                  <GeneratedText id="m_18faed4570d3e8" />{' '}
+                                  <strong>
+                                    <GeneratedText id="m_1b925bd65abff0" />
+                                  </strong>{' '}
+                                  <GeneratedText id="m_0b8398cfc958ca" />
+                                </div>
+                              </>
+                            )
+                          })()}
+                        />
+                      </RecordFlag>
                     ) : null
                   }
                 />
@@ -1213,65 +1262,6 @@ export default async function EquipmentDetailPage({
           />
 
           <RecordSyncBanner />
-
-          <GeneratedValue
-            value={
-              item.isMissing ? (
-                <Alert variant="destructive">
-                  <AlertTitle>
-                    <GeneratedText id="m_00ffd43dd757ec" />
-                  </AlertTitle>
-                  <AlertDescription>
-                    <GeneratedValue
-                      value={(() => {
-                        const parts: string[] = []
-                        if (item.missingReportedAt) {
-                          parts.push(
-                            `Reported on ${formatDate(new Date(item.missingReportedAt), ctx.timezone, ctx.locale)}`,
-                          )
-                        }
-                        if (missingReporter?.name) {
-                          parts.push(`by ${missingReporter.name}`)
-                        }
-                        if (item.missingLastSeenAt) {
-                          parts.push(`— last seen ${item.missingLastSeenAt}`)
-                        }
-                        if (item.missingLastSeenLocation) {
-                          parts.push(`at ${item.missingLastSeenLocation}`)
-                        }
-                        const headline = parts.length
-                          ? parts.join(' ')
-                          : `Last seen ${item.lastSeenAt ? formatDateTime(new Date(item.lastSeenAt), ctx.timezone, ctx.locale) : '—'}`
-                        return (
-                          <>
-                            <div>
-                              <GeneratedValue value={headline} />.
-                            </div>
-                            <GeneratedValue
-                              value={
-                                item.missingNotes ? (
-                                  <div className="mt-1 text-xs whitespace-pre-wrap">
-                                    <GeneratedValue value={item.missingNotes} />
-                                  </div>
-                                ) : null
-                              }
-                            />
-                            <div className="mt-1 text-xs">
-                              <GeneratedText id="m_18faed4570d3e8" />{' '}
-                              <strong>
-                                <GeneratedText id="m_1b925bd65abff0" />
-                              </strong>{' '}
-                              <GeneratedText id="m_0b8398cfc958ca" />
-                            </div>
-                          </>
-                        )
-                      })()}
-                    />
-                  </AlertDescription>
-                </Alert>
-              ) : null
-            }
-          />
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
             <aside className="min-w-0 space-y-3">

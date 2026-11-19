@@ -7,7 +7,7 @@ import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
-import { Building2, Camera, History, ListChecks, Lock, PenLine, ShieldAlert } from 'lucide-react'
+import { Building2, Camera, History, ListChecks, PenLine, ShieldAlert } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -51,6 +51,7 @@ import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { RecordActivity } from '@/components/record-activity'
+import { RecordFlag } from '@/components/record-flag'
 import { DetailPageLayout } from '@/components/page-layout'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
@@ -1169,7 +1170,7 @@ export default async function InspectionRecordDetailPage({
               `${record.reference} · ${formatDateTime(new Date(record.occurredAt), ctx.timezone, ctx.locale)}`,
             )}
             badge={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge
                   variant={
                     record.status === 'closed' || record.status === 'submitted'
@@ -1182,15 +1183,46 @@ export default async function InspectionRecordDetailPage({
                   <GeneratedValue value={record.status.replace(/_/g, ' ')} />
                 </Badge>
                 <RecordSyncStatus />
-                <GeneratedValue
-                  value={
-                    recordImmutable ? (
-                      <Badge variant="success">
-                        <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
-                      </Badge>
-                    ) : null
-                  }
-                />
+                {recordImmutable ? (
+                  <RecordFlag
+                    tone="locked"
+                    label={tGeneratedValue(record.status === 'closed' ? 'Closed' : 'Locked')}
+                  >
+                    <p className="font-medium">
+                      {record.status === 'closed' ? (
+                        <GeneratedText id="m_0ebf07876cd391" />
+                      ) : (
+                        <GeneratedText id="m_1a9deab2633a94" />
+                      )}
+                    </p>
+                    <p>
+                      {record.status === 'closed' ? (
+                        <>
+                          <GeneratedText id="m_01381607e25f0d" />{' '}
+                          <GeneratedValue
+                            value={
+                              record.closedAt ? (
+                                formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
+                              ) : (
+                                <GeneratedText id="m_15e0a049681b58" />
+                              )
+                            }
+                          />
+                          <GeneratedText id="m_0be94f4d1ad8da" />
+                        </>
+                      ) : (
+                        <GeneratedText id="m_16987bb5ddf0c8" />
+                      )}
+                    </p>
+                  </RecordFlag>
+                ) : null}
+                {needsSignature && !signed ? (
+                  <RecordFlag tone="info" label={tGeneratedValue('Signature required')}>
+                    <p>
+                      <GeneratedText id="m_1ed6655040e79e" />
+                    </p>
+                  </RecordFlag>
+                ) : null}
                 <GeneratedValue
                   value={
                     failCount > 0 ? (
@@ -1226,70 +1258,7 @@ export default async function InspectionRecordDetailPage({
             }
           />
         }
-        alerts={
-          <>
-            <RecordSyncBanner />
-            <GeneratedValue
-              value={
-                recordImmutable ? (
-                  <Alert variant="warning">
-                    <AlertTitle>
-                      <GeneratedValue
-                        value={
-                          record.status === 'closed' ? (
-                            <GeneratedText id="m_0ebf07876cd391" />
-                          ) : (
-                            <GeneratedText id="m_1a9deab2633a94" />
-                          )
-                        }
-                      />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedValue
-                        value={
-                          record.status === 'closed' ? (
-                            <>
-                              <GeneratedText id="m_01381607e25f0d" />
-                              <GeneratedValue value={' '} />
-                              <GeneratedValue
-                                value={
-                                  record.closedAt ? (
-                                    formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
-                                  ) : (
-                                    <GeneratedText id="m_15e0a049681b58" />
-                                  )
-                                }
-                              />
-                              <GeneratedText id="m_0be94f4d1ad8da" />
-                            </>
-                          ) : (
-                            <>
-                              <GeneratedText id="m_16987bb5ddf0c8" />
-                            </>
-                          )
-                        }
-                      />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                needsSignature && !signed ? (
-                  <Alert variant="info">
-                    <AlertTitle>
-                      <GeneratedText id="m_02ffe91f500dc8" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_1ed6655040e79e" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-          </>
-        }
+        alerts={<RecordSyncBanner />}
         subtabs={<SectionNav sections={sectionItems} />}
       >
         <div className="ff-surface space-y-5">

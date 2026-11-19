@@ -196,7 +196,7 @@ If **Manage** is available to your role:
 
 ## Record actions
 
-Open **Actions** in the header for **Safety review**, **Print / PDF**, **Send email**, **Copy assessment**, and **Submit & lock** or **Unlock**, when your role allows them. On a phone, the submit item reads **Submit**. **Delete** is the last menu item and still asks for confirmation.
+Open **Actions** in the header for **Safety review**, **Print / PDF**, **Send email**, **Copy assessment**, and **Submit & lock** or **Unlock**, when your role allows them. On a phone, the submit item reads **Submit**. **Delete** is the last menu item and still asks for confirmation. Small flags beside the status, such as **Locked**, **Changes need re-signing**, or **1 safety issue**, show what needs attention; tap a flag to read the details.
 
 ## What this is for
 
@@ -397,7 +397,7 @@ Managers build inspection types under **Site Inspections** → **Manage** → **
 
 ## Submitting and corrections
 
-Open **Actions** and choose **Submit & lock** when all required answers and evidence are complete. Submission waits for pending saves. When the inspection type enables corrective actions, failed findings marked **Follow-up required** create an action after successful submission, at any severity. **Resolved on site** findings do not create new open actions. Draft edits do not send corrective-action emails.
+Small flags beside the status, such as **Locked**, **Closed**, or **Signature required**, show the inspection's state; tap a flag to read the details. Open **Actions** and choose **Submit & lock** when all required answers and evidence are complete. Submission waits for pending saves. When the inspection type enables corrective actions, failed findings marked **Follow-up required** create an action after successful submission, at any severity. **Resolved on site** findings do not create new open actions. Draft edits do not send corrective-action emails.
 
 If something is missing, the page stays open and lists the item and missing field below **Actions**. Complete those fields and try again. Your inspection stays editable until submission succeeds.
 
@@ -631,7 +631,7 @@ Actions assigned to you also show under **My corrective actions** on the **My co
 
 ## Due dates
 
-The due date is on the row in the list and at the top of the action. Overdue actions are marked and show up in reports your supervisor sees. If you cannot make the date, say so early — do not let it quietly go overdue.
+The due date is on the row in the list and at the top of the action. Flags beside the status, such as **Locked** or **Verification pending**, show what is holding the action up; tap a flag to read the details. Overdue actions are marked and show up in reports your supervisor sees. If you cannot make the date, say so early — do not let it quietly go overdue.
 
 Supervisors can use the report tabs to work through larger backlogs. **Aging** filters open actions by age, severity, and status. **Overdue** searches all overdue actions and filters by severity, status, or whether someone is assigned. **By assignee** finds people with overdue or outstanding work, and **By source** shows which records create the most actions. Click a heading to change the sort order.
 

@@ -1,4 +1,5 @@
 import { RecordActionMenu } from '@/components/record-action-menu'
+import { RecordFlag } from '@/components/record-flag'
 import { ConfirmedSubmitButton } from '@/components/record-header-actions'
 import { deleteFormResponse } from './_delete-action'
 import { canDeleteOwnRecord } from '@/lib/own-record-policy'
@@ -24,15 +25,7 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Badge,
-  Button,
-  DetailHeader,
-  Textarea,
-} from '@beaconhs/ui'
+import { Badge, Button, DetailHeader, Textarea } from '@beaconhs/ui'
 import {
   correctiveActions,
   formAutomations,
@@ -798,6 +791,64 @@ export default async function FormResponsePage({
                   ) : null
                 }
               />
+              {finalizeErrorCount > 0 ? (
+                <RecordFlag tone="danger" label={tGeneratedValue('Not finalized')}>
+                  <p>
+                    <GeneratedValue value={finalizeErrorCount} />{' '}
+                    <GeneratedText id="m_1d6aa8702d3fac" />
+                    <GeneratedValue
+                      value={
+                        finalizeErrorCount === 1 ? (
+                          <GeneratedText id="m_12f668c7352caf" />
+                        ) : (
+                          <GeneratedText id="m_156505465b1f33" />
+                        )
+                      }
+                    />{' '}
+                    <GeneratedText id="m_1f960ee1f594ac" />
+                  </p>
+                </RecordFlag>
+              ) : null}
+              {reviewEnabled && complianceStatus === 'non_compliant' ? (
+                <RecordFlag tone="danger" label={tGeneratedValue('Non-compliant')}>
+                  <p>
+                    <GeneratedText id="m_1469688270fa41" />{' '}
+                    <GeneratedValue value={complianceScore.toFixed(1)} /> ·{' '}
+                    <GeneratedValue value={failedFieldKeys.length} />{' '}
+                    <GeneratedText id="m_1d8bc417edc4a2" />
+                    <GeneratedValue
+                      value={
+                        failedFieldKeys.length === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />
+                      }
+                    />
+                    <GeneratedText id="m_0ed7a8c1dd855d" />
+                  </p>
+                </RecordFlag>
+              ) : reviewEnabled && flagsFollowup ? (
+                <RecordFlag tone="caution" label={tGeneratedValue('Follow-up required')}>
+                  <p>
+                    <GeneratedText id="m_10df82d7ff45d3" /> <GeneratedValue value={failCount} />{' '}
+                    <GeneratedText id="m_197c5828079212" />
+                    <GeneratedValue
+                      value={failCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                    />{' '}
+                    <GeneratedText id="m_14b08ce3cf96d3" />
+                  </p>
+                </RecordFlag>
+              ) : null}
+              {locked ? (
+                <RecordFlag tone="locked" label={tGeneratedValue('Locked')}>
+                  <p>
+                    <GeneratedText id="m_0803a334cce8bf" />
+                  </p>
+                </RecordFlag>
+              ) : !canEditRecord ? (
+                <RecordFlag tone="info" label={tGeneratedValue('View only')}>
+                  <p>
+                    <GeneratedText id="m_1f28e5133b4b0e" />
+                  </p>
+                </RecordFlag>
+              ) : null}
             </div>
           }
           actions={
@@ -905,104 +956,6 @@ export default async function FormResponsePage({
             </RecordActionMenu>
           }
         />
-      }
-      alerts={
-        (reviewEnabled && (complianceStatus === 'non_compliant' || flagsFollowup)) ||
-        finalizeErrorCount > 0 ||
-        locked ||
-        !canEditRecord ? (
-          <div className="space-y-3">
-            <GeneratedValue
-              value={
-                finalizeErrorCount > 0 ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      <GeneratedText id="m_1877a2cd4c7963" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedValue value={finalizeErrorCount} />{' '}
-                      <GeneratedText id="m_1d6aa8702d3fac" />
-                      <GeneratedValue
-                        value={
-                          finalizeErrorCount === 1 ? (
-                            <GeneratedText id="m_12f668c7352caf" />
-                          ) : (
-                            <GeneratedText id="m_156505465b1f33" />
-                          )
-                        }
-                      />{' '}
-                      <GeneratedText id="m_1f960ee1f594ac" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                reviewEnabled && complianceStatus === 'non_compliant' ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      <GeneratedText id="m_0d41602b36f385" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_1469688270fa41" />{' '}
-                      <GeneratedValue value={complianceScore.toFixed(1)} /> ·{' '}
-                      <GeneratedValue value={failedFieldKeys.length} />{' '}
-                      <GeneratedText id="m_1d8bc417edc4a2" />
-                      <GeneratedValue
-                        value={
-                          failedFieldKeys.length === 1 ? (
-                            ''
-                          ) : (
-                            <GeneratedText id="m_00ded356f0f424" />
-                          )
-                        }
-                      />
-                      <GeneratedText id="m_0ed7a8c1dd855d" />
-                    </AlertDescription>
-                  </Alert>
-                ) : reviewEnabled && flagsFollowup ? (
-                  <Alert variant="warning">
-                    <AlertTitle>
-                      <GeneratedText id="m_12caee20e6a339" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_10df82d7ff45d3" /> <GeneratedValue value={failCount} />{' '}
-                      <GeneratedText id="m_197c5828079212" />
-                      <GeneratedValue
-                        value={failCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
-                      />{' '}
-                      <GeneratedText id="m_14b08ce3cf96d3" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                locked ? (
-                  <Alert variant="warning">
-                    <AlertTitle>
-                      <GeneratedText id="m_11f71ec9a1cf5b" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_0803a334cce8bf" />
-                    </AlertDescription>
-                  </Alert>
-                ) : !canEditRecord ? (
-                  <Alert variant="warning">
-                    <AlertTitle>
-                      <GeneratedText id="m_0cd6abb2df6fc8" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_1f28e5133b4b0e" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-          </div>
-        ) : null
       }
       subtabs={
         <TabNav

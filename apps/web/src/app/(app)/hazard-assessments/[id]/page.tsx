@@ -8,17 +8,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm'
-import {
-  UiBackLink,
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Badge,
-  Button,
-  DetailHeader,
-  Textarea,
-  UrlDrawer,
-} from '@beaconhs/ui'
+import { UiBackLink, Badge, Button, DetailHeader, Textarea, UrlDrawer } from '@beaconhs/ui'
 import {
   AlertTriangle,
   Building2,
@@ -80,6 +70,7 @@ import {
   RecordSyncStatus,
 } from '@/lib/offline-drafts/offline-record'
 import { OnlineActionForm } from '@/components/online-action-form'
+import { RecordFlag } from '@/components/record-flag'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import {
@@ -805,6 +796,64 @@ export default async function HazidAssessmentDetailPage({
   const editQuestionRow = editQuestionId
     ? questions.find((q) => q.id === editQuestionId)
     : undefined
+  // Record state as small flags in the header badge row (and the phone
+  // details), never full-width alerts that eat the form's working space.
+  const headerFlags = (
+    <>
+      {a.locked ? (
+        <RecordFlag tone="locked" label={tGeneratedValue('Locked')}>
+          <p>
+            <GeneratedText id="m_110a9e28d94199" />{' '}
+            <GeneratedValue
+              value={a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'}
+            />
+          </p>
+          <p>
+            <GeneratedValue value="Job content is locked. Crew can still be added and signed. Unlock to change the job; signatures clear only when content changes." />
+          </p>
+        </RecordFlag>
+      ) : null}
+      {!a.locked && canUpdate && signedCount > 0 ? (
+        <RecordFlag tone="caution" label={tGeneratedValue('Changes need re-signing')}>
+          <p>
+            <GeneratedValue value="Changing job details, hazards, controls or attached plans starts a new signing version. Earlier signatures stay in Previous signatures. Reordering rows does not require signing again." />
+          </p>
+        </RecordFlag>
+      ) : null}
+      {requiresYesViolations.length > 0 ? (
+        <RecordFlag
+          tone="danger"
+          label={
+            requiresYesViolations.length === 1
+              ? tGeneratedValue('1 safety issue')
+              : tGenerated('m_1708e6451a363a', { value0: requiresYesViolations.length })
+          }
+        >
+          <p className="font-medium">
+            <GeneratedValue value={requiresYesViolations.length} />{' '}
+            <GeneratedText id="m_115a5b98c7fe99" />
+            <GeneratedValue
+              value={
+                requiresYesViolations.length === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />
+              }
+            />{' '}
+            <GeneratedText id="m_1b243221c321ad" />
+          </p>
+          <p>
+            <GeneratedValue
+              value={requiresYesViolations
+                .map((q) => q.question)
+                .slice(0, 3)
+                .join(' · ')}
+            />
+            <GeneratedValue value={requiresYesViolations.length > 3 ? ' · …' : ''} />{' '}
+            <GeneratedText id="m_0950f40d4e262e" />
+          </p>
+        </RecordFlag>
+      ) : null}
+    </>
+  )
+
   const assessmentActions = (
     <AssessmentHeaderActions
       id={id}
@@ -874,14 +923,7 @@ export default async function HazidAssessmentDetailPage({
                 value={`${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone, ctx.locale)}`}
               />
             </p>
-            {a.locked ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                <GeneratedText id="m_110a9e28d94199" />{' '}
-                <GeneratedValue
-                  value={a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'}
-                />
-              </p>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-1.5 empty:hidden">{headerFlags}</div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               <GeneratedText id="m_09dfacfcb5fc80" /> <GeneratedValue value={a.reviewStatus} />
             </p>
@@ -897,19 +939,11 @@ export default async function HazidAssessmentDetailPage({
               )}
               badge={
                 <div className="flex flex-wrap items-center gap-2">
-                  <GeneratedValue
-                    value={
-                      a.locked ? (
-                        <Badge variant="success">
-                          <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">
-                          <GeneratedText id="m_1a03b06872ffd9" />
-                        </Badge>
-                      )
-                    }
-                  />
+                  {a.locked ? null : (
+                    <Badge variant="secondary">
+                      <GeneratedText id="m_1a03b06872ffd9" />
+                    </Badge>
+                  )}
                   <Badge
                     variant={
                       a.reviewStatus === 'approved'
@@ -922,6 +956,7 @@ export default async function HazidAssessmentDetailPage({
                     <GeneratedText id="m_09dfacfcb5fc80" />{' '}
                     <GeneratedValue value={a.reviewStatus} />
                   </Badge>
+                  {headerFlags}
                   <RecordSyncStatus />
                 </div>
               }
@@ -929,73 +964,7 @@ export default async function HazidAssessmentDetailPage({
             />
           </>
         }
-        alerts={
-          <>
-            <RecordSyncBanner />
-            {!a.locked && canUpdate && signedCount > 0 ? (
-              <Alert variant="warning">
-                <AlertTitle>
-                  <GeneratedValue value="Changes may require new signatures" />
-                </AlertTitle>
-                <AlertDescription>
-                  <GeneratedValue value="Changing job details, hazards, controls or attached plans starts a new signing version. Earlier signatures stay in Previous signatures. Reordering rows does not require signing again." />
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            <GeneratedValue
-              value={
-                a.locked ? (
-                  <Alert variant="warning" className="hidden sm:block">
-                    <AlertTitle>
-                      <GeneratedText id="m_17b55a364cc0d2" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_110a9e28d94199" />{' '}
-                      <GeneratedValue
-                        value={
-                          a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'
-                        }
-                      />{' '}
-                      <GeneratedValue value="Job content is locked. Crew can still be added and signed. Unlock to change the job; signatures clear only when content changes." />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                requiresYesViolations.length > 0 ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      <GeneratedValue value={requiresYesViolations.length} />{' '}
-                      <GeneratedText id="m_115a5b98c7fe99" />
-                      <GeneratedValue
-                        value={
-                          requiresYesViolations.length === 1 ? (
-                            ''
-                          ) : (
-                            <GeneratedText id="m_00ded356f0f424" />
-                          )
-                        }
-                      />{' '}
-                      <GeneratedText id="m_1b243221c321ad" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedValue
-                        value={requiresYesViolations
-                          .map((q) => q.question)
-                          .slice(0, 3)
-                          .join(' · ')}
-                      />
-                      <GeneratedValue value={requiresYesViolations.length > 3 ? ' · …' : ''} />{' '}
-                      <GeneratedText id="m_0950f40d4e262e" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-          </>
-        }
+        alerts={<RecordSyncBanner />}
         subtabs={<SectionNav sections={sectionItems} />}
       >
         <div className="ff-surface space-y-5">

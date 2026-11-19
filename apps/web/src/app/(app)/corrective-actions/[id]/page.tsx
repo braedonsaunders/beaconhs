@@ -6,17 +6,8 @@ import { randomUUID } from 'node:crypto'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import { Building2, Camera, History, Lock, Plus, ShieldCheck, Wrench } from 'lucide-react'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Badge,
-  Button,
-  DetailHeader,
-  EmptyState,
-  UrlDrawer,
-} from '@beaconhs/ui'
+import { Building2, Camera, History, Plus, ShieldCheck, Wrench } from 'lucide-react'
+import { Badge, Button, DetailHeader, EmptyState, UrlDrawer } from '@beaconhs/ui'
 import { isUuid, pickString } from '@/lib/list-params'
 import {
   attachments,
@@ -37,6 +28,7 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recentActivityForEntity, recordAuditInTransaction } from '@/lib/audit'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
+import { RecordFlag } from '@/components/record-flag'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -341,24 +333,35 @@ export default async function CorrectiveActionPage({
                   <GeneratedValue value={ca.status.replace(/_/g, ' ')} />
                 </Badge>
                 <RecordSyncStatus />
-                <GeneratedValue
-                  value={
-                    locked ? (
-                      <Badge variant="outline" className="border-amber-300 text-amber-800">
-                        <Lock size={10} className="mr-1" /> <GeneratedText id="m_0e259fa0babc2d" />
-                      </Badge>
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    ca.verificationRequired ? (
-                      <Badge variant="outline" className="border-sky-300 text-sky-800">
-                        <GeneratedText id="m_07a541edc3e0c7" />
-                      </Badge>
-                    ) : null
-                  }
-                />
+                {locked ? (
+                  <RecordFlag tone="locked" label={tGeneratedValue('Locked')}>
+                    <p className="font-medium">
+                      <GeneratedText id="m_15ca38df986113" />
+                    </p>
+                    <p>
+                      <GeneratedText id="m_01381607e25f0d" />{' '}
+                      <GeneratedValue
+                        value={
+                          ca.closedAt
+                            ? formatDate(new Date(ca.closedAt), ctx.timezone, ctx.locale)
+                            : '—'
+                        }
+                      />
+                      <GeneratedText id="m_1d0f03f015029b" />
+                    </p>
+                  </RecordFlag>
+                ) : null}
+                {ca.verificationRequired && !ca.verifiedAt && !locked ? (
+                  <RecordFlag tone="info" label={tGeneratedValue('Verification pending')}>
+                    <p>
+                      <GeneratedText id="m_1402c94aca2b1a" />
+                    </p>
+                  </RecordFlag>
+                ) : ca.verificationRequired ? (
+                  <Badge variant="outline" className="border-sky-300 text-sky-800">
+                    <GeneratedText id="m_07a541edc3e0c7" />
+                  </Badge>
+                ) : null}
               </div>
             }
             actions={
@@ -377,43 +380,7 @@ export default async function CorrectiveActionPage({
             }
           />
         }
-        alerts={
-          <>
-            <RecordSyncBanner />
-            <GeneratedValue
-              value={
-                locked ? (
-                  <Alert variant="warning">
-                    <AlertTitle>
-                      <GeneratedText id="m_15ca38df986113" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_01381607e25f0d" />
-                      <GeneratedValue value={' '} />
-                      <GeneratedValue
-                        value={
-                          ca.closedAt
-                            ? formatDate(new Date(ca.closedAt), ctx.timezone, ctx.locale)
-                            : '—'
-                        }
-                      />
-                      <GeneratedText id="m_1d0f03f015029b" />
-                    </AlertDescription>
-                  </Alert>
-                ) : ca.verificationRequired && !ca.verifiedAt ? (
-                  <Alert variant="info">
-                    <AlertTitle>
-                      <GeneratedText id="m_1c1c6acd0769c9" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_1402c94aca2b1a" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-          </>
-        }
+        alerts={<RecordSyncBanner />}
         subtabs={<SectionNav sections={sectionItems} />}
       >
         <div className="space-y-5">

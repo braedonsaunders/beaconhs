@@ -25,25 +25,12 @@ import {
   HelpCircle,
   History,
   ListChecks,
-  Lock,
   Pencil,
   Plus,
-  Send,
   Trash2,
   Users,
 } from 'lucide-react'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Badge,
-  Button,
-  DetailHeader,
-  EmptyState,
-  Input,
-  Label,
-  UrlDrawer,
-} from '@beaconhs/ui'
+import { Badge, Button, DetailHeader, EmptyState, Input, Label, UrlDrawer } from '@beaconhs/ui'
 import type { AppLocale } from '@beaconhs/i18n'
 import {
   attachments,
@@ -103,6 +90,7 @@ import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { OnlineActionForm } from '@/components/online-action-form'
+import { RecordFlag } from '@/components/record-flag'
 import {
   OfflineRecordProvider,
   RecordSyncBanner,
@@ -1666,15 +1654,45 @@ export default async function IncidentDetailPage({
                 <SeverityBadge severity={incident.severity} />
                 <StatusBadge status={incident.status} isDraft={incident.isDraft} />
                 <RecordSyncStatus />
-                <GeneratedValue
-                  value={
-                    locked ? (
-                      <Badge variant="outline" className="border-amber-300 text-amber-800">
-                        <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
-                      </Badge>
-                    ) : null
-                  }
-                />
+                {incident.criticalInjury || incident.ministryOfLabourNotified ? (
+                  <RecordFlag tone="danger" label={tGeneratedValue('Critical incident')}>
+                    {incident.criticalInjury ? (
+                      <p>
+                        <GeneratedText id="m_0df328fb5ce73a" />
+                      </p>
+                    ) : null}
+                    {incident.ministryOfLabourNotified ? (
+                      <p>
+                        <GeneratedValue
+                          value={regulatoryT('authorityWasNotified', {
+                            authority: regulatory.authorityName,
+                          })}
+                        />
+                      </p>
+                    ) : null}
+                  </RecordFlag>
+                ) : null}
+                {locked ? (
+                  <RecordFlag tone="locked" label={tGeneratedValue('Closed')}>
+                    <p>
+                      <GeneratedText id="m_01381607e25f0d" />{' '}
+                      <GeneratedValue
+                        value={
+                          incident.closedAt
+                            ? formatDate(new Date(incident.closedAt), ctx.timezone, ctx.locale)
+                            : '—'
+                        }
+                      />
+                      <GeneratedText id="m_1f8b8158a7d63d" />
+                    </p>
+                  </RecordFlag>
+                ) : !isDraft && reportingReadOnly ? (
+                  <RecordFlag tone="info" label={tGeneratedValue('Submitted')}>
+                    <p>
+                      <GeneratedText id="m_14bf7f7592a82b" />
+                    </p>
+                  </RecordFlag>
+                ) : null}
               </div>
             }
             actions={
@@ -1694,104 +1712,7 @@ export default async function IncidentDetailPage({
             }
           />
         }
-        alerts={
-          <>
-            <RecordSyncBanner />
-            <GeneratedValue
-              value={
-                isDraft && !reportingReadOnly ? (
-                  <Alert variant="info">
-                    <AlertTitle>
-                      <GeneratedText id="m_07ae4a6d5cafa5" />
-                    </AlertTitle>
-                    <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                      <span>
-                        <GeneratedText id="m_10db8bfdbcea0f" />
-                      </span>
-                      <OnlineActionForm action={submitIncident} purpose="finish">
-                        <input type="hidden" name="id" value={id} />
-                        <Button size="sm" type="submit">
-                          <Send size={12} /> <GeneratedText id="m_09349052137c88" />
-                        </Button>
-                      </OnlineActionForm>
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                !isDraft && !locked && reportingReadOnly ? (
-                  <Alert variant="info">
-                    <AlertTitle>
-                      <GeneratedText id="m_15384a1aa091a5" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_14bf7f7592a82b" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                locked ? (
-                  <Alert variant="warning">
-                    <AlertTitle>
-                      <GeneratedText id="m_0577b8edc03bfa" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <span>
-                        <GeneratedText id="m_01381607e25f0d" />
-                        <GeneratedValue value={' '} />
-                        <GeneratedValue
-                          value={
-                            incident.closedAt
-                              ? formatDate(new Date(incident.closedAt), ctx.timezone, ctx.locale)
-                              : '—'
-                          }
-                        />
-                        <GeneratedText id="m_1f8b8158a7d63d" />
-                      </span>
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                incident.criticalInjury || incident.ministryOfLabourNotified ? (
-                  <Alert variant="destructive">
-                    <AlertTriangle size={16} />
-                    <AlertTitle>
-                      <GeneratedText id="m_0963d480ff963a" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedValue
-                        value={
-                          incident.criticalInjury ? <GeneratedText id="m_0df328fb5ce73a" /> : ''
-                        }
-                      />
-                      <GeneratedValue
-                        value={
-                          incident.ministryOfLabourNotified ? (
-                            <GeneratedValue
-                              value={regulatoryT('authorityWasNotified', {
-                                authority: regulatory.authorityName,
-                              })}
-                            />
-                          ) : (
-                            ''
-                          )
-                        }
-                      />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-          </>
-        }
+        alerts={<RecordSyncBanner />}
         subtabs={<SectionNav sections={sectionItems} />}
       >
         <div className="space-y-5">

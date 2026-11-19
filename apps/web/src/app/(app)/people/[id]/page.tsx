@@ -1,4 +1,5 @@
 import { employeeJournalDefault } from '@/lib/journal-default'
+import { RecordFlag } from '@/components/record-flag'
 import { RecordActionMenu } from '@/components/record-action-menu'
 import { TableToolbar } from '@/components/table-toolbar'
 import { FilterChips } from '@/components/filter-bar'
@@ -24,9 +25,6 @@ import {
   Trash2,
 } from 'lucide-react'
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Badge,
   Button,
   Card,
@@ -612,14 +610,32 @@ export default async function PersonDetailPage({
             back={{ href: '/people', label: 'Back to people' }}
             title={tGeneratedValue(`${person.firstName} ${person.lastName}`)}
             badge={
-              canReadPrivate ? (
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {canReadPrivate ? (
                   <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
                     <GeneratedValue value={person.status} />
                   </Badge>
-                  <GeneratedValue value={canEdit ? <RecordSyncStatus /> : null} />
-                </div>
-              ) : undefined
+                ) : null}
+                {!canEdit ? (
+                  <RecordFlag tone="info" label={tGeneratedValue('Read-only')}>
+                    <p>
+                      <GeneratedText id="m_078315010f70e4" />
+                    </p>
+                  </RecordFlag>
+                ) : null}
+                {syncOrigin ? (
+                  <RecordFlag tone="info" label={tGeneratedValue('Synced')}>
+                    <p className="font-medium">
+                      <GeneratedText id="m_147b8803799f06" />{' '}
+                      <GeneratedValue value={syncOrigin.connectionName} />
+                    </p>
+                    <p>
+                      <GeneratedText id="m_02191f52e79239" />
+                    </p>
+                  </RecordFlag>
+                ) : null}
+                <GeneratedValue value={canEdit ? <RecordSyncStatus /> : null} />
+              </div>
             }
             actions={
               canEdit ? (
@@ -870,36 +886,6 @@ export default async function PersonDetailPage({
                 value={
                   active === 'overview' ? (
                     <div className="space-y-4">
-                      <GeneratedValue
-                        value={
-                          !canEdit ? (
-                            <Alert variant="info">
-                              <AlertTitle>
-                                <GeneratedText id="m_0fdc17678fae80" />
-                              </AlertTitle>
-                              <AlertDescription>
-                                <GeneratedText id="m_078315010f70e4" />
-                              </AlertDescription>
-                            </Alert>
-                          ) : null
-                        }
-                      />
-                      <GeneratedValue
-                        value={
-                          syncOrigin ? (
-                            <Alert variant="info">
-                              <AlertTitle>
-                                <GeneratedText id="m_147b8803799f06" />{' '}
-                                <GeneratedValue value={syncOrigin.connectionName} />
-                              </AlertTitle>
-                              <AlertDescription>
-                                <GeneratedText id="m_02191f52e79239" />
-                              </AlertDescription>
-                            </Alert>
-                          ) : null
-                        }
-                      />
-
                       <Section
                         title={tGenerated('m_1b2eb1ab6d7edc')}
                         subtitle={tGenerated('m_11cc3c77f4e22f')}

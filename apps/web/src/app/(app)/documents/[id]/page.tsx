@@ -1,4 +1,5 @@
 import { loadDocumentControlHeaders } from '@beaconhs/db'
+import { RecordFlag } from '@/components/record-flag'
 import { currentDocumentAcknowledgment } from '@beaconhs/compliance'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -21,18 +22,7 @@ import {
   ShieldCheck,
   Trash2,
 } from 'lucide-react'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-} from '@beaconhs/ui'
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from '@beaconhs/ui'
 import { DocumentDrawers } from './_drawers'
 import {
   attachments,
@@ -808,9 +798,27 @@ export default async function DocumentDetailPage({
             <GeneratedValue
               value={
                 isOverdue ? (
-                  <Badge variant="destructive">
-                    <GeneratedText id="m_00a1f1b8ed0f00" />
-                  </Badge>
+                  <RecordFlag tone="danger" label={tGeneratedValue('Review overdue')}>
+                    <p>
+                      <GeneratedText id="m_04bfc1eaee3a4b" />{' '}
+                      <GeneratedValue value={doc.nextReviewOn} />.
+                      <GeneratedValue
+                        value={
+                          canRecordReview ? (
+                            <>
+                              <GeneratedValue value={' '} />
+                              <Link
+                                href={`${basePath}?tab=reviews&drawer=record-review`}
+                                className="font-medium underline-offset-2 hover:underline"
+                              >
+                                <GeneratedText id="m_0804c5d753d279" />
+                              </Link>
+                            </>
+                          ) : null
+                        }
+                      />
+                    </p>
+                  </RecordFlag>
                 ) : null
               }
             />
@@ -931,37 +939,6 @@ export default async function DocumentDetailPage({
             />
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4">
-            <GeneratedValue
-              value={
-                isOverdue ? (
-                  <Alert variant="warning" className="mb-4">
-                    <AlertTitle>
-                      <GeneratedText id="m_111449cf34e9af" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_04bfc1eaee3a4b" />{' '}
-                      <GeneratedValue value={doc.nextReviewOn} />.
-                      <GeneratedValue
-                        value={
-                          canRecordReview ? (
-                            <>
-                              <GeneratedValue value={' '} />
-                              <Link
-                                href={`${basePath}?tab=reviews&drawer=record-review`}
-                                className="font-medium underline-offset-2 hover:underline"
-                              >
-                                <GeneratedText id="m_0804c5d753d279" />
-                              </Link>
-                            </>
-                          ) : null
-                        }
-                      />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-
             <GeneratedValue
               value={
                 active === 'overview' ? (

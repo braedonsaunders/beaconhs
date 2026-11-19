@@ -93,6 +93,8 @@ Use the search button in the top bar to find incidents, corrective actions, peop
 
 Search covers useful record information even when it is not shown in the table. For example, find equipment by licence plate or VIN, people by email or full name, documents by document key or description, and hazard assessments by job scope or specific location. Module lists and their CSV exports use the same search fields as global search. Your permissions and the list's status and other filters still apply.
 
+On an open record, small flags beside the status show anything that needs attention, such as **Locked**, **Revoked**, **Missing**, **Critical incident**, or **Inspection overdue**. Tap a flag to read the details and any next step.
+
 ## Selecting a person
 
 Employee and person pickers offer active people who have not been deleted. Instructor, supervisor, owner, participant, and user-recipient choices also exclude inactive or deleted linked employees. An active account without an employee link can still be selected where the field asks for a user.

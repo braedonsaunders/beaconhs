@@ -1,4 +1,5 @@
 import { RecordActionMenu } from '@/components/record-action-menu'
+import { RecordFlag } from '@/components/record-flag'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -36,9 +37,6 @@ import {
   UserPlus,
 } from 'lucide-react'
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Badge,
   Button,
   DetailHeader,
@@ -861,25 +859,28 @@ export default async function PpeDetailPage({
                 >
                   <GeneratedValue value={item.status.replace('_', ' ')} />
                 </Badge>
-                <GeneratedValue
-                  value={
-                    countData.openIssueCount > 0 ? (
-                      <Badge variant="destructive">
-                        <GeneratedValue value={countData.openIssueCount} />{' '}
-                        <GeneratedText id="m_0d9877d90b6b7d" />
-                        <GeneratedValue
-                          value={
-                            countData.openIssueCount === 1 ? (
-                              ''
-                            ) : (
-                              <GeneratedText id="m_00ded356f0f424" />
-                            )
-                          }
-                        />
-                      </Badge>
-                    ) : null
-                  }
-                />
+                {countData.openIssueCount > 0 ? (
+                  <RecordFlag tone="danger" label={tGeneratedValue('Open issues')}>
+                    <p>
+                      <GeneratedValue value={countData.openIssueCount} />{' '}
+                      <GeneratedText id="m_0d9877d90b6b7d" />
+                      <GeneratedValue
+                        value={
+                          countData.openIssueCount === 1 ? (
+                            ''
+                          ) : (
+                            <GeneratedText id="m_00ded356f0f424" />
+                          )
+                        }
+                      />
+                    </p>
+                    {openIssues[0] ? (
+                      <p className="text-slate-600 dark:text-slate-300">
+                        <GeneratedValue value={openIssues[0].description} />
+                      </p>
+                    ) : null}
+                  </RecordFlag>
+                ) : null}
                 <GeneratedValue
                   value={
                     expiringIn !== null && expiringIn <= 30 ? (
@@ -903,6 +904,23 @@ export default async function PpeDetailPage({
                     ) : null
                   }
                 />
+                {hasInspections && inspectionDueIn !== null && inspectionDueIn <= 0 ? (
+                  <RecordFlag tone="danger" label={tGeneratedValue('Inspection overdue')}>
+                    <p>
+                      <GeneratedText id="m_02af2c143301ac" />{' '}
+                      <GeneratedValue value={item.nextInspectionDue} />
+                      <GeneratedText id="m_01a8c692b32591" />
+                    </p>
+                  </RecordFlag>
+                ) : null}
+                {showCertificates && annualDueIn !== null && annualDueIn <= 0 ? (
+                  <RecordFlag tone="danger" label={tGeneratedValue('Certificate overdue')}>
+                    <p>
+                      <GeneratedText id="m_0134ca707501cc" />{' '}
+                      <GeneratedValue value={item.nextAnnualInspectionDue} />.
+                    </p>
+                  </RecordFlag>
+                ) : null}
                 <GeneratedValue value={canManage ? <RecordSyncStatus /> : null} />
               </div>
             }
@@ -983,56 +1001,7 @@ export default async function PpeDetailPage({
             }
           />
         }
-        alerts={
-          <>
-            <RecordSyncBanner />
-            <GeneratedValue
-              value={
-                countData.openIssueCount > 0 && openIssues[0] ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      <GeneratedText id="m_1a8f774c8d5487" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedValue value={openIssues[0]!.description} />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                hasInspections && inspectionDueIn !== null && inspectionDueIn <= 0 ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      <GeneratedText id="m_0efcb286ead8a2" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_02af2c143301ac" />{' '}
-                      <GeneratedValue value={item.nextInspectionDue} />
-                      <GeneratedText id="m_01a8c692b32591" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                showCertificates && annualDueIn !== null && annualDueIn <= 0 ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      <GeneratedText id="m_044bdd8da8ecba" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_0134ca707501cc" />{' '}
-                      <GeneratedValue value={item.nextAnnualInspectionDue} />.
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-          </>
-        }
+        alerts={<RecordSyncBanner />}
         subtabs={
           <TabNav
             basePath={basePath}

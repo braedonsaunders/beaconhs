@@ -1,4 +1,5 @@
 import { RecordActionMenu } from '@/components/record-action-menu'
+import { RecordFlag } from '@/components/record-flag'
 import { FilePreview } from '@/components/file-preview'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -18,9 +19,6 @@ import {
   Trash2,
 } from 'lucide-react'
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Badge,
   Button,
   Card,
@@ -285,9 +283,14 @@ export default async function TrainingRecordPage({
                 <GeneratedValue
                   value={
                     isRevoked ? (
-                      <Badge variant="destructive">
-                        <GeneratedText id="m_1ae9fac75309ce" />
-                      </Badge>
+                      <RecordFlag tone="danger" label={tGeneratedValue('Revoked')}>
+                        <p className="font-medium">
+                          <GeneratedText id="m_13ef5a4866fb5d" />
+                        </p>
+                        <p>
+                          <GeneratedText id="m_18b63410e5f4b0" />
+                        </p>
+                      </RecordFlag>
                     ) : null
                   }
                 />
@@ -329,25 +332,7 @@ export default async function TrainingRecordPage({
             }
           />
         }
-        alerts={
-          <>
-            <RecordSyncBanner />
-            <GeneratedValue
-              value={
-                isRevoked ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      <GeneratedText id="m_13ef5a4866fb5d" />
-                    </AlertTitle>
-                    <AlertDescription>
-                      <GeneratedText id="m_18b63410e5f4b0" />
-                    </AlertDescription>
-                  </Alert>
-                ) : null
-              }
-            />
-          </>
-        }
+        alerts={<RecordSyncBanner />}
         subtabs={
           <TabNav
             basePath={basePath}
