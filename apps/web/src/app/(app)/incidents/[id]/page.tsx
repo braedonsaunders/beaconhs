@@ -1719,14 +1719,6 @@ export default async function IncidentDetailPage({
           <GeneratedValue
             value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
           />
-          <header>
-            <h2 className="text-xl font-semibold">
-              <GeneratedText id="m_06e75603508223" />
-            </h2>
-            <p className="text-sm text-slate-500">
-              <GeneratedText id="m_1cc4c700a65b60" />
-            </p>
-          </header>
           {/* ===================== OVERVIEW ===================== */}
           <section id="section-overview" className="scroll-mt-2 space-y-5">
             {/* Hero — investigation progress ring */}
@@ -2530,14 +2522,8 @@ export default async function IncidentDetailPage({
               />
             </Section>
           </section>
-          <header className="border-t border-slate-200 pt-6 dark:border-slate-800">
-            <h2 className="text-xl font-semibold">
-              <GeneratedText id="m_0909d0f0104f04" />
-            </h2>
-            <p className="text-sm text-slate-500">
-              <GeneratedText id="m_1f4c0b0a3c92d8" />
-            </p>
-          </header>
+          {/* Reporting ends here; the section tabs label the Investigating group. */}
+          <hr className="border-slate-200 dark:border-slate-800" />
           {/* ===================== LOST TIME ===================== */}
           <section id="section-lost-time" className="scroll-mt-2">
             <Section
