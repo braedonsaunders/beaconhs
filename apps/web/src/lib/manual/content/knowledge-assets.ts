@@ -1164,6 +1164,8 @@ Select a work-order row to open its full drawer. Edit details and work notes, ch
 
 On an equipment record, **Condition** uses one to five stars. In **Log entries**, **Kind** sits beside search.
 
+To add a photo of a unit, open the unit. Under the picture at the top of its card, tap **Take photo or upload** to use the camera or choose a picture from your device. The new photo replaces the old one. Tap **Remove photo** to take it off. Equipment managers can change unit photos, and every change is recorded in the unit's history.
+
 In the inspection type builder, open **Settings → Behaviour** and set **Allow N/A**. This applies to new inspections; existing inspections keep their original checklist.
 
 ## Automatic emails and alerts (managers)

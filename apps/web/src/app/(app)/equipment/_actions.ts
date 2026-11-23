@@ -31,6 +31,8 @@ import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { optionalTextInput, optionalUuidInput, requireEnumInput } from '@/lib/mutation-input'
 import { csvRow } from '@/lib/csv'
+import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
+import { isUuid } from '@/lib/list-params'
 import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
 import {
   lockEquipmentCustodyRows,
@@ -451,6 +453,50 @@ export async function bulkExportEquipmentCsv(args: {
 // This does not grant equipment editing or management.
 
 const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
+
+/**
+ * Set or clear a unit's photo. The uploaded file must be an image in this
+ * workspace; the previous photo stays in storage as part of the audit trail.
+ */
+export async function setEquipmentPhoto(
+  itemId: string,
+  attachmentId: string | null,
+): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
+  if (!isUuid(itemId)) throw new Error('Equipment item not found')
+  await ctx.db(async (tx) => {
+    const [item] = await tx
+      .select({
+        id: equipmentItems.id,
+        photoAttachmentId: equipmentItems.photoAttachmentId,
+        deletedAt: equipmentItems.deletedAt,
+      })
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.tenantId, ctx.tenantId), eq(equipmentItems.id, itemId)))
+      .limit(1)
+      .for('update')
+    if (!item || item.deletedAt) throw new Error('Equipment item not found')
+    const [photoId = null] = attachmentId
+      ? await validateTenantImageAttachmentIdsInTx(tx, ctx.tenantId, [attachmentId])
+      : []
+    if (photoId === item.photoAttachmentId) return
+    await tx
+      .update(equipmentItems)
+      .set({ photoAttachmentId: photoId })
+      .where(and(eq(equipmentItems.tenantId, ctx.tenantId), eq(equipmentItems.id, itemId)))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment',
+      entityId: itemId,
+      action: 'update',
+      summary: photoId ? 'Changed photo' : 'Removed photo',
+      before: { photoAttachmentId: item.photoAttachmentId },
+      after: { photoAttachmentId: photoId },
+    })
+  })
+  revalidatePath(`/equipment/${itemId}`)
+  revalidatePath('/equipment')
+}
 
 export async function checkInEquipment(formData: FormData) {
   const ctx = await requireRequestContext()

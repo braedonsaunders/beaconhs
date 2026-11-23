@@ -1,4 +1,5 @@
 import { complianceDate, resolveComplianceClock } from '@beaconhs/compliance'
+import { EquipmentPhotoCard } from './_photo-card'
 import { RecordFlag } from '@/components/record-flag'
 import { setEquipmentDeleted } from '../_lifecycle-actions'
 import { transferLocation, checkOutFromItem } from './_custody-actions'
@@ -79,7 +80,6 @@ import {
   LiveSelect,
   LiveToggle,
 } from '@/components/live-field'
-import { RawImage } from '@/components/raw-image'
 import {
   OfflineRecordProvider,
   RecordSyncBanner,
@@ -1267,32 +1267,12 @@ export default async function EquipmentDetailPage({
             <aside className="min-w-0 space-y-3">
               <Card>
                 <CardContent className="space-y-3 p-5 text-sm">
-                  <GeneratedValue
-                    value={
-                      photoUrl ? (
-                        <a
-                          href={photoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block"
-                          title={tGenerated('m_1facadad2a5607')}
-                        >
-                          {/* object-contain + a capped height shows portrait and
-                        landscape photos in full without cropping; the neutral
-                        backdrop fills the letterbox gap. */}
-                          <RawImage
-                            src={photoUrl}
-                            alt={tGeneratedValue(item.name)}
-                            optimizationReason="authenticated"
-                            className="max-h-56 w-full rounded-md bg-slate-100 object-contain dark:bg-slate-800"
-                          />
-                        </a>
-                      ) : (
-                        <div className="flex h-32 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                          <Truck size={48} />
-                        </div>
-                      )
-                    }
+                  <EquipmentPhotoCard
+                    itemId={item.id}
+                    name={tGeneratedValue(item.name)}
+                    photoUrl={photoUrl}
+                    openLabel={tGenerated('m_1facadad2a5607')}
+                    canEdit={canManageEquipment}
                   />
                   <div className="text-center">
                     <div className="text-base font-semibold">
