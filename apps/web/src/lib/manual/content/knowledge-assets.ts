@@ -830,7 +830,7 @@ Under **Usage counters**, select **Update reading** to update engine hours, kilo
 2. Enter **Completed on** and the reading for each usage condition. Add **Work performed / reference** and **Cost (optional)** if available.
 3. Select **Record completed**.
 
-The next due points advance from the actual completion date and readings. A later equipment reading is kept when recording earlier work. The **Log** keeps completion notes, readings, cost, and previous conditions. Use a maintenance log entry to attach a receipt. Saving setup or editing notes does not record work as completed.
+The next due points advance from the actual completion date and readings. A later equipment reading is kept when recording earlier work. Readings for meters the task does not count on are optional and only update the unit. A reading the task counts on cannot be lower than the one recorded at its last completion. If that meter was replaced or reset, edit the task and select **A meter was replaced or reset** first. The **Log** keeps completion notes, readings, cost, and previous conditions. Use a maintenance log entry to attach a receipt. Saving setup or editing notes does not record work as completed.
 
 In **Inspections**, schedules with a checklist have **Start**. Schedules for outside inspections have **Record completion**: enter the completion date and certificate reference or notes. Saving advances the next due date and adds history. Inspection names and intervals are configured by your company.
 

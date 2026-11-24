@@ -65,6 +65,22 @@ export function parseServicePlan(input: ServicePlanInput) {
     })),
   }
 }
+/**
+ * A plan's completion baseline holds readings only for the meters its usage
+ * conditions count on. Other meters entered at completion go to the unit and
+ * the log, never into the baseline — a calendar oil change must not be
+ * blocked by an unrelated hour meter that was replaced or re-based.
+ */
+function usageBaseline(readings: Record<string, number>, rules: ServiceRule[]) {
+  const meters = new Set(rules.flatMap((rule) => (rule.kind === 'meter' ? [rule.meter] : [])))
+  return Object.fromEntries(Object.entries(readings).filter(([meter]) => meters.has(meter)))
+}
+function belowBaselineError(name: string, unit: string, reading: number, previous: number) {
+  return new Error(
+    `${name} (${reading} ${unit}) is below the ${previous} ${unit} recorded at the last completion. ` +
+      'If the meter was replaced or reset, edit this maintenance and tick "A meter was replaced or reset" first.',
+  )
+}
 function validReading(value: unknown): number {
   if (
     typeof value !== 'number' ||
@@ -133,7 +149,9 @@ export async function persistServicePlan(
     previousPlan.isActive === parsed.isActive
   const values = {
     category: parsed.category,
-    lastReadings: parsed.resetReadings ? {} : (previousPlan?.lastReadings ?? {}),
+    lastReadings: parsed.resetReadings
+      ? {}
+      : usageBaseline(previousPlan?.lastReadings ?? {}, parsed.rules),
     name: parsed.name,
     notes: parsed.notes,
     rules: parsed.rules,
@@ -234,6 +252,7 @@ export async function completeServicePlan(
     return { ...rule, dueAt: completionReading + rule.every }
   })
   validateServiceRules(rules)
+  const usage = usageBaseline(plan.lastReadings, rules)
   const current = {
     engine_hours: item.currentHours === null ? null : Number(item.currentHours),
     odometer: item.currentOdometer,
@@ -248,8 +267,14 @@ export async function completeServicePlan(
         value: reading,
       })
       const previous = current[meterId]
-      if (plan.lastReadings[meterId] !== undefined && reading < plan.lastReadings[meterId]!)
-        throw new Error('Completion readings cannot be below the previous completion reading.')
+      const baseline = usage[meterId]
+      if (baseline !== undefined && reading < baseline)
+        throw belowBaselineError(
+          meterId === 'engine_hours' ? 'Engine hours' : 'Odometer',
+          meterId === 'engine_hours' ? 'hours' : 'km',
+          reading,
+          baseline,
+        )
       if (meterId === 'odometer' && (!Number.isInteger(reading) || reading > 2147483647))
         throw new Error('Enter a valid whole-number odometer reading.')
       if (
@@ -276,8 +301,9 @@ export async function completeServicePlan(
         .for('update')
       if (!meter) throw new Error('Usage counter was not found.')
       meterSnapshots.set(meterId, { name: meter.name, unit: meter.unit, value: reading })
-      if (plan.lastReadings[meterId] !== undefined && reading < plan.lastReadings[meterId]!)
-        throw new Error('Completion readings cannot be below the previous completion reading.')
+      const baseline = usage[meterId]
+      if (baseline !== undefined && reading < baseline)
+        throw belowBaselineError(meter.name, meter.unit, reading, baseline)
       if (meter.currentValue === null || reading > Number(meter.currentValue))
         await tx
           .update(equipmentMeters)
@@ -295,7 +321,7 @@ export async function completeServicePlan(
     .update(equipmentServicePlans)
     .set({
       rules,
-      lastReadings: Object.fromEntries(completionReadings),
+      lastReadings: usageBaseline(Object.fromEntries(completionReadings), rules),
       lastCompletedOn: completedOn,
       cycleId: randomUUID(),
       notifiedCycleId: null,

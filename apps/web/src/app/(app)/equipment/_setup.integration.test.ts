@@ -301,7 +301,7 @@ describe('atomic guided equipment setup and servicing', () => {
       readings: { engine_hours: 150.5 },
     }
     expect(await recordServiceCompletion(completion)).toMatchObject({ ok: true })
-    const rows = await rowsFor(input.requestId)
+    let rows = await rowsFor(input.requestId)
     expect(rows.plans[0]!.rules).toEqual([
       { kind: 'calendar', every: 3, unit: 'month', dueOn: '2026-04-30' },
     ])
@@ -310,6 +310,28 @@ describe('atomic guided equipment setup and servicing', () => {
       readings: { engine_hours: 150.5 },
       meterSnapshots: { engine_hours: { name: 'Engine hours', unit: 'hours', value: 150.5 } },
     })
+    // Hours entered for a calendar plan are not a completion baseline.
+    expect(rows.plans[0]!.lastReadings).toEqual({})
+    // A legacy baseline above the unit's replaced hour meter must not block the
+    // next calendar oil change.
+    await ctx.db((tx) =>
+      tx
+        .update(equipmentServicePlans)
+        .set({ lastReadings: { engine_hours: 9851 } })
+        .where(eq(equipmentServicePlans.id, plan.id)),
+    )
+    expect(
+      await recordServiceCompletion({
+        ...completion,
+        cycleId: rows.plans[0]!.cycleId,
+        completedOn: '2026-02-15',
+        readings: { engine_hours: 187 },
+      }),
+    ).toMatchObject({ ok: true })
+    rows = await rowsFor(input.requestId)
+    expect(rows.plans[0]!.lastReadings).toEqual({})
+    expect(rows.plans[0]!.lastCompletedOn).toBe('2026-02-15')
+    expect(rows.logs).toHaveLength(2)
     const next = rows.plans[0]!
     for (const key of ['__proto__', 'constructor', 'prototype']) {
       expect(
@@ -321,7 +343,7 @@ describe('atomic guided equipment setup and servicing', () => {
       ).toMatchObject({ ok: false })
     }
     expect((await rowsFor(input.requestId)).plans[0]!.cycleId).toBe(next.cycleId)
-    expect((await rowsFor(input.requestId)).logs).toHaveLength(1)
+    expect((await rowsFor(input.requestId)).logs).toHaveLength(2)
     expect(
       await recordServiceCompletion({
         ...completion,
@@ -329,7 +351,7 @@ describe('atomic guided equipment setup and servicing', () => {
         readings: { [otherMeter]: 30 },
       }),
     ).toMatchObject({ ok: false })
-    expect((await rowsFor(input.requestId)).logs).toHaveLength(1)
+    expect((await rowsFor(input.requestId)).logs).toHaveLength(2)
     expect(
       await recordServiceCompletion({
         ...completion,
@@ -490,6 +512,17 @@ describe('atomic guided equipment setup and servicing', () => {
     rows = await rowsFor(input.requestId)
     expect(Number(rows.items[0]?.currentHours)).toBe(1000)
     expect(rows.logs).toHaveLength(2)
+    expect(rows.plans[0]?.lastReadings).toEqual({ engine_hours: 500 })
+    // Hours are a usage condition here, so going backwards still needs a reset.
+    const backwards = await recordServiceCompletion({
+      ...args,
+      cycleId: rows.plans[0]!.cycleId,
+      completedOn: '2026-03-15',
+      readings: { engine_hours: 400 },
+    })
+    expect(backwards).toMatchObject({ ok: false })
+    if (!backwards.ok) expect(backwards.error).toContain('A meter was replaced or reset')
+    expect((await rowsFor(input.requestId)).logs).toHaveLength(2)
   })
   it('does not rearm an alerted cycle when only its name or notes are edited', async () => {
     const input = setup()

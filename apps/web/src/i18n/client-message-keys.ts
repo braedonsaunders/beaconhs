@@ -3372,7 +3372,6 @@ export const CLIENT_MESSAGE_KEYS: readonly string[] = [
   'm_0bb32189a6d114',
   'm_0bb347c23433ea',
   'm_0bb3c5fab55c31',
-  'm_0bb5863f711ca2',
   'm_0bb62460374184',
   'm_0bb649d5a9f63f',
   'm_0bb6621f58446d',

@@ -736,6 +736,13 @@
       "when": 1794085200000,
       "tag": "0105_vehicle_log_template_rows_editor_saved",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1794171600000,
+      "tag": "0106_service_plan_usage_baselines",
+      "breakpoints": true
     }
   ]
 }
