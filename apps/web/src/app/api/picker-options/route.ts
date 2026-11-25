@@ -2139,14 +2139,15 @@ async function loadOptions(
     // What inspections are actually SET UP on one unit: its pre-use checklist
     // plus every active schedule's type. contextId is the EQUIPMENT ITEM id
     // (not its type) — a unit inherits its inspections, it does not shop for
-    // them from the tenant-wide catalogue.
+    // them from the tenant-wide catalogue. What is set up on the unit is
+    // offered even when its form is bound to another equipment type; the
+    // start action allows it too, and the unit page flags the mismatch.
     if (lookup === 'equipment-item-scheduled-inspection-types') {
       const [item] = input.contextId
         ? await tx
             .select({
               preUseTypeId: equipmentItems.preUseInspectionTypeId,
               ownership: equipmentItems.ownership,
-              typeId: equipmentItems.typeId,
             })
             .from(equipmentItems)
             .where(
@@ -2188,10 +2189,6 @@ async function loadOptions(
             eq(equipmentInspectionTypes.tenantId, ctx.tenantId),
             inArray(equipmentInspectionTypes.id, ids),
             eq(equipmentInspectionTypes.isActive, true),
-            or(
-              isNull(equipmentInspectionTypes.appliesToTypeId),
-              item.typeId ? eq(equipmentInspectionTypes.appliesToTypeId, item.typeId) : undefined,
-            ),
             // Rented gear is only ever checked before use; its periodic
             // certification belongs to the rental company.
             item.ownership === 'rented' ? eq(equipmentInspectionTypes.isPreUse, true) : undefined,

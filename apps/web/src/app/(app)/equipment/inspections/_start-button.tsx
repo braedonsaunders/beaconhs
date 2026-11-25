@@ -45,7 +45,8 @@ export function StartInspectionButton({
     start(async () => {
       try {
         await flushRecordSaves()
-        await startEquipmentInspection(fd)
+        const result = await startEquipmentInspection(fd)
+        toast.error(result.error)
       } catch (error) {
         unstable_rethrow(error)
         toast.error(

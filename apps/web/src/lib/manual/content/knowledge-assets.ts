@@ -974,7 +974,7 @@ On a unit's page, every field — including company-specific fields — saves to
 ## Tips
 
 - A red **missing** badge means someone reported the unit missing. If you find it, tell your supervisor.
-- Each unit names the **Pre-use inspection** form its crew gets. If that form belongs to a different equipment type, the unit shows a warning — a boom lift handed the scissor-lift checklist is the classic case. Managers set which equipment type a form belongs to under **Manage** → **Inspection types**; a form left unassigned can be used on anything.
+- Each unit names the **Pre-use inspection** form its crew gets. If that form belongs to a different equipment type, the unit shows a warning — a boom lift handed the scissor-lift checklist is the classic case. Crews can still start the form the unit names. To clear the warning, correct the unit's **Type** or pick the right form. Managers set which equipment type a form belongs to under **Manage** → **Inspection types**; a form left unassigned can be used on anything.
 - **Print / PDF** on a unit gives you its asset record sheet. **Actions → QR** prints the tag that goes on the unit — they are two different documents.
 - Need to inspect a unit before use? See [Inspections](/help/equipment-inspections).
 

@@ -467,6 +467,88 @@ describe('atomic guided equipment setup and servicing', () => {
     expect(rental[0]).toMatchObject({ isPreUse: true, isRental: true, equipmentItemId: null })
   })
 
+  it('starts the pre-use set up on a unit even when its form is bound to another equipment type, and returns refusals', async () => {
+    // A boom lift registered under the wrong equipment type still hands its
+    // crew the boom checklist it was given.
+    const boomTypeId = randomUUID(),
+      boomPreUseId = randomUUID(),
+      strayId = randomUUID()
+    await ctx.db(async (tx) => {
+      await tx
+        .insert(equipmentTypes)
+        .values({ id: boomTypeId, tenantId, categoryId, name: 'Booms' })
+      await tx.insert(equipmentInspectionTypes).values([
+        {
+          id: boomPreUseId,
+          tenantId,
+          name: 'Boom pre-use',
+          appliesToTypeId: boomTypeId,
+          isPreUse: true,
+        },
+        { id: strayId, tenantId, name: 'Boom annual', appliesToTypeId: boomTypeId },
+      ])
+      await tx.insert(equipmentInspectionCriteria).values([
+        {
+          tenantId,
+          inspectionTypeId: boomPreUseId,
+          sequence: 0,
+          question: 'Platform gate closes?',
+        },
+        { tenantId, inspectionTypeId: strayId, sequence: 0, question: 'Welds sound?' },
+      ])
+    })
+    const input = setup()
+    expect(await createEquipmentFromSetup(input)).toMatchObject({ ok: true })
+    const start = (typeId: string) => {
+      const form = new FormData()
+      form.set('typeId', typeId)
+      form.set('targetMode', 'registered')
+      form.set('equipmentItemId', input.requestId)
+      return startEquipmentInspection(form)
+    }
+    const records = () =>
+      ctx.db((tx) =>
+        tx
+          .select()
+          .from(equipmentInspectionRecords)
+          .where(eq(equipmentInspectionRecords.equipmentItemId, input.requestId)),
+      )
+    const before = (await records()).length
+    // Hand-picked type for another equipment type: refused with its reason.
+    await ctx.db((tx) =>
+      tx
+        .update(equipmentItems)
+        .set({ preUseInspectionTypeId: null })
+        .where(eq(equipmentItems.id, input.requestId)),
+    )
+    await ctx.db((tx) =>
+      tx
+        .delete(equipmentInspectionSchedules)
+        .where(eq(equipmentInspectionSchedules.equipmentItemId, input.requestId)),
+    )
+    expect(await start(strayId)).toEqual({
+      ok: false,
+      error: 'This inspection type does not apply to the selected equipment item',
+    })
+    // Set up on the unit as its pre-use: starts, as a pre-use inspection.
+    await ctx.db((tx) =>
+      tx
+        .update(equipmentItems)
+        .set({ preUseInspectionTypeId: boomPreUseId })
+        .where(eq(equipmentItems.id, input.requestId)),
+    )
+    await expect(start(boomPreUseId)).rejects.toThrow('NEXT_REDIRECT')
+    const after = await records()
+    expect(after).toHaveLength(before + 1)
+    expect(after.find((r) => r.inspectionTypeId === boomPreUseId)).toMatchObject({ isPreUse: true })
+    // Not set up on the unit: refused with its reason, nothing created.
+    expect(await start(strayId)).toEqual({
+      ok: false,
+      error: 'That inspection is not set up on this equipment item',
+    })
+    expect(await records()).toHaveLength(before + 1)
+  })
+
   it('advances from actual completion evidence once, clamps calendar months, and preserves later meter readings', async () => {
     const input = setup()
     await createEquipmentFromSetup(input)

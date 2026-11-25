@@ -7,7 +7,7 @@
 // across separate requests.
 
 import { and, asc, eq, inArray, isNull, notInArray } from 'drizzle-orm'
-import { redirect } from 'next/navigation'
+import { redirect, unstable_rethrow } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import {
   attachments,
@@ -20,6 +20,7 @@ import {
   orgUnits,
 } from '@beaconhs/db/schema'
 import { assertCan, type RequestContext } from '@beaconhs/tenant'
+import { pgError } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
@@ -91,10 +92,32 @@ async function withLockedRecordMutation(
   })
 }
 
-/** Create the record, criteria snapshot, and audit as one atomic unit. */
-export async function startEquipmentInspection(formData: FormData) {
+/**
+ * Create the record, criteria snapshot, and audit as one atomic unit, then
+ * redirect to it. When it cannot start, the reason is returned rather than
+ * thrown: production hides the message of an error thrown from a server
+ * action, so the crew would see a generic React error instead of why.
+ */
+export async function startEquipmentInspection(
+  formData: FormData,
+): Promise<{ ok: false; error: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.inspect')
+  try {
+    return await createEquipmentInspection(ctx, formData)
+  } catch (error) {
+    unstable_rethrow(error)
+    return {
+      ok: false,
+      error:
+        !pgError(error) && error instanceof Error
+          ? error.message
+          : 'Could not start the inspection. Try again.',
+    }
+  }
+}
+
+async function createEquipmentInspection(ctx: RequestContext, formData: FormData): Promise<never> {
   const typeId = String(formData.get('typeId') ?? '').trim()
   const targetMode = formData.get('targetMode') === 'rental' ? 'rental' : 'registered'
   const equipmentItemIdRaw = String(formData.get('equipmentItemId') ?? '').trim()
@@ -156,9 +179,6 @@ export async function startEquipmentInspection(formData: FormData) {
         personId: item.currentHolderPersonId,
       })
       if (!visible) throw new Error('Equipment item not found')
-      if (type.appliesToTypeId && item.typeId !== type.appliesToTypeId) {
-        throw new Error('This inspection type does not apply to the selected equipment item')
-      }
       // Rented gear is only ever checked before use — we do not own its
       // periodic certification programme, the rental company does.
       if (item.ownership === 'rented' && !isDailyOrPreUseInspection(type)) {
@@ -185,6 +205,13 @@ export async function startEquipmentInspection(formData: FormData) {
       // a freshly registered unit is still possible.
       if (offered.size > 0 && !offered.has(typeId)) {
         throw new Error('That inspection is not set up on this equipment item')
+      }
+      // What is set up on the unit is the decision of record, even when its
+      // form is bound to another equipment type (the unit page flags that
+      // mismatch to managers). Only a hand-picked type must fit the unit —
+      // never block a crew from the checklist the unit hands them.
+      if (!offered.has(typeId) && type.appliesToTypeId && item.typeId !== type.appliesToTypeId) {
+        throw new Error('This inspection type does not apply to the selected equipment item')
       }
     }
     if (siteOrgUnitIdRaw) {

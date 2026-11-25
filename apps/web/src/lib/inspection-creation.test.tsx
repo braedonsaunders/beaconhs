@@ -315,6 +315,21 @@ describe('inspection creation', () => {
       'Your entries are kept',
     )
     expect(container.querySelector<HTMLInputElement>('#rentalName')!.value).toBe('Rental crane')
+    // A refusal comes back as a returned reason (production hides thrown
+    // server-action messages); the crew sees why.
+    state.start.mockResolvedValue({
+      ok: false,
+      error: 'Rented equipment can only have pre-use inspections',
+    })
+    await act(async () =>
+      [...container.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Start inspection')!
+        .click(),
+    )
+    expect(state.start).toHaveBeenCalledTimes(2)
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Rented equipment can only have pre-use inspections',
+    )
     await act(async () =>
       [...container.querySelectorAll('button')]
         .find((button) => button.textContent === 'Registered unit')!

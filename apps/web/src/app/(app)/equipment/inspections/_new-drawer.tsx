@@ -74,7 +74,8 @@ export function NewEquipmentInspectionDrawer({
     start(async () => {
       try {
         await flushRecordSaves()
-        await startEquipmentInspection(fd)
+        const result = await startEquipmentInspection(fd)
+        setError(`${tGenerated('m_0598e8bbe9e9ea')} ${result.error}`)
       } catch (error) {
         unstable_rethrow(error)
         setError(
