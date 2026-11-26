@@ -11,8 +11,8 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ClipboardCheck, Plus, Settings2, Trash2 } from 'lucide-react'
-import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { ClipboardCheck, Plus, Settings2 } from 'lucide-react'
+import { and, asc, count, desc, eq, isNotNull, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -27,8 +27,7 @@ import {
 } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { canDeleteOwnRecord } from '@/lib/own-record-policy'
-import { ConfirmedSubmitButton } from '@/components/record-header-actions'
-import { bulkDeleteBuilderResponses } from './_bulk-delete-action'
+import { ResponseSelectAll, ResponseSelectCell, ResponseSelection } from './_selection'
 import { localizeText, type AppLocale } from '@beaconhs/i18n'
 import {
   formResponses,
@@ -300,7 +299,25 @@ export default async function AppRecordsPage({
       .from(formResponses)
       .where(and(eq(formResponses.templateId, id), isNull(formResponses.deletedAt), vis))
       .groupBy(formResponses.status)
+    // Subject = the person a record is about (set by flows, spawned records
+    // or the API). Most apps never have one, so it is only a default column
+    // when this app does.
+    const [withSubject] = listConfig.columns?.length
+      ? []
+      : await tx
+          .select({ id: formResponses.id })
+          .from(formResponses)
+          .where(
+            and(
+              eq(formResponses.templateId, id),
+              isNull(formResponses.deletedAt),
+              isNotNull(formResponses.subjectPersonId),
+              vis,
+            ),
+          )
+          .limit(1)
     return {
+      hasSubjects: Boolean(withSubject),
       schema: ver?.schema ?? null,
       rows: data,
       total,
@@ -309,7 +326,7 @@ export default async function AppRecordsPage({
     }
   })
 
-  const { schema, rows, total, page, statusCounts } = result
+  const { schema, rows, total, page, statusCounts, hasSubjects } = result
   const tmpl = template
   const basePath = `/apps/templates/${id}/records`
   const sortProps = { basePath, currentParams: sp, dir: listParams.dir }
@@ -332,7 +349,16 @@ export default async function AppRecordsPage({
 
   // Resolve display columns from config; index app fields by id for headers + cells.
   const columns =
-    listConfig.columns && listConfig.columns.length > 0 ? listConfig.columns : DEFAULT_COLUMNS
+    listConfig.columns && listConfig.columns.length > 0
+      ? listConfig.columns
+      : DEFAULT_COLUMNS.filter((col) => hasSubjects || col.key !== 'subject')
+  const canDeleteRow = (response: (typeof rows)[number]['response']) =>
+    !response.locked &&
+    (can(ctx, 'forms.response.delete') ||
+      canDeleteOwnRecord(ctx, 'forms.response.delete.own', response.submittedBy))
+  const selectableIds = rows
+    .filter(({ response }) => canDeleteRow(response))
+    .map(({ response }) => response.id)
   const fieldMap = new Map<string, SchemaField>()
   if (schema) {
     for (const sec of schema.sections) {
@@ -402,27 +428,13 @@ export default async function AppRecordsPage({
             />
           ) : (
             <>
-              <form action={bulkDeleteBuilderResponses}>
-                <input type="hidden" name="templateId" value={id} />
-                {canBulkDelete ? (
-                  <div className="mb-3">
-                    <ConfirmedSubmitButton
-                      title={tGeneratedValue('Delete selected responses?')}
-                      message={tGeneratedValue(
-                        'Selected unlocked responses will be archived and removed from linked assessments.',
-                      )}
-                      confirmLabel={tGeneratedValue('Delete selected')}
-                    >
-                      <Trash2 size={14} /> <GeneratedValue value="Delete selected" />
-                    </ConfirmedSubmitButton>
-                  </div>
-                ) : null}
+              <ResponseSelection templateId={id} selectableIds={selectableIds}>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       {canBulkDelete ? (
-                        <TableHead>
-                          <GeneratedValue value="Select" />
+                        <TableHead className="w-8">
+                          {selectableIds.length > 0 ? <ResponseSelectAll /> : null}
                         </TableHead>
                       ) : null}
                       <GeneratedValue
@@ -460,7 +472,7 @@ export default async function AppRecordsPage({
                           const cell = (col: ListColumnConfig) => {
                             if (col.source === 'field') {
                               return (
-                                <span className="text-xs text-slate-600">
+                                <span className="text-xs text-slate-600 dark:text-slate-300">
                                   <GeneratedValue
                                     value={formatListCell(
                                       fieldMap.get(col.key),
@@ -484,7 +496,7 @@ export default async function AppRecordsPage({
                                 )
                               case 'subject':
                                 return (
-                                  <span className="text-xs text-slate-600">
+                                  <span className="text-xs text-slate-600 dark:text-slate-300">
                                     <GeneratedValue
                                       value={subject || <span className="text-slate-400">—</span>}
                                     />
@@ -492,7 +504,7 @@ export default async function AppRecordsPage({
                                 )
                               case 'site':
                                 return (
-                                  <span className="text-xs text-slate-600">
+                                  <span className="text-xs text-slate-600 dark:text-slate-300">
                                     <GeneratedValue value={site?.name ?? '—'} />
                                   </span>
                                 )
@@ -514,7 +526,7 @@ export default async function AppRecordsPage({
                                 )
                               case 'created_at':
                                 return (
-                                  <span className="text-xs text-slate-600 tabular-nums">
+                                  <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                                     <GeneratedValue
                                       value={
                                         response.createdAt
@@ -530,7 +542,7 @@ export default async function AppRecordsPage({
                                 )
                               case 'submitted_at':
                                 return (
-                                  <span className="text-xs text-slate-600 tabular-nums">
+                                  <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                                     <GeneratedValue
                                       value={
                                         response.submittedAt
@@ -546,7 +558,7 @@ export default async function AppRecordsPage({
                                 )
                               case 'submittedBy':
                                 return (
-                                  <span className="text-xs text-slate-600">
+                                  <span className="text-xs text-slate-600 dark:text-slate-300">
                                     <GeneratedValue
                                       value={
                                         submittedByName ?? <span className="text-slate-400">—</span>
@@ -569,21 +581,12 @@ export default async function AppRecordsPage({
                           return (
                             <TableRow key={response.id}>
                               {canBulkDelete ? (
-                                <TableCell>
-                                  {!response.locked &&
-                                  (can(ctx, 'forms.response.delete') ||
-                                    canDeleteOwnRecord(
-                                      ctx,
-                                      'forms.response.delete.own',
-                                      response.submittedBy,
-                                    )) ? (
-                                    <input
-                                      type="checkbox"
-                                      name="responseId"
-                                      value={response.id}
-                                      aria-label={tGeneratedValue('Select response')}
-                                    />
-                                  ) : null}
+                                <TableCell className="w-8">
+                                  <ResponseSelectCell
+                                    id={response.id}
+                                    locked={response.locked}
+                                    selectable={canDeleteRow(response)}
+                                  />
                                 </TableCell>
                               ) : null}
                               <GeneratedValue
@@ -600,7 +603,7 @@ export default async function AppRecordsPage({
                     />
                   </TableBody>
                 </Table>
-              </form>
+              </ResponseSelection>
               <Pagination
                 basePath={basePath}
                 currentParams={sp}

@@ -788,6 +788,8 @@ One place for all the paperwork. Nothing gets lost in a truck cab, and the offic
 
 Only published forms allowed for the role you are currently using appear. If you switch roles, your pinned forms and available form records update with that role.
 
+The default records list shows **Subject** when a record you can view is about a specific person. Your company can also choose its own columns for each form.
+
 Person fields on forms offer active people who have not been deleted. If a person has left the company, ask an administrator to update their People status.
 
 ## Filling out a pinned form

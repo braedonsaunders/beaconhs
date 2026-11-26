@@ -22,8 +22,8 @@ export const OVERSIGHT_ADMIN_ARTICLES: ManualArticle[] = [
 
 ## Delete several responses
 
-1. Open the app's records list and select the unlocked responses you may delete.
-2. Choose **Delete selected**, then confirm. The selected responses are archived together.
+1. Open the app's records list. Select the unlocked responses you may delete, or use **Select all visible rows** in the header to select every eligible row on the page. A lock beside a row means it must be unlocked before deletion.
+2. Choose **Delete** in the bar at the bottom of the screen, then confirm. The selected responses are archived together.
 
 Administrators with **Delete responses** can delete any unlocked response. A person with **Delete own unlocked responses** can delete only their own. Locked responses must be unlocked first. Deleting a response attached to a hazard assessment also releases that app slot, so the assessment can start it again.`,
   },

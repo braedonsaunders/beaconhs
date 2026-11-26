@@ -16,11 +16,13 @@ export function RowSelectionButton({
   selected,
   onToggle,
   label = 'row',
+  ariaLabel,
 }: {
   id: string
   selected: boolean
   onToggle: (id: string) => void
   label?: string
+  ariaLabel?: string
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   return (
@@ -31,7 +33,7 @@ export function RowSelectionButton({
         event.stopPropagation()
         onToggle(id)
       }}
-      aria-label={tGeneratedValue(`${selected ? 'Deselect' : 'Select'} ${label}`)}
+      aria-label={ariaLabel ?? tGeneratedValue(`${selected ? 'Deselect' : 'Select'} ${label}`)}
       aria-pressed={selected}
       className={selectionButtonClass}
     >

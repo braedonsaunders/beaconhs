@@ -9,7 +9,7 @@ import {
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Archive, Download, Tag, X } from 'lucide-react'
+import { Archive, Download, Tag } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
 import {
@@ -17,6 +17,7 @@ import {
   bulkExportIncidentsCsv,
   bulkSetIncidentClassification,
 } from './_actions'
+import { FloatingSelectionBar } from '@/components/floating-selection-bar'
 
 export type IncidentClassificationOption = {
   id: string
@@ -128,95 +129,81 @@ export function BulkIncidentsBar({
   }
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-        <button
-          type="button"
-          onClick={onClear}
-          aria-label={tGenerated('m_1013583a7c0e28')}
-          className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        >
-          <X size={14} />
-        </button>
-        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-          <GeneratedValue value={label} />
-        </span>
+    <FloatingSelectionBar label={label} onClear={onClear}>
+      <Select
+        value={action}
+        onChange={(e) => setAction(e.target.value as typeof action)}
+        className="h-8 min-w-[10rem]"
+        disabled={pending}
+      >
+        {canUpdate ? <option value="archive">{'Archive'}</option> : null}
+        {canUpdate ? <option value="classification">{'Set classification'}</option> : null}
+        {canExport ? <option value="export">{'Export selected to CSV'}</option> : null}
+      </Select>
 
-        <Select
-          value={action}
-          onChange={(e) => setAction(e.target.value as typeof action)}
-          className="h-8 min-w-[10rem]"
-          disabled={pending}
-        >
-          {canUpdate ? <option value="archive">{'Archive'}</option> : null}
-          {canUpdate ? <option value="classification">{'Set classification'}</option> : null}
-          {canExport ? <option value="export">{'Export selected to CSV'}</option> : null}
-        </Select>
+      <GeneratedValue
+        value={
+          action === 'classification' ? (
+            <div className="flex items-center gap-2">
+              <Tag size={14} className="text-slate-500" />
+              <Select
+                value={classificationId}
+                onChange={(e) => setClassificationId(e.target.value)}
+                className="h-8 min-w-[12rem]"
+                disabled={pending}
+              >
+                <option value="">{'Select classification…'}</option>
+                {classifications.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code ? `${c.code} · ` : ''}
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : null
+        }
+      />
 
+      <Button size="sm" onClick={go} disabled={pending}>
         <GeneratedValue
           value={
-            action === 'classification' ? (
-              <div className="flex items-center gap-2">
-                <Tag size={14} className="text-slate-500" />
-                <Select
-                  value={classificationId}
-                  onChange={(e) => setClassificationId(e.target.value)}
-                  className="h-8 min-w-[12rem]"
-                  disabled={pending}
-                >
-                  <option value="">{'Select classification…'}</option>
-                  {classifications.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code ? `${c.code} · ` : ''}
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            ) : null
-          }
-        />
-
-        <Button size="sm" onClick={go} disabled={pending}>
-          <GeneratedValue
-            value={
-              pending ? (
-                <GeneratedText id="m_09001dc89c0edf" />
-              ) : action === 'archive' ? (
-                <span className="inline-flex items-center gap-1">
-                  <Archive size={14} /> <GeneratedText id="m_019c0a64030688" />
-                </span>
-              ) : action === 'classification' ? (
-                <span className="inline-flex items-center gap-1">
-                  <Tag size={14} /> <GeneratedText id="m_01185cdc1c20a5" />
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  <Download size={14} /> <GeneratedText id="m_01edcd3d04ad91" />
-                </span>
-              )
-            }
-          />
-        </Button>
-        <GeneratedValue
-          value={
-            error ? (
-              <span className="text-xs text-red-600 dark:text-red-400">
-                <GeneratedValue value={error} />
+            pending ? (
+              <GeneratedText id="m_09001dc89c0edf" />
+            ) : action === 'archive' ? (
+              <span className="inline-flex items-center gap-1">
+                <Archive size={14} /> <GeneratedText id="m_019c0a64030688" />
               </span>
-            ) : null
-          }
-        />
-        <GeneratedValue
-          value={
-            info ? (
-              <span className="text-xs text-emerald-700 dark:text-emerald-400">
-                <GeneratedValue value={info} />
+            ) : action === 'classification' ? (
+              <span className="inline-flex items-center gap-1">
+                <Tag size={14} /> <GeneratedText id="m_01185cdc1c20a5" />
               </span>
-            ) : null
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <Download size={14} /> <GeneratedText id="m_01edcd3d04ad91" />
+              </span>
+            )
           }
         />
-      </div>
-    </div>
+      </Button>
+      <GeneratedValue
+        value={
+          error ? (
+            <span className="text-xs text-red-600 dark:text-red-400">
+              <GeneratedValue value={error} />
+            </span>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          info ? (
+            <span className="text-xs text-emerald-700 dark:text-emerald-400">
+              <GeneratedValue value={info} />
+            </span>
+          ) : null
+        }
+      />
+    </FloatingSelectionBar>
   )
 }
