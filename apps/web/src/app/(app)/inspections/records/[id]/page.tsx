@@ -1184,10 +1184,7 @@ export default async function InspectionRecordDetailPage({
                 </Badge>
                 <RecordSyncStatus />
                 {recordImmutable ? (
-                  <RecordFlag
-                    tone="locked"
-                    label={tGeneratedValue(record.status === 'closed' ? 'Closed' : 'Locked')}
-                  >
+                  <RecordFlag tone="locked" label={tGeneratedValue('Locked')}>
                     <p className="font-medium">
                       {record.status === 'closed' ? (
                         <GeneratedText id="m_0ebf07876cd391" />

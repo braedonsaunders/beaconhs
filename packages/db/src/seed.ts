@@ -1756,7 +1756,6 @@ export async function seedAtmosphericGasDetectorPilot(tx: any, tenantId: string)
     .values({
       tenantId,
       name: TYPE_NAME,
-      category: 'safety',
       description: 'Portable multi-gas atmospheric monitor (confined-space entry, hot work).',
     })
     .returning({ id: equipmentTypes.id })

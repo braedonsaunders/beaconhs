@@ -1673,7 +1673,7 @@ export default async function IncidentDetailPage({
                   </RecordFlag>
                 ) : null}
                 {locked ? (
-                  <RecordFlag tone="locked" label={tGeneratedValue('Closed')}>
+                  <RecordFlag tone="locked" label={tGeneratedValue('Locked')}>
                     <p>
                       <GeneratedText id="m_01381607e25f0d" />{' '}
                       <GeneratedValue
