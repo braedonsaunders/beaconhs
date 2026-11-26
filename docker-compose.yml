@@ -1,10 +1,13 @@
 # Dev uses DATABASE_URL from .env. Maintainers can keep pointing at the shared
 # PG cluster, while open-source/local clones can opt into Postgres with:
 #   docker compose --profile local-db up -d
+# The in-browser Word/PowerPoint editor (Collabora, ~1.9 GB) is opt-in:
+#   docker compose --profile local-db --profile collabora up -d
+# Container names come from the Compose project (the checkout folder name by
+# default), so several checkouts can coexist; only the published ports collide.
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: beaconhs-postgres
     profiles:
       - local-db
     environment:
@@ -25,7 +28,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: beaconhs-redis
     ports:
       - '6380:6379'
     volumes:
@@ -37,8 +39,9 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
-    container_name: beaconhs-minio
+    # MinIO no longer publishes server images; pgsty/minio is the maintained
+    # community build of the same server (same CLI, health endpoint and API).
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: beaconhs
@@ -56,17 +59,18 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    container_name: beaconhs-mailpit
     ports:
       - '1025:1025'
       - '8025:8025'
 
-  # In-browser PowerPoint editor for PPTX-mastered training decks. The app
+  # In-browser Word and PowerPoint editor (Documents and PPTX-mastered training
+  # decks); opt-in via the `collabora` profile. The app
   # iframes http://localhost:9980; Collabora calls back into the app's
   # /wopi/files/* routes at host.docker.internal:3000 (COLLABORA_WOPI_URL).
   collabora:
     image: collabora/code:latest
-    container_name: beaconhs-collabora
+    profiles:
+      - collabora
     environment:
       # Allow the WOPI host (this app, as seen from inside the container).
       - aliasgroup1=http://host.docker.internal:3000

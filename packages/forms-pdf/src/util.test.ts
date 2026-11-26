@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import sharp from 'sharp'
 import { MAX_SECURE_FETCH_RESPONSE_BYTES } from '@beaconhs/sync/egress'
 import {
+  chromiumExecutableCandidates,
   injectPdfBase,
   optimizePdfImageResource,
   PDF_RESOURCE_LIMITS,
@@ -165,4 +166,43 @@ it('never asks the egress proxy for more than it will allow', () => {
     MAX_SECURE_FETCH_RESPONSE_BYTES,
   )
   expect(MAX_SECURE_FETCH_RESPONSE_BYTES).toBeLessThan(PDF_RESOURCE_LIMITS.singleBytes)
+})
+
+describe('PDF browser discovery', () => {
+  it('prefers PUPPETEER_EXECUTABLE_PATH on every platform', () => {
+    for (const platform of ['linux', 'darwin', 'win32'] as const) {
+      expect(
+        chromiumExecutableCandidates(platform, { PUPPETEER_EXECUTABLE_PATH: '/opt/chrome' })[0],
+      ).toBe('/opt/chrome')
+    }
+  })
+
+  it('probes the Docker shell first, then system Chrome, Chromium and Edge on Linux', () => {
+    const candidates = chromiumExecutableCandidates('linux', {})
+    expect(candidates[0]).toBe('/usr/local/bin/chrome-headless-shell')
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/chromium',
+        '/snap/bin/chromium',
+        '/usr/bin/microsoft-edge-stable',
+      ]),
+    )
+  })
+
+  it('probes Chrome and the always-present Edge under the Windows install roots', () => {
+    const candidates = chromiumExecutableCandidates('win32', {
+      PROGRAMFILES: 'C:\\Program Files',
+      'PROGRAMFILES(X86)': 'C:\\Program Files (x86)',
+      LOCALAPPDATA: 'C:\\Users\\crew\\AppData\\Local',
+    })
+    expect(candidates).toEqual([
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Users\\crew\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Users\\crew\\AppData\\Local\\Microsoft\\Edge\\Application\\msedge.exe',
+    ])
+  })
 })

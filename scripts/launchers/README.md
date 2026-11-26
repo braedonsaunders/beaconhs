@@ -14,8 +14,8 @@ The launchers run the same flow:
 3. Prepare pnpm through Corepack when available.
 4. Run `pnpm install --frozen-lockfile` when dependencies are missing or stale.
 5. Detect whether `DATABASE_URL` is local or remote.
-6. Pull Docker Compose images, start Redis, MinIO, Mailpit, and optionally local Postgres, then wait for health checks.
-7. Start `pnpm dev`.
+6. Pull Docker Compose images, start Redis, MinIO, Mailpit, optionally local Postgres, and the Collabora document editor when `COLLABORA_URL` in `.env` is local, then wait for health checks.
+7. Start `pnpm dev` (registers the scheduled jobs, then runs the web app and worker).
 8. On exit, stop the dev process tree and any Docker containers this launcher started.
 
 Database mode defaults to `auto`:

@@ -217,7 +217,18 @@ See [`AGENTS.md`](AGENTS.md) for the full repo map and engineering conventions.
 
 ## Quick start
 
-You'll need **Node 24 LTS**, **pnpm 10+**, and **Docker**.
+You'll need:
+
+- **Node 24 LTS** — any 24.x from 24.18 up. `.nvmrc` pins the CI version if
+  you use nvm (`nvm install`), but nvm is optional.
+- **pnpm 10** via Corepack — `corepack enable`. If that fails with `EACCES`
+  (Node installed system-wide), run
+  `corepack enable --install-directory ~/.local/bin` instead (with
+  `~/.local/bin` on your `PATH`).
+- **Docker with Compose v2** — `docker compose version` must work. On Ubuntu's
+  `docker.io` package, also install `docker-compose-v2`.
+- **Chrome, Chromium or Edge** for PDF export — found automatically in the
+  usual install locations, or set `PUPPETEER_EXECUTABLE_PATH` in `.env`.
 
 One-click launchers live in [`scripts/launchers`](scripts/launchers):
 
@@ -238,12 +249,13 @@ cp .env.example .env
 
 # 3. Bring up local infra (Postgres, Redis, MinIO, Mailpit)
 docker compose --profile local-db up -d
+#    Optional: add `--profile collabora` for in-browser Word/PowerPoint editing (~1.9 GB)
 
 # 4. Set up the local database (schema + RLS policies + seed data)
 pnpm db:migrate
 pnpm db:seed
 
-# 5. Run the app, worker, and scheduler
+# 5. Register scheduled jobs, then run the app and worker (reads .env itself)
 pnpm dev
 ```
 

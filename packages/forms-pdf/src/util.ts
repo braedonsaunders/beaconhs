@@ -345,22 +345,62 @@ async function handlePdfResourceRequest(
   }
 }
 
-/** PUPPETEER_EXECUTABLE_PATH wins; otherwise probe the Docker image's
- *  chromium, then the usual macOS installs (local dev). */
+/** Browser executables tried for PDF rendering, in order. PUPPETEER_EXECUTABLE_PATH
+ *  always wins; then the Docker image's pinned Chrome-for-Testing shell (see
+ *  Dockerfile) and the standard Chrome / Chromium / Edge installs per OS. */
+export function chromiumExecutableCandidates(
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+): string[] {
+  const windowsInstalls = (root: string | undefined) =>
+    root
+      ? [
+          `${root}\\Google\\Chrome\\Application\\chrome.exe`,
+          `${root}\\Microsoft\\Edge\\Application\\msedge.exe`,
+        ]
+      : []
+  const platformCandidates =
+    platform === 'win32'
+      ? [
+          ...windowsInstalls(env.PROGRAMFILES),
+          ...windowsInstalls(env['PROGRAMFILES(X86)']),
+          ...windowsInstalls(env.LOCALAPPDATA),
+        ]
+      : platform === 'darwin'
+        ? [
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            '/Applications/Chromium.app/Contents/MacOS/Chromium',
+            '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+          ]
+        : [
+            '/usr/local/bin/chrome-headless-shell',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/google-chrome',
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+            '/snap/bin/chromium',
+            '/usr/bin/microsoft-edge-stable',
+          ]
+  return [env.PUPPETEER_EXECUTABLE_PATH, ...platformCandidates].filter((p): p is string =>
+    Boolean(p),
+  )
+}
+
 function resolveExecutablePath(): string {
-  const candidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    // The Docker image's pinned Chrome-for-Testing shell (see Dockerfile).
-    '/usr/local/bin/chrome-headless-shell',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  ].filter((p): p is string => Boolean(p))
-  for (const p of candidates) {
-    if (existsSync(p)) return p
+  const configured = process.env.PUPPETEER_EXECUTABLE_PATH
+  if (configured && !existsSync(configured)) {
+    throw new Error(
+      `PUPPETEER_EXECUTABLE_PATH points to a missing file (${configured}); fix the path or unset it`,
+    )
   }
-  throw new Error('No Chromium executable found for PDF rendering — set PUPPETEER_EXECUTABLE_PATH')
+  const found = chromiumExecutableCandidates(process.platform, process.env).find((p) =>
+    existsSync(p),
+  )
+  if (found) return found
+  throw new Error(
+    'No Chrome, Chromium or Edge found for PDF rendering. Install one, or set ' +
+      'PUPPETEER_EXECUTABLE_PATH to a Chromium-based browser (see docs/QUICKSTART.md)',
+  )
 }
 
 export function getBrowser(): Promise<Browser> {

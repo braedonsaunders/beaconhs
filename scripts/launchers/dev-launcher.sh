@@ -175,10 +175,10 @@ env_value() {
   ' .env
 }
 
-database_url_is_local() {
-  local database_url="$1"
+url_is_local() {
+  local url="$1"
 
-  case "$database_url" in
+  case "$url" in
     *localhost*|*127.0.0.1*|*::1*)
       return 0
       ;;
@@ -195,7 +195,7 @@ resolve_database_mode() {
 
   case "$DB_MODE" in
     auto)
-      if database_url_is_local "$database_url"; then
+      if url_is_local "$database_url"; then
         DB_MODE="local"
       else
         DB_MODE="remote"
@@ -211,15 +211,24 @@ resolve_database_mode() {
   if [[ "$DB_MODE" == "local" ]]; then
     DOCKER_COMPOSE_CMD=(docker compose --profile local-db)
     log "Database mode: local Docker Postgres profile."
-    if [[ -n "$database_url" ]] && ! database_url_is_local "$database_url"; then
+    if [[ -n "$database_url" ]] && ! url_is_local "$database_url"; then
       warn "BEACONHS_DB_MODE=local, but DATABASE_URL does not look local. Update .env or set BEACONHS_DB_MODE=remote."
     fi
   else
     DOCKER_COMPOSE_CMD=(docker compose)
     log "Database mode: remote/existing DATABASE_URL. Local Postgres will not be started."
-    if database_url_is_local "$database_url"; then
+    if url_is_local "$database_url"; then
       warn "DATABASE_URL looks local, but BEACONHS_DB_MODE=remote. Set BEACONHS_DB_MODE=local to start local Postgres."
     fi
+  fi
+
+  # The in-browser Word/PowerPoint editor is an opt-in compose profile; start it
+  # whenever .env points the app at a local Collabora server.
+  local collabora_url
+  collabora_url="$(env_value COLLABORA_URL || true)"
+  if [[ -n "$collabora_url" ]] && url_is_local "$collabora_url"; then
+    DOCKER_COMPOSE_CMD+=(--profile collabora)
+    log "COLLABORA_URL is local: starting the Collabora document editor too."
   fi
 }
 
@@ -227,10 +236,10 @@ ensure_node_and_pnpm() {
   local major
   local package_manager
 
-  has_command node || fail "Node.js is required. Install Node 20+ and run this launcher again."
+  has_command node || fail "Node.js is required. Install Node 24 LTS and run this launcher again."
   major="$(node -p "Number(process.versions.node.split('.')[0])")"
-  if [[ "$major" -lt 20 ]]; then
-    fail "Node.js 20+ is required. Current version: $(node -v)"
+  if [[ "$major" -ne 24 ]]; then
+    fail "Node.js 24 LTS is required (see .nvmrc). Current version: $(node -v)"
   fi
 
   package_manager="$(node -p "require('./package.json').packageManager || 'pnpm@latest'")"

@@ -36,6 +36,32 @@ describe('contentSecurityPolicy', () => {
     expect(policy).not.toContain('wss:')
     expect(policy).toContain("object-src 'none';")
     expect(policy).toContain('upgrade-insecure-requests;')
+    // Remote HTTPS storage is already covered by the scheme source; production
+    // image/media policy is not widened by the storage endpoint.
+    expect(policy).toContain("img-src 'self' blob: data: https:;")
+    expect(policy).toContain("media-src 'self' blob: data: https:;")
+  })
+
+  it('lets local loopback storage serve presigned images and media in development', () => {
+    const policy = contentSecurityPolicy({
+      nonce: NONCE,
+      isDevelopment: true,
+      storageEndpoint: 'http://localhost:9000',
+    })
+
+    expect(policy).toContain("img-src 'self' blob: data: https: http://localhost:9000;")
+    expect(policy).toContain("media-src 'self' blob: data: https: http://localhost:9000;")
+  })
+
+  it('never names an HTTP storage origin outside development', () => {
+    const policy = contentSecurityPolicy({
+      nonce: NONCE,
+      isDevelopment: false,
+      storageEndpoint: 'http://localhost:9000',
+    })
+
+    expect(policy).not.toContain('localhost:9000')
+    expect(policy).toContain("img-src 'self' blob: data: https:;")
   })
 
   it('permits only loopback HTTP in development and ignores malformed origins', () => {

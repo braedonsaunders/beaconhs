@@ -164,10 +164,10 @@ function Get-EnvFileValue {
   return $match.Matches[0].Groups[1].Value.Trim("'`"")
 }
 
-function Test-DatabaseUrlIsLocal {
-  param([string] $DatabaseUrl)
+function Test-UrlIsLocal {
+  param([string] $Url)
 
-  return $DatabaseUrl -match "localhost|127\.0\.0\.1|::1"
+  return $Url -match "localhost|127\.0\.0\.1|::1"
 }
 
 function Resolve-DatabaseMode {
@@ -175,7 +175,7 @@ function Resolve-DatabaseMode {
 
   switch ($DbMode) {
     "auto" {
-      if (Test-DatabaseUrlIsLocal $databaseUrl) {
+      if (Test-UrlIsLocal $databaseUrl) {
         $script:ResolvedDbMode = "local"
       } else {
         $script:ResolvedDbMode = "remote"
@@ -195,26 +195,34 @@ function Resolve-DatabaseMode {
   if ($script:ResolvedDbMode -eq "local") {
     $script:DockerComposeArgs = @("compose", "--profile", "local-db")
     Write-LauncherLog "Database mode: local Docker Postgres profile."
-    if ($databaseUrl -and -not (Test-DatabaseUrlIsLocal $databaseUrl)) {
+    if ($databaseUrl -and -not (Test-UrlIsLocal $databaseUrl)) {
       Write-LauncherWarn "BEACONHS_DB_MODE=local, but DATABASE_URL does not look local. Update .env or set BEACONHS_DB_MODE=remote."
     }
   } else {
     $script:DockerComposeArgs = @("compose")
     Write-LauncherLog "Database mode: remote/existing DATABASE_URL. Local Postgres will not be started."
-    if (Test-DatabaseUrlIsLocal $databaseUrl) {
+    if (Test-UrlIsLocal $databaseUrl) {
       Write-LauncherWarn "DATABASE_URL looks local, but BEACONHS_DB_MODE=remote. Set BEACONHS_DB_MODE=local to start local Postgres."
     }
+  }
+
+  # The in-browser Word/PowerPoint editor is an opt-in compose profile; start it
+  # whenever .env points the app at a local Collabora server.
+  $collaboraUrl = Get-EnvFileValue "COLLABORA_URL"
+  if ($collaboraUrl -and (Test-UrlIsLocal $collaboraUrl)) {
+    $script:DockerComposeArgs += @("--profile", "collabora")
+    Write-LauncherLog "COLLABORA_URL is local: starting the Collabora document editor too."
   }
 }
 
 function Ensure-NodeAndPnpm {
   if (-not (Test-Command "node")) {
-    Stop-WithMessage "Node.js is required. Install Node 20+ and run this launcher again."
+    Stop-WithMessage "Node.js is required. Install Node 24 LTS and run this launcher again."
   }
 
   $major = [int](& node -p "Number(process.versions.node.split('.')[0])")
-  if ($major -lt 20) {
-    Stop-WithMessage "Node.js 20+ is required. Current version: $(& node -v)"
+  if ($major -ne 24) {
+    Stop-WithMessage "Node.js 24 LTS is required (see .nvmrc). Current version: $(& node -v)"
   }
 
   $packageManager = & node -p "require('./package.json').packageManager || 'pnpm@latest'"

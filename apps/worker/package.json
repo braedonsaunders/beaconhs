@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "scheduler:dev": "tsx watch src/scheduler.ts",
+    "dev": "tsx src/scheduler.ts && tsx watch src/index.ts",
     "build": "node build.mjs",
     "start": "node dist/index.js",
     "scheduler:start": "node dist/scheduler.js",

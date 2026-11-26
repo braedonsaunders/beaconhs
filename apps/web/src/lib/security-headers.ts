@@ -40,6 +40,12 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
 
   const collaboraOrigin = allowedOrigin(options.collaboraUrl, options.isDevelopment)
   const storageOrigin = allowedOrigin(options.storageEndpoint, options.isDevelopment)
+  // Attachment routes redirect to presigned object URLs. Remote stores are
+  // HTTPS and already covered by the `https:` image/media sources; a local
+  // MinIO on loopback HTTP (development only, see allowedOrigin) must be named
+  // explicitly or every uploaded photo and video renders broken.
+  const localStorageOrigin = storageOrigin?.startsWith('http:') ? storageOrigin : null
+  const mediaSources = uniqueSources(["'self'", 'blob:', 'data:', 'https:', localStorageOrigin])
   // A Sentry DSN encodes its public project key as URL user info. Only the
   // credential-free origin enters CSP.
   const sentryOrigin = allowedOrigin(options.sentryDsn, false, true)
@@ -86,9 +92,9 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     // The operational UI uses React style attributes and editor-generated
     // inline CSS. Keep scripts strict while allowing those non-executable styles.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' blob: data: https:",
+    `img-src ${mediaSources.join(' ')}`,
     "font-src 'self' data:",
-    "media-src 'self' blob: data: https:",
+    `media-src ${mediaSources.join(' ')}`,
     `connect-src ${connectSources.join(' ')}`,
     "worker-src 'self' blob:",
     `frame-src ${frameSources.join(' ')}`,

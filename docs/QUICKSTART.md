@@ -1,5 +1,30 @@
 # Quick start
 
+## Prerequisites
+
+- **Node 24 LTS** — any 24.x from 24.18 up (`node -v`). `.nvmrc` pins the
+  exact version CI uses; with nvm, `nvm install` picks it up. nvm is optional.
+- **pnpm 10** through Corepack: `corepack enable`. When Node is installed
+  system-wide (apt, NodeSource, the official installer) that command needs root
+  and fails with `EACCES … symlink … /usr/bin/pnpm`. Install the shim into your
+  user instead, and make sure that folder is on your `PATH`:
+
+  ```bash
+  corepack enable --install-directory ~/.local/bin
+  ```
+
+- **Docker with Compose v2** — `docker compose version` must print a version.
+  Ubuntu's `docker.io` package ships without it; add `docker-compose-v2`
+  (`sudo apt install docker-compose-v2`).
+- **Chrome, Chromium or Edge** for PDF export (incidents, certificates,
+  reports). BeaconHS finds them in their standard install locations on Linux,
+  macOS and Windows. Without one, install a headless Chrome and point
+  `PUPPETEER_EXECUTABLE_PATH` in `.env` at the path it prints:
+
+  ```bash
+  npx @puppeteer/browsers install chrome-headless-shell@stable --path ~/.cache/chrome-headless-shell
+  ```
+
 ## One-click launchers
 
 From the repo root:
@@ -12,14 +37,15 @@ From the repo root:
 The launchers install dependencies when needed, start Docker services, run
 `pnpm dev`, and clean up launcher-started processes on exit. They default to
 `BEACONHS_DB_MODE=auto`: existing `.env` files with a remote `DATABASE_URL` keep
-using the remote PG cluster, while fresh local clones use Docker Postgres.
+using the remote PG cluster, while fresh local clones use Docker Postgres. They
+also start the Collabora editor when `COLLABORA_URL` in `.env` is local (the
+`.env.example` default).
 
 ## Manual local setup
 
 ```bash
-# 1. Prereqs
-nvm use              # Node 24 LTS (see .nvmrc)
-corepack enable       # pnpm via corepack
+# 1. Prereqs (see above)
+corepack enable       # pnpm via Corepack
 
 # 2. Install dependencies
 pnpm install
@@ -36,7 +62,7 @@ pnpm db:migrate       # apply migrations + install RLS policies
 pnpm db:seed          # creates a super-admin + a 'demo' tenant with built-in roles
 
 # 6. Run the app
-pnpm dev              # starts web (3000) + worker + scheduler in parallel
+pnpm dev              # registers scheduled jobs, then runs web (3000) + worker
 ```
 
 Then open:
@@ -44,6 +70,11 @@ Then open:
 - App: <http://localhost:3000>
 - Mailpit (catches outbound email): <http://localhost:8025>
 - MinIO console: <http://localhost:9001> (login `beaconhs` / `beaconhs-dev-secret`)
+
+`pnpm dev` loads the root `.env`, then registers repeating jobs (such as
+compliance scans, digests, and scheduled reports) in Redis before starting the
+web app and worker in watch mode. `pnpm db:migrate` and `pnpm db:seed` also load
+the root `.env`. Shell-exported variables take precedence.
 
 > Postgres is on **5433** and Redis on **6380** so they don't collide with
 > common local services. `.env.example` already uses those ports. Maintainers
@@ -64,6 +95,24 @@ Maintainers using the shared dev PG cluster should keep their real `.env`
 docker compose up -d
 pnpm dev
 ```
+
+Containers are named after the Compose project (the checkout folder by default),
+so several checkouts can share a machine. Only one of them can publish the
+ports above at a time; pass `-p <name>` to keep their containers and volumes
+apart.
+
+## Optional: in-browser Word and PowerPoint editor
+
+Editing documents and building or playing slideshow lessons runs in Collabora
+Online, a separate ~1.9 GB image that is not started by default. Start it with
+its profile; `.env.example` already points the app at it:
+
+```bash
+docker compose --profile local-db --profile collabora up -d
+```
+
+Without it, those editors show as unavailable and the rest of the app works
+normally.
 
 ## Default super-admin
 

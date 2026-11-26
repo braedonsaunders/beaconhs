@@ -19,12 +19,12 @@ historical evidence. Agents should leave the app more coherent than they found i
 
 ## Quick Start
 
-- Runtime: Node 24 LTS (`.nvmrc`), pnpm 10.30.3, Docker.
+- Runtime: Node 24 LTS (`.nvmrc`), pnpm 10.30.3, Docker with Compose v2.
 - Install: `corepack enable` then `pnpm install`.
 - Env: copy `.env.example` to `.env`.
-- Local infra: `docker compose --profile local-db up -d` starts Postgres on 5433, Redis on 6380, MinIO on 9000/9001, and Mailpit on 8025.
+- Local infra: `docker compose --profile local-db up -d` starts Postgres on 5433, Redis on 6380, MinIO on 9000/9001, and Mailpit on 8025. Add `--profile collabora` for the in-browser Word/PowerPoint editor on 9980.
 - DB setup: `pnpm db:migrate` then `pnpm db:seed`.
-- Dev app: `pnpm dev` starts the web app, worker, and scheduler through Turbo.
+- Dev app: `pnpm dev` loads the root `.env`, registers scheduled jobs once, then runs the web app and worker through Turbo. `pnpm db:migrate` and `pnpm db:seed` also load the root `.env`. Shell-exported variables take precedence.
 - App: `http://localhost:3000`.
 - Mailpit: `http://localhost:8025`.
 - Seeded super-admin: `admin@beaconhs.local`; use the Magic link tab and open the link from Mailpit.
@@ -159,7 +159,9 @@ Prettier violations that fail CI.
 ## Workers and Background Jobs
 
 - Worker entrypoints are in `apps/worker/src/index.ts` and
-  `apps/worker/src/scheduler.ts`.
+  `apps/worker/src/scheduler.ts`. The scheduler is a one-shot that registers
+  repeatable jobs in Redis and exits; the worker `dev` script runs it before
+  starting the worker.
 - Queue definitions live in `packages/jobs`; do not create one-off queue names.
 - Worker handlers live under `apps/worker/src/workers`.
 - Shared worker logic belongs in `apps/worker/src/lib` or a package when used by

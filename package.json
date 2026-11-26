@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --parallel",
+    "dev": "node --env-file-if-exists=.env node_modules/turbo/bin/turbo run dev",
     "lint": "turbo run lint",
     "deadcode:check": "knip --treat-config-hints-as-errors",
     "typecheck": "turbo run typecheck",
