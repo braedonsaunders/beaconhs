@@ -14,6 +14,7 @@
     "./seed/lift-plan-template": "./src/seed/lift-plan-template.ts",
     "./seed/pdf-templates": "./src/seed/pdf-templates.ts",
     "./seed/report-definitions": "./src/seed/report-definitions.ts",
+    "./seed/tenant-defaults": "./src/seed/tenant-defaults.ts",
     "./seed/training-class-email": "./src/seed/training-class-email.ts",
     "./equipment-service": "./src/equipment-service.ts",
     "./incident-metrics": "./src/incident-metrics.ts"

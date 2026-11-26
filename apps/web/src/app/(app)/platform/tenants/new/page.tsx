@@ -9,8 +9,7 @@ import { Button, Input, Label, PageHeader, Select } from '@beaconhs/ui'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { auditLog, tenants } from '@beaconhs/db/schema'
 import { LOCALE_OPTIONS, normalizeLocalePolicy } from '@beaconhs/i18n'
-import { seedLiftPlanTemplate } from '@beaconhs/db/seed/lift-plan-template'
-import { seedTrainingClassBookingEmail } from '@beaconhs/db/seed/training-class-email'
+import { provisionTenantDefaults } from '@beaconhs/db/seed/tenant-defaults'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
@@ -84,11 +83,10 @@ async function createTenant(formData: FormData): Promise<void> {
           enabledLanguages: languagePolicy.enabledLocales,
         },
       })
-      // Seed every built-in form template that's required on day-one. Done
-      // inside the same transaction so a seeder failure rolls back the
+      // Roles, stock reports, PDF templates, document types and built-in
+      // forms, in the same transaction so a seeder failure rolls back the
       // tenant create — we never want a half-provisioned tenant.
-      await seedLiftPlanTemplate(tx, created.id)
-      await seedTrainingClassBookingEmail(tx, created.id)
+      await provisionTenantDefaults(tx, created.id)
     }
   })
 

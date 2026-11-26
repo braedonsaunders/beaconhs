@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { pathToFileURL } from 'node:url'
+import { and, eq, sql } from 'drizzle-orm'
 import { createSuperClient } from './client'
 import {
-  BUILTIN_ROLES,
   correctiveActions,
   crews,
   customerContacts,
@@ -11,7 +11,6 @@ import {
   documentAcknowledgments,
   documentReviews,
   documentVersions,
-  documentTypes,
   documentCategories,
   customFieldDefinitions,
   equipmentCategories,
@@ -55,8 +54,6 @@ import {
   ppeItems,
   ppeTypeInspectionCriteria,
   ppeTypes,
-  reportDefinitions,
-  roles,
   tenants,
   tenantUsers,
   safeDistanceRecords,
@@ -91,11 +88,10 @@ import {
 import type { FormSchemaV1 } from './schema'
 import { CANONICAL_TEMPLATES } from './canonical-templates'
 import { seedHazardAssessmentAppTemplates } from './seed/hazard-assessment-app-templates'
-import { seedLiftPlanTemplate } from './seed/lift-plan-template'
 import { seedFormPdfTemplates, seedPdfTemplates } from './seed/pdf-templates'
-import { BEACON_REPORT_SEEDS } from './seed/report-definitions'
+import { seedDocumentTypesAndCategories } from './seed/document-types'
+import { provisionTenantDefaults, seedReportDefinitions } from './seed/tenant-defaults'
 import { seedToolboxTemplate } from './seed/toolbox-template'
-import { seedTrainingClassBookingEmail } from './seed/training-class-email'
 
 async function main() {
   const { db, sql: pg } = createSuperClient()
@@ -154,16 +150,7 @@ async function main() {
       .returning()
     if (!membership) throw new Error('Failed to create membership')
 
-    for (const [key, def] of Object.entries(BUILTIN_ROLES)) {
-      await tx.insert(roles).values({
-        tenantId: tenant.id,
-        key,
-        name: def.name,
-        description: def.description,
-        isBuiltIn: true,
-        permissions: def.permissions as unknown as string[],
-      })
-    }
+    await provisionTenantDefaults(tx, tenant.id)
 
     // --- Org hierarchy --------------------------------------------------
     const customer = await insertOrgUnit(tx, tenant.id, null, 'customer', 'Acme Refinery')
@@ -1365,9 +1352,7 @@ async function main() {
 
     // --- Lift Plan + Toolbox Talk form templates (built-in; surfaced as
     //     pinned forms in the sidebar rather than native modules) ---------
-    await seedLiftPlanTemplate(tx, tenant.id)
     await seedToolboxTemplate(tx, tenant.id)
-    await seedTrainingClassBookingEmail(tx, tenant.id)
 
     // --- Inspection records (5 sample records against the seeded types) -
     await seedInspectionRecords(tx, tenant.id)
@@ -1404,30 +1389,10 @@ async function main() {
     console.log(`  · sign in via Magic link (Mailpit: http://localhost:8025)`)
   })
 
-  // Every report is an ordinary tenant-owned AppKit definition. Seed identity
-  // is insert-only so re-running the seed restores missing defaults without
-  // overwriting a tenant's edits.
+  // Restore missing stock reports on every tenant (insert-only).
   await db.transaction(async (tx) => {
     const all = await tx.select({ id: tenants.id }).from(tenants)
-    for (const tenant of all) {
-      await tx
-        .insert(reportDefinitions)
-        .values(
-          BEACON_REPORT_SEEDS.map((definition) => ({
-            tenantId: tenant.id,
-            seedKey: definition.seedKey,
-            slug: definition.slug,
-            name: definition.name,
-            description: definition.description,
-            category: definition.category,
-            query: definition.query,
-            layout: definition.layout,
-            state: definition.state,
-            tags: definition.tags ?? [],
-          })),
-        )
-        .onConflictDoNothing()
-    }
+    for (const tenant of all) await seedReportDefinitions(tx, tenant.id)
   })
 
   // Canonical templates (JSHA / Toolbox Talk / Lift Plan / WAH Rescue) ----
@@ -1444,7 +1409,7 @@ async function main() {
       .orderBy(tenants.createdAt)
       .limit(1)
     if (!first) return
-    await seedDocumentTypesAndCategories(tx as any, first.id)
+    await seedDocumentTypesAndCategories(tx, first.id)
   })
 
   // PDF document templates — refresh the seeded per-module print defaults and
@@ -1461,115 +1426,6 @@ async function main() {
 
   await pg.end()
   console.log('✔ Seed complete')
-}
-
-/**
- * Idempotently insert the standard set of document types + categories for the
- * given tenant. Safe to re-run — uses ON CONFLICT for types
- * (unique on (tenant_id, key)), and name-existence checks for categories.
- */
-export async function seedDocumentTypesAndCategories(tx: any, tenantId: string): Promise<void> {
-  // --- Document Types (5) ---------------------------------------------
-  const docTypeRows = [
-    {
-      key: 'policy',
-      name: 'Policy',
-      color: '#0f766e',
-      description: 'Company-wide policies and stances.',
-    },
-    {
-      key: 'procedure',
-      name: 'Procedure / SOP',
-      color: '#2563eb',
-      description: 'Step-by-step instructions for routine work.',
-    },
-    {
-      key: 'sds',
-      name: 'SDS / MSDS',
-      color: '#ea580c',
-      description: 'Safety data sheets for hazardous materials.',
-    },
-    {
-      key: 'manual',
-      name: 'Manual / handbook',
-      color: '#7c3aed',
-      description: 'Equipment manuals and reference handbooks.',
-    },
-    {
-      key: 'form',
-      name: 'Form / template',
-      color: '#0891b2',
-      description: 'Blank forms and printable templates.',
-    },
-  ]
-  let typesInserted = 0
-  for (const row of docTypeRows) {
-    const inserts = await tx
-      .insert(documentTypes)
-      .values({
-        tenantId,
-        key: row.key,
-        name: row.name,
-        color: row.color,
-        description: row.description,
-      })
-      .onConflictDoNothing({ target: [documentTypes.tenantId, documentTypes.key] })
-      .returning({ id: documentTypes.id })
-    if (inserts.length > 0) typesInserted += 1
-  }
-
-  // --- Document Categories (5, hierarchical) --------------------------
-  // The root category "Safety" with three children (PPE, Permits, Working
-  // at Heights), plus a sibling "Operations" category.
-  const categoryDefs: { name: string; parent?: string; description?: string }[] = [
-    { name: 'Safety', description: 'All safety-related policies and procedures.' },
-    { name: 'PPE', parent: 'Safety', description: 'Personal protective equipment policies.' },
-    {
-      name: 'Permits',
-      parent: 'Safety',
-      description: 'Hot work, confined-space, working-at-heights permits.',
-    },
-    { name: 'Working at Heights', parent: 'Safety', description: 'Fall-arrest and ladder safety.' },
-    { name: 'Operations', description: 'Day-to-day operational SOPs.' },
-  ]
-  const insertedCats = new Map<string, string>()
-  let catsInserted = 0
-  for (const def of categoryDefs) {
-    const parentId = def.parent ? (insertedCats.get(def.parent) ?? null) : null
-    // Match the active sibling-name identity enforced by the schema index.
-    // Deleted categories do not reserve names, and separate parents may use
-    // the same case-insensitive, trimmed display name.
-    const existing = await tx
-      .select({ id: documentCategories.id })
-      .from(documentCategories)
-      .where(
-        and(
-          eq(documentCategories.tenantId, tenantId),
-          parentId
-            ? eq(documentCategories.parentId, parentId)
-            : isNull(documentCategories.parentId),
-          isNull(documentCategories.deletedAt),
-          sql`lower(btrim(${documentCategories.name})) = lower(btrim(${def.name}))`,
-        ),
-      )
-      .limit(1)
-    if (existing.length > 0) {
-      insertedCats.set(def.name, existing[0]!.id)
-      continue
-    }
-    const [row] = await tx
-      .insert(documentCategories)
-      .values({ tenantId, name: def.name, parentId, description: def.description ?? null })
-      .returning({ id: documentCategories.id })
-    if (row) {
-      insertedCats.set(def.name, row.id)
-      catsInserted += 1
-    }
-  }
-
-  console.log(
-    `  · doc lookups: ${typesInserted}/${docTypeRows.length} types, ${catsInserted}/${categoryDefs.length} categories`,
-  )
 }
 
 /**
@@ -3729,7 +3585,10 @@ export async function seedTrainingAssessmentAttempts(tx: any, tenantId: string):
   console.log(`  · training assessment attempts: ${created} seeded (mixed pass/fail)`)
 }
 
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
-})
+// Run only as the `db:seed` entrypoint; other scripts import its seeders.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().catch((err) => {
+    console.error(err)
+    process.exit(1)
+  })
+}
