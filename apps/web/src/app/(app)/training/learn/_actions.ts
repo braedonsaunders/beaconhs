@@ -474,6 +474,7 @@ export async function markLessonComplete(enrollmentId: string, lessonId: string)
       courseId: enrollment.courseId,
       personId,
       currentLessonId: lessonId,
+      timeZone: ctx.timezone,
     })
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'training_lesson_progress',

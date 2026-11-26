@@ -38,6 +38,7 @@ export async function completeOnlineCourseEnrollment(
       personId: enrollment.personId,
       reviewerTenantUserId,
       reviewNote: note,
+      timeZone: ctx.timezone,
     })
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'training_enrollment',

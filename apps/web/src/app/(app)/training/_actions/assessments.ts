@@ -189,7 +189,6 @@ async function finalizeAssessmentAttempt(
         score: outcome.score,
         grade: outcome.score,
         instructor: attempt.graded ? 'Assessment' : 'Assessment completion',
-        details: `Auto-recorded from assessment attempt ${attempt.id}`,
         certificateType: 'auto',
       })
       .returning()

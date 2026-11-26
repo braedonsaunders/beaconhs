@@ -173,6 +173,7 @@ export async function evaluatePractical(args: {
           enrollmentId,
           courseId,
           personId: enrollment.personId,
+          timeZone: ctx.timezone,
         })
         await recordAuditInTransaction(tx, ctx, {
           entityType: 'training_lesson_progress',

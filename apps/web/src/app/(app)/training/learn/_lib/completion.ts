@@ -16,6 +16,7 @@ import {
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { issueTrainingCertificate } from '@/lib/training-certificate-issuance'
 import { assertTrainingEnrollmentOpen } from '@/lib/training-mutation-validation'
+import { dateIsoInTimeZone } from '@/lib/datetime'
 import { addMonthsIso } from '../../_lib/dates'
 import { deliveryMeta } from '../../_lib/delivery'
 
@@ -38,7 +39,8 @@ async function issueCourseRecordAndComplete(
     courseId: string
     personId: string
     instructor: string
-    details: string
+    /** Completion day is taken on this clock (the person completing it). */
+    timeZone: string
     currentLessonId?: string
     completionReview?: {
       reviewedAt: Date
@@ -53,7 +55,7 @@ async function issueCourseRecordAndComplete(
     courseId,
     personId,
     instructor,
-    details,
+    timeZone,
     currentLessonId,
     completionReview,
   } = args
@@ -64,7 +66,7 @@ async function issueCourseRecordAndComplete(
     .where(and(eq(trainingCourses.id, courseId), isNull(trainingCourses.deletedAt)))
     .limit(1)
   if (!course) throw new Error('Course not found')
-  const completedOn = now.toISOString().slice(0, 10)
+  const completedOn = dateIsoInTimeZone(now, timeZone)
   const expiresOn = course.validForMonths ? addMonthsIso(completedOn, course.validForMonths) : null
   const [rec] = await tx
     .insert(trainingRecords)
@@ -76,7 +78,7 @@ async function issueCourseRecordAndComplete(
       completedOn,
       expiresOn,
       instructor,
-      details,
+      details: null,
       certificateType: 'auto',
     })
     .returning()
@@ -128,6 +130,7 @@ export async function completeVerifiedOnlineEnrollment(
     personId: string
     reviewerTenantUserId: string
     reviewNote: string | null
+    timeZone: string
   },
 ): Promise<CompletionResult> {
   const [enr] = await tx
@@ -156,7 +159,7 @@ export async function completeVerifiedOnlineEnrollment(
     courseId: args.courseId,
     personId: args.personId,
     instructor: 'Online course',
-    details: `Online provider completion verified by training staff (enrollment ${args.enrollmentId})`,
+    timeZone: args.timeZone,
     completionReview: {
       reviewedAt: new Date(),
       reviewerTenantUserId: args.reviewerTenantUserId,
@@ -174,9 +177,10 @@ export async function recomputeEnrollmentCompletion(
     courseId: string
     personId: string
     currentLessonId?: string
+    timeZone: string
   },
 ): Promise<CompletionResult> {
-  const { tenantId, enrollmentId, courseId, personId, currentLessonId } = args
+  const { tenantId, enrollmentId, courseId, personId, currentLessonId, timeZone } = args
 
   const [enr] = await tx
     .select()
@@ -236,7 +240,7 @@ export async function recomputeEnrollmentCompletion(
         courseId,
         personId,
         instructor: 'Self-paced course',
-        details: `Completed via the learning player (enrollment ${enrollmentId})`,
+        timeZone,
         currentLessonId,
       })
       return {
