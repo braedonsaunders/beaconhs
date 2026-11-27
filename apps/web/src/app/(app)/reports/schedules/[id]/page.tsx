@@ -1,7 +1,7 @@
 import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
-import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
+import { attachments, reportRuns, reportSchedules } from '@beaconhs/db/schema'
+import { assertCan, can } from '@beaconhs/tenant'
 import { PageHeader } from '@beaconhs/ui'
 import { PageContainer } from '@/components/page-layout'
 import { GeneratedText } from '@/i18n/generated'
@@ -60,8 +60,30 @@ export default async function SchedulePage({
     }),
     ctx.db((tx) =>
       tx
-        .select()
+        .select({
+          id: reportRuns.id,
+          scheduleId: reportRuns.scheduleId,
+          trigger: reportRuns.trigger,
+          status: reportRuns.status,
+          error: reportRuns.error,
+          rowCount: reportRuns.rowCount,
+          startedAt: reportRuns.startedAt,
+          finishedAt: reportRuns.finishedAt,
+          artifact: {
+            filename: attachments.filename,
+            sizeBytes: attachments.sizeBytes,
+            contentType: attachments.contentType,
+            createdAt: attachments.createdAt,
+          },
+        })
         .from(reportRuns)
+        .leftJoin(
+          attachments,
+          and(
+            eq(attachments.tenantId, reportRuns.tenantId),
+            eq(attachments.id, reportRuns.pdfAttachmentId),
+          ),
+        )
         .where(runWhere)
         .orderBy(desc(reportRuns.startedAt))
         .limit(PER_PAGE)
@@ -91,14 +113,15 @@ export default async function SchedulePage({
           total={totalRow?.value ?? 0}
           page={page}
           runs={runs.map((run) => ({
-            id: run.id,
-            scheduleId: run.scheduleId,
-            trigger: run.trigger,
-            status: run.status,
-            error: run.error,
-            rowCount: run.rowCount,
-            startedAt: run.startedAt,
-            finishedAt: run.finishedAt,
+            ...run,
+            artifact: run.artifact
+              ? {
+                  ...run.artifact,
+                  href: can(ctx, 'reports.read')
+                    ? `/reports/schedules/${id}/runs/${run.id}/pdf`
+                    : undefined,
+                }
+              : null,
           }))}
         />
       </section>

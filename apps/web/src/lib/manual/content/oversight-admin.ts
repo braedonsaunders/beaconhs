@@ -339,6 +339,8 @@ The **Schedules** tab shows every schedule with its next run and last run. Use *
 
 Open a schedule to see **Run history**. Search by trigger or failure message, or use **Status** to show queued, running, succeeded, or failed runs. Use **Next** and **Previous** to move through older deliveries.
 
+When a PDF is ready, click its filename under **Output** to download it. You can still open the PDF if an email failed to send.
+
 Open a run to see **Delivery** — every recipient with **Sent**, **Sending**, **Queued**, or **Failed**, and the reason when an email failed. Use **Search recipients** to find one person.
 
 ## Edit or build a report

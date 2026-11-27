@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { ReportRunHistory, type ReportScheduleRun } from '@beaconhs/reports/react'
+import { DownloadLink } from '@/components/download-link'
 
 export function BeaconReportRunHistory({
   scheduleId,
@@ -41,6 +42,9 @@ export function BeaconReportRunHistory({
       onStatusChange={(next) => navigate({ status: next })}
       onPageChange={(next) => navigate({ page: next })}
       onOpen={(run) => router.push(`/reports/schedules/${scheduleId}/runs/${run.id}`)}
+      renderArtifactLink={(run, label) =>
+        run.artifact?.href ? <DownloadLink href={run.artifact.href}>{label}</DownloadLink> : null
+      }
     />
   )
 }

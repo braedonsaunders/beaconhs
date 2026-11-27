@@ -278,6 +278,16 @@ async function updateRunDelivery(
       .returning({ runId: ledger.runId })
     if (!delivery || values.status === 'enqueued') return
 
+    // Serialize completion for this run. Concurrent deliveries can each see
+    // the other's old status until one transaction commits. Read the ledger
+    // in a separate statement after taking the lock so the last writer sees
+    // outcomes committed by the preceding transactions.
+    await tx
+      .select({ id: runs.id })
+      .from(runs)
+      .where(eq(runs.id, delivery.runId))
+      .for('no key update')
+
     const deliveries = await tx
       .select({ status: ledger.status, error: ledger.error })
       .from(ledger)

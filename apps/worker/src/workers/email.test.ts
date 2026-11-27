@@ -39,8 +39,10 @@ vi.mock('@beaconhs/db/schema', () => ({
     subject: 'email_log.subject',
     recipientPrimary: 'email_log.recipient_primary',
   },
-  reportRunDeliveries: { id: 'report_run_deliveries.id' },
+  reportRunDeliveries: { id: 'report_run_deliveries.id', runId: 'report_run_deliveries.run_id' },
   reportRuns: { id: 'report_runs.id' },
+  briefRunDeliveries: { id: 'brief_run_deliveries.id', runId: 'brief_run_deliveries.run_id' },
+  briefRuns: { id: 'brief_runs.id' },
   tenantNotificationPolicy: {
     equipmentRemindersEnabled: 'policy.equipment_reminders_enabled',
     tenantId: 'policy.tenant_id',
@@ -82,6 +84,14 @@ function job(): Job<EmailJobData> {
       meta: { tenantId: 'tenant-1', category: 'incident' },
     },
   } as unknown as Job<EmailJobData>
+}
+
+function deferred() {
+  let resolve!: () => void
+  const promise = new Promise<void>((finish) => {
+    resolve = finish
+  })
+  return { promise, resolve }
 }
 
 beforeEach(() => {
@@ -275,3 +285,113 @@ it('suppresses an already queued maintenance email after equipment reminders are
     meta: { provider: 'suppressed', suppressed: true },
   })
 })
+
+it.each(['report', 'brief'] as const)(
+  'finishes a %s when two recipients complete in overlapping transactions',
+  async (kind) => {
+    const schema = await import('@beaconhs/db/schema')
+    const ledger = kind === 'report' ? schema.reportRunDeliveries : schema.briefRunDeliveries
+    const runs = kind === 'report' ? schema.reportRuns : schema.briefRuns
+    const { processEmail } = await import('./email')
+    mocks.resolveDelivery.mockResolvedValue({
+      kind: 'transport',
+      transport: { provider: 'sendgrid', from: 'BeaconHS <beacon@example.com>' },
+    })
+
+    const recipients = [
+      { tenantId: 'tenant-1', recipientEmail: 'first@example.com', status: 'enqueued' },
+      { tenantId: 'tenant-1', recipientEmail: 'second@example.com', status: 'enqueued' },
+    ]
+    const runUpdates: Record<string, unknown>[] = []
+    const bothUpdated = deferred()
+    let deliveryWrites = 0
+    let nextLock = Promise.resolve()
+
+    // Model committed sibling rows and the current transaction's own write.
+    // Each delivery is updated before either can inspect the run's outcomes.
+    function deliveryTransaction(index: number) {
+      let ownStatus: string | undefined
+      let unlock: (() => void) | undefined
+      return {
+        ...tx,
+        select: () => ({
+          from: (table: unknown) => ({
+            where: () =>
+              table === runs
+                ? {
+                    for: async (strength: string) => {
+                      expect(strength).toBe('no key update')
+                      const previous = nextLock
+                      const lock = deferred()
+                      nextLock = lock.promise
+                      await previous
+                      unlock = lock.resolve
+                    },
+                  }
+                : Object.assign(
+                    Promise.resolve(
+                      recipients.map((row, other) => ({
+                        status: (index === other ? ownStatus : undefined) ?? row.status,
+                        error: null,
+                      })),
+                    ),
+                    { limit: async () => [recipients[index]] },
+                  ),
+          }),
+        }),
+        update: (table: unknown) => ({
+          set: (values: Record<string, unknown>) => {
+            if (table === ledger) {
+              return {
+                where: () => ({
+                  returning: async () => {
+                    ownStatus = String(values.status)
+                    if (++deliveryWrites === recipients.length) bothUpdated.resolve()
+                    await bothUpdated.promise
+                    return [{ runId: 'shared-run' }]
+                  },
+                }),
+              }
+            }
+            if (table === runs) {
+              return { where: async () => runUpdates.push(values) }
+            }
+            return tx.update().set(values)
+          },
+        }),
+        commit: () => {
+          if (ownStatus) recipients[index]!.status = ownStatus
+          unlock?.()
+        },
+      }
+    }
+
+    const transactions = recipients.map((_, index) => deliveryTransaction(index))
+    let calls = 0
+    mocks.withSuperAdmin.mockImplementation(async (_db, callback) => {
+      // Two initial ledger reads, two log inserts, two log updates, then the
+      // overlapping delivery transactions.
+      const transaction = transactions[calls++ % recipients.length]!
+      try {
+        return await callback(transaction)
+      } finally {
+        transaction.commit()
+      }
+    })
+
+    await Promise.all(
+      recipients.map(({ recipientEmail }, index) => {
+        const email = job()
+        email.data.to = recipientEmail
+        email.data.meta = {
+          tenantId: 'tenant-1',
+          [kind === 'report' ? 'reportRunDeliveryId' : 'briefRunDeliveryId']: `delivery-${index}`,
+        }
+        return processEmail(email)
+      }),
+    )
+
+    expect(mocks.sendVia).toHaveBeenCalledTimes(2)
+    expect(runUpdates).toEqual([{ status: 'succeeded', error: null, finishedAt: expect.any(Date) }])
+  },
+)
